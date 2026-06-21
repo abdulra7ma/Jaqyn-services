@@ -6,8 +6,16 @@ import { useEffect, type ReactNode } from "react";
 
 export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
+    // Service worker disabled: its offline-shell caching caused stale 301s and
+    // re-fetch noise in production. Actively unregister any SW already installed
+    // on a visitor's device and purge its caches so they get fresh responses.
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((reg) => reg.unregister());
+      });
+      if ("caches" in window) {
+        caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+      }
     }
   }, []);
 
