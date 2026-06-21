@@ -5,7 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "gunicorn config.wsgi --bind 0.0.0.0:$PORT --workers 3",
+    "startCommand": "sh -c 'gunicorn config.wsgi --bind 0.0.0.0:$PORT --workers 3'",
     "healthcheckPath": "/api/health/",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
