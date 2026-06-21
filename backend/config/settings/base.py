@@ -122,10 +122,16 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
+# Directory that holds manage.py / config / apps. In the container the code is
+# COPYed to /app, so this resolves to /app (writable by appuser); locally it is
+# the backend/ dir. BASE_DIR (parents[3]) is the repo root and is NOT writable in
+# the container — don't put collected static/media there.
+PROJECT_DIR = Path(__file__).resolve().parents[2]
+
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = PROJECT_DIR / "staticfiles"
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = PROJECT_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Media storage. By default writes to the local MEDIA_ROOT (fine for dev). In
