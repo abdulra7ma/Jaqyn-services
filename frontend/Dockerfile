@@ -22,6 +22,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # with --build-arg NEXT_PUBLIC_API_URL=https://api... for direct/CORS mode.
 ARG NEXT_PUBLIC_API_URL=""
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# next.config rewrites() bake the proxy target at BUILD time. Must be present
+# during `pnpm build` or it defaults to http://localhost:8000 and the deployed
+# proxy points at nothing. Railway passes the service var as a build arg.
+ARG API_PROXY_TARGET="http://localhost:8000"
+ENV API_PROXY_TARGET=$API_PROXY_TARGET
 RUN pnpm --filter web build
 
 # ---- dev: hot-reload target (bind-mount source over it) ----
