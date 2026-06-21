@@ -1,0 +1,22 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "cwd": "frontend",
+      "runtimeExecutable": "corepack",
+      "runtimeArgs": ["pnpm", "--filter", "web", "dev"],
+      "port": 3000,
+      "autoPort": false
+    },
+    {
+      "name": "web-preview",
+      "cwd": "frontend",
+      "runtimeExecutable": "corepack",
+      "runtimeArgs": ["pnpm", "--filter", "web", "exec", "next", "dev", "-p", "3100"],
+      "port": 3100,
+      "autoPort": false,
+      "env": {}
+    }
+  ]
+}

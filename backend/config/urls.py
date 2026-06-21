@@ -1,0 +1,34 @@
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
+from rest_framework_simplejwt.views import TokenRefreshView
+
+from apps.businesses.onboarding_views import BusinessTypeListView
+
+from core.views import HealthView
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("api/health/", HealthView.as_view(), name="health"),
+    path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("api/business-types/", BusinessTypeListView.as_view(), name="business-types"),
+    path("api/auth/", include("apps.accounts.urls")),
+    path("api/", include("apps.notifications.urls")),
+    path("api/business/", include("apps.businesses.urls")),
+    path("api/business/", include("apps.groups.business_urls")),
+    path("api/business/", include("apps.reporting.business_urls")),
+    path("api/staff/", include("apps.staff.urls")),
+    path("api/qr/", include("apps.qr.urls")),
+    path("api/merchant/", include("apps.qr.merchant_urls")),
+    path("api/businesses/", include("apps.businesses.public_urls")),
+    path("api/customer/", include("apps.qr.customer_urls")),
+    path("api/customer/", include("apps.loyalty.wallet_urls")),
+    path("api/customer/rewards/", include("apps.loyalty.customer_urls")),
+    path("api/business/rewards/", include("apps.loyalty.business_urls")),
+    path("api/admin/", include("apps.businesses.admin_urls")),
+    path("api/admin/", include("apps.groups.admin_urls")),
+    path("api/admin/", include("apps.reporting.admin_urls")),
+    path("api/admin/", include("apps.notifications.admin_urls")),
+    path("api/", include("apps.groups.urls")),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -1,0 +1,62 @@
+name: CI
+
+# Railway and Vercel auto-deploy on push to main. This workflow only GATES that:
+# it must go green before a PR merges. No deploy steps here.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements/*.txt
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+      - name: Run migrations check + tests
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.test
+          DJANGO_SECRET_KEY: ci-secret
+          DB_ENGINE: sqlite
+        run: |
+          python manage.py makemigrations --check --dry-run
+          pytest -q
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter web lint
+      - run: pnpm --filter web typecheck
+      - run: pnpm --filter web build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"

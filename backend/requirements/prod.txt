@@ -1,0 +1,6 @@
+-r base.txt
+gunicorn>=23.0,<23.1
+# S3-compatible media storage (Cloudflare R2) so user uploads survive container
+# restarts. Enabled only when USE_S3=true; otherwise the local MEDIA_ROOT is used.
+# (whitenoise lives in base.txt — its middleware is referenced by base settings.)
+django-storages[s3]>=1.14,<1.15

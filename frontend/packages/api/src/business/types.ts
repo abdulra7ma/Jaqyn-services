@@ -1,0 +1,272 @@
+// Business-owner domain types (mirror backend business/loyalty/groups/reporting
+// serializers). Kept in the API layer so dashboard screens stay decoupled.
+
+export type BusinessStatus = "pending" | "approved" | "rejected" | "disabled";
+
+export type OnboardingStatus =
+  | "not_started"
+  | "in_progress"
+  | "submitted"
+  | "changes_requested"
+  | "completed";
+export type VerificationStatus = "pending_verification" | "verified" | "rejected" | "suspended";
+export type VisibilityStatus = "draft" | "hidden" | "published" | "unpublished";
+
+export type BusinessProfile = {
+  id: string;
+  business_code: string;
+  name: string;
+  display_name?: string;
+  legal_name?: string;
+  category: string;
+  business_type?: string;
+  description: string | null;
+  address: string;
+  area: string;
+  city?: string;
+  country?: string;
+  latitude: string | null;
+  longitude: string | null;
+  phone: string;
+  public_email?: string | null;
+  website_url?: string | null;
+  instagram_url: string | null;
+  logo_set?: boolean;
+  cover_set?: boolean;
+  glyph?: string;
+  accent_color?: string;
+  price_level?: string;
+  tags?: string[];
+  working_hours: Record<string, [string, string]> | null;
+  menu_style?: string;
+  default_currency?: string;
+  default_language?: string;
+  timezone?: string;
+  status: BusinessStatus;
+  onboarding_status?: OnboardingStatus;
+  verification_status?: VerificationStatus;
+  visibility_status?: VisibilityStatus;
+  change_note?: string;
+  completion_score?: number;
+  missing_required_fields?: { label: string; step: number }[];
+  created_at: string;
+};
+
+// ---- onboarding ----
+
+export type BusinessType = {
+  id: string;
+  key: string;
+  name: string;
+  glyph: string;
+  description: string;
+  module: "menu" | "services" | "products" | "plans";
+  sort_order: number;
+};
+
+export type OnboardingState = {
+  business_id: string;
+  onboarding_status: OnboardingStatus;
+  verification_status: VerificationStatus;
+  visibility_status: VisibilityStatus;
+  completion_score: number;
+  missing_required_fields: { label: string; step: number }[];
+  change_note: string;
+};
+
+export type CatalogItem = {
+  id: string;
+  module: string;
+  name: string;
+  category: string;
+  price: string;
+  duration: string;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export type CatalogItemPayload = {
+  name: string;
+  category?: string;
+  price?: string;
+  duration?: string;
+  module?: string;
+};
+
+export type StaffInvite = {
+  id: string;
+  full_name: string;
+  contact: string;
+  role: "manager" | "staff" | "viewer";
+  status: string;
+  created_at: string;
+};
+
+export type StaffInvitePayload = { full_name?: string; contact: string; role: string };
+
+export type StaffInviteList = { results: StaffInvite[]; limit: number; used: number };
+
+export type ActivateResponse = {
+  access: string;
+  refresh: string;
+  user: { id: string; name: string | null; email: string | null; role: string };
+  business_id: string;
+  next_step: string;
+};
+
+export type InviteValidation = {
+  business_name: string;
+  email: string | null;
+  phone: string | null;
+  expires_at: string;
+};
+
+export type OnboardingProfilePatch = Partial<{
+  display_name: string;
+  legal_name: string;
+  description: string;
+  phone: string;
+  public_email: string;
+  website_url: string;
+  instagram_url: string;
+  address: string;
+  city: string;
+  country: string;
+  latitude: string;
+  longitude: string;
+  business_type: string;
+  menu_style: string;
+  working_hours: Record<string, unknown>;
+  default_currency: string;
+  timezone: string;
+  logo_set: boolean;
+  cover_set: boolean;
+  glyph: string;
+  accent_color: string;
+  price_level: string;
+  tags: string[];
+}>;
+
+export type BusinessRegisterPayload = {
+  name: string;
+  category: string;
+  address: string;
+  area: string;
+  phone: string;
+  description?: string;
+  instagram_url?: string;
+};
+
+export type DashboardMetrics = {
+  scans: number;
+  customers: number;
+  rewards: number;
+  total_scans: number;
+  new_customers: number;
+  returning_customers: number;
+  rewards_issued: number;
+  rewards_redeemed: number;
+  active_groups: number;
+  completed_groups: number;
+  group_completion_rate: number;
+  estimated_revenue: string;
+};
+
+export type Dashboard = {
+  business: BusinessProfile;
+  metrics: DashboardMetrics;
+};
+
+export type RewardProgramFull = {
+  id: string;
+  business_name?: string;
+  type: string;
+  title: string;
+  description: string;
+  required_count: number | null;
+  required_spend?: string | null;
+  reward_description: string;
+  minimum_spend?: string | null;
+  expiry_days: number | null;
+  max_redemptions_per_customer?: number | null;
+  /** Max reward vouchers a customer may hold at once (banking). Null = unlimited. */
+  max_banked?: number | null;
+  terms: string | null;
+  is_active: boolean;
+  enrolled?: number;
+  redeemed_count?: number;
+  created_at?: string;
+};
+
+export type RewardProgramPayload = {
+  type: string;
+  title: string;
+  description: string;
+  required_count?: number | null;
+  required_spend?: string | null;
+  reward_description: string;
+  minimum_spend?: string | null;
+  expiry_days?: number | null;
+  max_redemptions_per_customer?: number | null;
+  /** Max reward vouchers a customer may hold at once (banking). Null = unlimited. */
+  max_banked?: number | null;
+  terms?: string;
+};
+
+export type BusinessGroupDeal = {
+  id: string;
+  offer_title: string;
+  leader_name: string | null;
+  visit_time: string;
+  status: string;
+  target_size: number;
+  joined: number;
+  checked_in: number;
+};
+
+export type GroupOfferFull = {
+  id: string;
+  business_name?: string;
+  title: string;
+  description: string;
+  category: string;
+  min_group_size: number;
+  max_group_size: number | null;
+  reward_type: string;
+  reward_description: string;
+  valid_from: string;
+  valid_to: string;
+  valid_days: string[];
+  time_start: string;
+  time_end: string;
+  checkin_window_minutes: number;
+  requires_staff_code: boolean;
+  requires_staff_approval: boolean;
+  terms: string | null;
+  status: string;
+};
+
+export type GroupOfferPayload = {
+  title: string;
+  description: string;
+  category: string;
+  min_group_size: number;
+  max_group_size?: number | null;
+  reward_type: string;
+  reward_description: string;
+  valid_from: string;
+  valid_to: string;
+  valid_days: string[];
+  time_start: string;
+  time_end: string;
+  checkin_window_minutes?: number;
+  requires_staff_code?: boolean;
+  requires_staff_approval?: boolean;
+  terms?: string;
+};
+
+export type MaskedCustomer = { id: string; phone: string; name: string | null };
+
+export type ApprovalCode = { code: string; valid_from: string; valid_to: string };
+
+export type MerchantQr = { token: string; type: string; url: string; png: string };

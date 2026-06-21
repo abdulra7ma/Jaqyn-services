@@ -1,0 +1,23 @@
+services:
+  web:
+    command: gunicorn config.wsgi --bind 0.0.0.0:8000 --workers 3
+    restart: unless-stopped
+
+  worker:
+    restart: unless-stopped
+
+  beat:
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - media:/app/media:ro
+      - static:/app/staticfiles:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - web
+    restart: unless-stopped

@@ -1,0 +1,21 @@
+{
+  "name": "jaqyn-frontend",
+  "private": true,
+  "packageManager": "pnpm@9.1.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "dev:customer": "pnpm --filter customer dev",
+    "dev:business": "pnpm --filter business dev",
+    "dev:staff": "pnpm --filter staff dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.4",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

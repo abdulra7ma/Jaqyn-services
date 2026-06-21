@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Subtle screen-enter fade from Jaqyn.dc.html (jqIn). */
+@keyframes jqIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Auth background: slow drifting blobs. */
+@keyframes jqFloatA {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(40px, -30px) scale(1.12); }
+}
+@keyframes jqFloatB {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-36px, 26px) scale(1.08); }
+}
+@keyframes jqFloatC {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(24px, 34px) scale(1.15); }
+}
+
+/* Auth tab/content swap: slide + fade in from the right or left. */
+@keyframes jqSwapR {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes jqSwapL {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Partners strip: seamless infinite scroll (track is duplicated 2×). */
+@keyframes jqMarquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+/* Gentle attention pulse for reward chips. */
+@keyframes jqBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* Staff scanner animations (deck: jqFlash, jqRise, jqPop, jqScanLine, jqRipple). */
+@keyframes jqFlash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes jqRise {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes jqPop {
+  0% { transform: scale(0.6); opacity: 0; }
+  70% { transform: scale(1.12); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes jqScanLine {
+  0%, 100% { top: 12px; }
+  50% { top: calc(100% - 12px); }
+}
+@keyframes jqRipple {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes jqCountdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-["] { animation: none !important; }
+  .jq-marquee { animation: none !important; }
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  background: #fbf6ee; /* cream */
+  color: #2e241d; /* ink */
+  font-family: var(--font-sans), "Hanken Grotesk", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display), "Bricolage Grotesque", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
