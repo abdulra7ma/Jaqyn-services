@@ -12,7 +12,10 @@ const nextConfig = {
   skipTrailingSlashRedirect: true,
   async rewrites() {
     return [
-      { source: "/api/:path*", destination: `${apiTarget}/api/:path*` },
+      // `:path*` drops the incoming trailing slash, so Django would 301 to add it
+      // back → infinite redirect loop. Force the trailing slash on the proxied
+      // API path so Django matches directly. (Media are files — no trailing slash.)
+      { source: "/api/:path*", destination: `${apiTarget}/api/:path*/` },
       { source: "/media/:path*", destination: `${apiTarget}/media/:path*` },
     ];
   },
