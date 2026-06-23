@@ -9,6 +9,8 @@ the business owns the campaign) before a campaign can ever count a visit.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from datetime import datetime, timedelta
 
 from django.db import models, transaction
@@ -21,10 +23,27 @@ from apps.campaigns.models import (
     Campaign,
     CampaignParticipant,
     CampaignReward,
+    CampaignRewardVoucher,
     CampaignRule,
 )
 from core.exceptions import JaqynAPIException
 from core.logging import emit_event
+
+
+@dataclass(frozen=True)
+class CustomerProgressContext:
+    """Per-customer progress lookup tables for the campaigns list (no N+1).
+
+    Built once in :meth:`CampaignService.progress_context_for` so the list
+    serializer can resolve each campaign's ``my_progress`` from memory instead of
+    one query per row. ``participants`` maps a campaign id to the requesting
+    customer's :class:`CampaignParticipant`; ``active_voucher_ids`` maps a campaign
+    id to that customer's currently-ACTIVE voucher id (the locked ``voucher_id``
+    field of the progress contract), absent when there is no live voucher.
+    """
+
+    participants: dict[str, CampaignParticipant] = dc_field(default_factory=dict)
+    active_voucher_ids: dict[str, str] = dc_field(default_factory=dict)
 
 
 class CampaignService:
@@ -380,22 +399,96 @@ class CampaignService:
             .order_by("-updated_at")
         )
 
-    @staticmethod
-    def discover_for_customer(customer, now: datetime | None = None):
+    # The participant statuses that count as "joined / in progress" for the
+    # ``joined=true`` filter — the "From places you go" set on the redesigned
+    # customer campaigns page. Source: campaigns-redesign spec (carousel of the
+    # customer's joined campaigns). COMPLETED/REDEEMED are intentionally excluded:
+    # those have already paid out and belong in the wallet, not "in progress".
+    _JOINED_FILTER_STATUSES = frozenset(
+        {CampaignParticipant.Status.JOINED, CampaignParticipant.Status.IN_PROGRESS}
+    )
+
+    @classmethod
+    def discover_for_customer(
+        cls,
+        customer,
+        now: datetime | None = None,
+        campaign_type: str | None = None,
+        joined_only: bool = False,
+    ):
         """Return ACTIVE campaigns a customer can currently discover (queryset).
 
         MVP discovery surfaces every ACTIVE campaign whose run window is open at
         ``now`` (``start_at``/``end_at`` bounds). The per-customer progress is
         layered on by the serializer/view, not here. Selects rule/reward/business
         to avoid N+1.
+
+        Optional filters back the redesigned customer campaigns page:
+
+        * ``campaign_type`` — when one of ``Campaign.CampaignType`` (``visit`` /
+          ``time_window`` / ``group``), restrict to that type. ``None`` or any
+          unknown value is ignored (no filter applied) so a bad query param
+          degrades gracefully rather than erroring.
+        * ``joined_only`` — when ``True``, restrict to campaigns the requesting
+          customer has a participant for whose status is JOINED or IN_PROGRESS
+          (the "From places you go" / "In progress" set). COMPLETED/REDEEMED are
+          excluded — those have paid out and live in the wallet.
         """
         now = now or timezone.now()
-        return (
+        qs = (
             Campaign.objects.filter(status=Campaign.Status.ACTIVE)
             .filter(models.Q(start_at__isnull=True) | models.Q(start_at__lte=now))
             .filter(models.Q(end_at__isnull=True) | models.Q(end_at__gt=now))
             .select_related("rule", "reward", "business")
             .order_by("-created_at")
+        )
+        if campaign_type in Campaign.CampaignType.values:
+            qs = qs.filter(campaign_type=campaign_type)
+        if joined_only:
+            qs = qs.filter(
+                participants__customer=customer,
+                participants__status__in=cls._JOINED_FILTER_STATUSES,
+            )
+        return qs
+
+    @staticmethod
+    def progress_context_for(customer, campaigns) -> CustomerProgressContext:
+        """Build the per-customer progress lookup for a page of campaigns (no N+1).
+
+        Given the requesting ``customer`` and the already-materialised
+        ``campaigns`` for one page, runs exactly two bounded queries — the
+        customer's participant rows for those campaigns, and the customer's ACTIVE
+        vouchers for those campaigns — and returns a
+        :class:`CustomerProgressContext` the list serializer reads from memory.
+        This is what keeps the list ``my_progress`` field off the N+1 path:
+        without it each row would re-query its participant and voucher. ``campaigns``
+        must already be a concrete list (the paginated page), not a lazy queryset,
+        so callers don't re-hit the DB per row.
+        """
+        campaign_ids = [c.id for c in campaigns]
+        if not campaign_ids:
+            return CustomerProgressContext()
+        participants = {
+            str(p.campaign_id): p
+            for p in CampaignParticipant.objects.filter(
+                customer=customer, campaign_id__in=campaign_ids
+            )
+        }
+        active_voucher_ids: dict[str, str] = {}
+        # Newest first so the last write wins == the most recent ACTIVE voucher,
+        # mirroring CampaignProgressSerializer.get_voucher_id's single-row order.
+        for campaign_id, voucher_id in (
+            CampaignRewardVoucher.objects.filter(
+                customer=customer,
+                campaign_id__in=campaign_ids,
+                status=CampaignRewardVoucher.Status.ACTIVE,
+            )
+            .order_by("-issued_at", "-created_at")
+            .values_list("campaign_id", "id")
+        ):
+            active_voucher_ids.setdefault(str(campaign_id), str(voucher_id))
+        return CustomerProgressContext(
+            participants=participants, active_voucher_ids=active_voucher_ids
         )
 
     @staticmethod

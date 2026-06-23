@@ -403,7 +403,9 @@ def test_discover_happy_path_and_query_count(django_assert_num_queries):
         make_campaign(business)
     customer = make_customer()
     client = customer_client(customer)
-    with django_assert_num_queries(3):
+    # 3 base (count + page + ...) + 2 for the per-customer progress prefetch
+    # (participants + active vouchers); see CampaignService.progress_context_for.
+    with django_assert_num_queries(5):
         response = client.get("/api/customer/campaigns/")
     assert response.status_code == 200
     assert response.data["data"]["count"] == 3
@@ -472,6 +474,128 @@ def test_my_progress_voucher_id_is_active_voucher_after_completion():
     CampaignRewardService.redeem_reward_voucher(staff, code=result.voucher.voucher_code)
     response = customer_client(customer).get(f"/api/customer/campaigns/{campaign.id}/")
     assert response.data["data"]["my_progress"]["voucher_id"] is None
+
+
+# --- customer list: my_progress + filters (campaigns-redesign) --------------
+
+
+def test_list_my_progress_null_when_not_joined():
+    """Each list row carries my_progress; it is null for a campaign not joined."""
+    business = make_business()
+    make_campaign(business)
+    response = customer_client(make_customer()).get("/api/customer/campaigns/")
+    assert response.status_code == 200
+    rows = response.data["data"]["results"]
+    assert len(rows) == 1
+    assert rows[0]["my_progress"] is None
+
+
+def test_list_my_progress_populated_when_joined():
+    """A joined row emits the locked progress contract shape inline in the list."""
+    business = make_business()
+    campaign = make_campaign(business, required_count=3)
+    customer = make_customer()
+    CampaignProgressService.join_campaign(campaign, customer)
+
+    response = customer_client(customer).get("/api/customer/campaigns/")
+    rows = response.data["data"]["results"]
+    progress = rows[0]["my_progress"]
+    assert progress is not None
+    assert progress["status"] == "joined"
+    assert progress["progress_count"] == 0
+    assert progress["required_count"] == 3
+    assert progress["voucher_id"] is None
+
+
+def test_list_my_progress_voucher_id_after_completion():
+    """A completed campaign's list row surfaces the customer's ACTIVE voucher id."""
+    business = make_business()
+    staff = make_staff(business)
+    campaign = make_campaign(business, required_count=1)
+    customer = make_customer()
+    result = CampaignProgressService.record_campaign_action(
+        campaign, customer, staff=staff
+    )
+
+    response = customer_client(customer).get("/api/customer/campaigns/")
+    progress = response.data["data"]["results"][0]["my_progress"]
+    assert progress["voucher_id"] == str(result.voucher.id)
+
+
+def test_list_my_progress_no_n_plus_one(django_assert_num_queries):
+    """my_progress is prefetched: the query count is flat regardless of row count.
+
+    Base discover is 3 queries (count + page + ...) and the per-customer progress
+    prefetch adds exactly 2 (participants + active vouchers) — 5 total — and does
+    not grow with the number of joined campaigns.
+    """
+    business = make_business()
+    customer = make_customer()
+    for _ in range(4):
+        campaign = make_campaign(business, required_count=2)
+        CampaignProgressService.join_campaign(campaign, customer)
+
+    client = customer_client(customer)
+    with django_assert_num_queries(5):
+        response = client.get("/api/customer/campaigns/")
+    assert response.status_code == 200
+    assert response.data["data"]["count"] == 4
+    assert all(r["my_progress"] is not None for r in response.data["data"]["results"])
+
+
+def test_list_filter_by_type():
+    """?type= narrows the list to one campaign_type; unknown values are ignored."""
+    business = make_business()
+    make_campaign(business, campaign_type=Campaign.CampaignType.VISIT)
+    make_campaign(business, campaign_type=Campaign.CampaignType.TIME_WINDOW)
+    make_campaign(business, campaign_type=Campaign.CampaignType.GROUP)
+    client = customer_client(make_customer())
+
+    visit = client.get("/api/customer/campaigns/?type=visit")
+    assert visit.data["data"]["count"] == 1
+    assert visit.data["data"]["results"][0]["campaign_type"] == "visit"
+
+    tw = client.get("/api/customer/campaigns/?type=time_window")
+    assert tw.data["data"]["count"] == 1
+
+    group = client.get("/api/customer/campaigns/?type=group")
+    assert group.data["data"]["count"] == 1
+
+    # Unknown type degrades gracefully: no filter, all rows returned.
+    unknown = client.get("/api/customer/campaigns/?type=bogus")
+    assert unknown.status_code == 200
+    assert unknown.data["data"]["count"] == 3
+
+
+def test_list_filter_joined_only():
+    """?joined=true returns only the customer's JOINED/IN_PROGRESS campaigns."""
+    business = make_business()
+    joined = make_campaign(business)
+    make_campaign(business)  # not joined
+    customer = make_customer()
+    CampaignProgressService.join_campaign(joined, customer)
+
+    client = customer_client(customer)
+    all_rows = client.get("/api/customer/campaigns/")
+    assert all_rows.data["data"]["count"] == 2
+
+    only_joined = client.get("/api/customer/campaigns/?joined=true")
+    assert only_joined.data["data"]["count"] == 1
+    assert only_joined.data["data"]["results"][0]["id"] == str(joined.id)
+
+
+def test_list_filter_joined_excludes_other_customers():
+    """joined=true is scoped to the requester — another customer's join is invisible."""
+    business = make_business()
+    campaign = make_campaign(business)
+    other = make_customer(suffix="002")
+    CampaignProgressService.join_campaign(campaign, other)
+
+    response = customer_client(make_customer(suffix="003")).get(
+        "/api/customer/campaigns/?joined=true"
+    )
+    assert response.status_code == 200
+    assert response.data["data"]["count"] == 0
 
 
 def test_customer_join():

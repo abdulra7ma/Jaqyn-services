@@ -33,7 +33,7 @@ export default function VisitQrPage() {
   const me = useMe(isAuthenticated);
   const qr = useMyQr(isAuthenticated);
   // Poll so a staff-side visit moves a campaign off the "eligible right now" list live.
-  const campaigns = useCampaigns({ refetchInterval: 4000 });
+  const campaigns = useCampaigns(undefined, { refetchInterval: 4000 });
 
   // Keep the screen awake while the QR is shown so staff can scan it.
   useEffect(() => {

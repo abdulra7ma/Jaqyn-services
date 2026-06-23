@@ -428,6 +428,14 @@ export type NearbyParams = Partial<{
   limit: number;
 }>;
 
+// Filters for the customer campaigns list. `type` mirrors the backend
+// campaign_type enum (underscored "time_window"); `joined=true` restricts to
+// the viewer's own enrolled / in-progress campaigns.
+export type CampaignListParams = Partial<{
+  type: "visit" | "time_window" | "group";
+  joined: boolean;
+}>;
+
 export type RequestOtpResult = { request_id: string; expires_in: number };
 export type AuthResult = {
   access: string;

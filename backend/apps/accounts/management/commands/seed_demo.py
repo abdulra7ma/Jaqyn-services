@@ -176,14 +176,63 @@ class Command(BaseCommand):
                 vouchers += int(created)
         return {"program": program.title, "progress_rows": len(plan), "pending_vouchers": vouchers}
 
+    # ----- extra demo businesses (campaigns-redesign) ---------------------
+    def _upsert_business(self, *, owner_phone, owner_name, name, glyph, area, description):
+        """Idempotently upsert an APPROVED+PUBLISHED business under its own owner.
+
+        Backs the redesigned customer campaigns page, which needs campaigns spread
+        across several businesses so the "From places you go" carousel shows
+        multiple cafés. Each business gets a dedicated owner because the Business
+        model enforces one business per owner (unique ``owner``); matched by owner
+        so a re-run updates in place.
+        """
+        owner, _ = User.objects.get_or_create(
+            phone=owner_phone, defaults={"role": User.Role.BUSINESS_OWNER})
+        owner.role = User.Role.BUSINESS_OWNER
+        owner.name = owner_name
+        owner.is_phone_verified = True
+        owner.is_active = True
+        owner.set_password(OWNER_PW)  # documented demo credential
+        owner.save()
+
+        biz = Business.objects.filter(owner=owner).first()
+        if biz is None:
+            biz = Business(owner=owner, name=name)
+        biz.name = name
+        biz.category = "cafe"
+        biz.area = area
+        biz.city = "Bishkek"
+        biz.glyph = glyph
+        biz.description = description
+        for attr, member in (("status", "APPROVED"), ("visibility_status", "PUBLISHED"),
+                             ("onboarding_status", "COMPLETED"), ("verification_status", "VERIFIED")):
+            enum = getattr(type(biz), {"status": "Status", "visibility_status": "VisibilityStatus",
+                                       "onboarding_status": "OnboardingStatus",
+                                       "verification_status": "VerificationStatus"}[attr], None)
+            if enum is not None and hasattr(enum, member):
+                setattr(biz, attr, getattr(enum, member))
+        biz.save()
+        return biz
+
     # ----- campaigns ------------------------------------------------------
     def _seed_campaigns(self, biz, owner, customers):
         now = timezone.now()
         RT = CampaignReward.ReceiverType
 
-        def mk(name, desc, ctype, rule_type, required, *, window=None, group_size=None,
+        # Two more storefronts owned by the same demo owner so campaigns span
+        # multiple businesses (redesigned customer page). Idempotent upsert.
+        bublik = self._upsert_business(
+            owner_phone="+996700112244", owner_name="Gulnara S.",
+            name="Bublik Bistro", glyph="🥪", area="Erkindik Boulevard",
+            description="Fresh bagels and lunch sandwiches on Erkindik, Bishkek.")
+        luna = self._upsert_business(
+            owner_phone="+996700112255", owner_name="Cholpon B.",
+            name="Cafe Luna", glyph="🍰", area="Ala-Too Square",
+            description="Desserts and weekend hangouts by Ala-Too Square, Bishkek.")
+
+        def mk(business, name, desc, ctype, rule_type, required, *, window=None, group_size=None,
                reward_title="", reward_desc="", max_rewards=200):
-            c, _ = Campaign.objects.get_or_create(business=biz, name=name, defaults=dict(
+            c, _ = Campaign.objects.get_or_create(business=business, name=name, defaults=dict(
                 created_by=owner, description=desc, campaign_type=ctype,
                 status=Campaign.Status.ACTIVE, start_at=now - timedelta(days=2),
                 end_at=now + timedelta(days=5), active_days=[], max_participants=1000,
@@ -200,17 +249,27 @@ class Command(BaseCommand):
                 max_redemptions=max_rewards, reward_receiver_type=RT.LEADER))
             return c
 
-        c1 = mk("Morning Coffee Challenge", "Visit 3 times before 12:00 this week and get a free croissant.",
+        # Spread across all three businesses and all three types so every filter
+        # chip on the redesigned page (visit / time_window / group) returns rows.
+        c1 = mk(biz, "Morning Coffee Challenge",
+                "Visit 3 times before 12:00 this week and get a free croissant.",
                 Campaign.CampaignType.TIME_WINDOW, CampaignRule.RuleType.TIME_WINDOW, 3, window=time(12, 0),
                 reward_title="Free croissant", reward_desc="Any croissant up to 150 KGS")
-        c2 = mk("Lunch Loyalty Streak", "Visit 5 times this month and get 20% off your order.",
+        c2 = mk(bublik, "Lunch Loyalty Streak", "Visit 5 times this month and get 20% off your order.",
                 Campaign.CampaignType.VISIT, CampaignRule.RuleType.VISIT_COUNT, 5,
                 reward_title="20% off your order", reward_desc="Up to 400 KGS off", max_rewards=500)
-        c3 = mk("Weekend Friends Deal", "Come with 3 friends and unlock a free dessert for the table.",
-                Campaign.CampaignType.GROUP, CampaignRule.RuleType.GROUP_CHECKIN, 1, group_size=4,
-                reward_title="Free dessert for the table", reward_desc="One shared dessert", max_rewards=120)
+        mk(luna, "Weekend Friends Deal", "Come with 3 friends and unlock a free dessert for the table.",
+           Campaign.CampaignType.GROUP, CampaignRule.RuleType.GROUP_CHECKIN, 1, group_size=4,
+           reward_title="Free dessert for the table", reward_desc="One shared dessert", max_rewards=120)
+        # A plain visit campaign at Manas so the home business also has a visit type.
+        c4 = mk(biz, "Coffee Lovers Punch Card", "Buy 4 coffees this week and the 5th is free.",
+                Campaign.CampaignType.VISIT, CampaignRule.RuleType.VISIT_COUNT, 4,
+                reward_title="Free coffee", reward_desc="Any drink up to 200 KGS", max_rewards=300)
 
-        # Participants: c0 completed Morning (gets a voucher), c1 mid Morning + Lunch, c2 mid Lunch.
+        # Participants. Aibek (customers[0]) is JOINED + in-progress across two
+        # different businesses so "From places you go" shows multiple cafés:
+        # Morning Coffee 2/3 at Manas, Lunch 3/5 at Bublik. The other customers'
+        # data is preserved (Aizada mid Morning + Lunch, Bek mid Lunch).
         def join(camp, cust, progress, status):
             p, _ = CampaignParticipant.objects.get_or_create(campaign=camp, customer=cust, defaults=dict(
                 status=status, progress_count=progress, joined_at=now - timedelta(days=1),
@@ -223,26 +282,31 @@ class Command(BaseCommand):
             return p
 
         S = CampaignParticipant.Status
-        p_done = join(c1, customers[0], 3, S.COMPLETED)
-        join(c1, customers[1], 2, S.IN_PROGRESS)
-        join(c2, customers[1], 3, S.IN_PROGRESS)
-        join(c2, customers[2], 1, S.IN_PROGRESS)
+        join(c1, customers[0], 2, S.IN_PROGRESS)  # Aibek: Morning Coffee 2/3 @ Manas
+        join(c2, customers[0], 3, S.IN_PROGRESS)  # Aibek: Lunch 3/5 @ Bublik
+        join(c1, customers[1], 2, S.IN_PROGRESS)  # Aizada: Morning Coffee @ Manas
+        join(c2, customers[1], 3, S.IN_PROGRESS)  # Aizada: Lunch @ Bublik
+        join(c2, customers[2], 1, S.IN_PROGRESS)  # Bek: Lunch @ Bublik
+        # Aizada completed the Manas punch card → an ACTIVE reward voucher to
+        # present, so the wallet/present flow has live demo data.
+        join(c4, customers[1], 4, S.COMPLETED)
 
-        # Issue one ACTIVE campaign voucher for the completed participant.
         vouchers = 0
-        reward = CampaignReward.objects.filter(campaign=c1).first()
-        if reward and not CampaignRewardVoucher.objects.filter(campaign=c1, customer=customers[0]).exists():
+        reward = CampaignReward.objects.filter(campaign=c4).first()
+        if reward and not CampaignRewardVoucher.objects.filter(
+            campaign=c4, customer=customers[1]
+        ).exists():
             token = QRCodeToken.objects.create(
                 token=secrets.token_urlsafe(16), type=QRCodeToken.Type.CAMPAIGN_REWARD,
-                business=biz, customer=customers[0], campaign=c1.id,
+                business=biz, customer=customers[1], campaign=c4.id,
                 is_active=True, expires_at=now + timedelta(days=7))
             CampaignRewardVoucher.objects.create(
-                campaign=c1, customer=customers[0], business=biz, reward=reward,
+                campaign=c4, customer=customers[1], business=biz, reward=reward,
                 voucher_code=_code(), qr_token=token, status=CampaignRewardVoucher.Status.ACTIVE,
                 issued_at=now, expires_at=now + timedelta(days=7))
             vouchers = 1
 
-        return {"campaigns": 3, "participants": 4, "active_voucher": vouchers}
+        return {"campaigns": 4, "businesses": 3, "participants": 6, "active_voucher": vouchers}
 
     # ----- group deals ----------------------------------------------------
     def _seed_groups(self, biz, customers):
@@ -286,7 +350,9 @@ class Command(BaseCommand):
         w(f"Loyalty   : program '{counts['loyalty']['program']}', "
           f"{counts['loyalty']['progress_rows']} progress rows, "
           f"{counts['loyalty']['pending_vouchers']} pending voucher(s)")
-        w(f"Campaigns : {counts['campaigns']['campaigns']} campaigns, "
+        w(f"Campaigns : {counts['campaigns']['campaigns']} campaigns across "
+          f"{counts['campaigns']['businesses']} businesses "
+          f"(Manas Coffee, Bublik Bistro, Cafe Luna), "
           f"{counts['campaigns']['participants']} participants, "
           f"{counts['campaigns']['active_voucher']} active reward voucher(s)")
         w(f"Groups    : offer '{counts['groups']['offer']}', "

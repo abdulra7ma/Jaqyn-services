@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 
 from apps.campaigns.serializers import (
     CampaignDetailSerializer,
+    CampaignDiscoverQuerySerializer,
     CampaignProgressSerializer,
     CampaignRewardVoucherSerializer,
     CampaignSerializer,
@@ -37,11 +38,25 @@ class CampaignDiscoverView(APIView):
     pagination_class = StandardResultsSetPagination
 
     def get(self, request):
-        campaigns = CampaignService.discover_for_customer(request.user)
+        # Shape validation of the optional query params lives in the serializer;
+        # the view passes the validated values to the service, which owns the
+        # filtering rules. Unknown ``type`` values are ignored gracefully there.
+        params = CampaignDiscoverQuerySerializer(data=request.query_params)
+        params.is_valid(raise_exception=True)
+        campaigns = CampaignService.discover_for_customer(
+            request.user,
+            campaign_type=params.validated_data.get("type"),
+            joined_only=params.validated_data.get("joined", False),
+        )
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(campaigns, request, view=self)
+        # Prefetch this page's per-customer progress so my_progress on each row
+        # resolves from memory (no N+1) — see CampaignService.progress_context_for.
+        progress_context = CampaignService.progress_context_for(request.user, page)
         return paginator.get_paginated_response(
-            CampaignSerializer(page, many=True).data
+            CampaignSerializer(
+                page, many=True, context={"progress_context": progress_context}
+            ).data
         )
 
 

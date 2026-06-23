@@ -171,6 +171,54 @@ export function CampaignCard({ campaign }: { campaign: Campaign }) {
   );
 }
 
+/**
+ * Compact card for the horizontal "From places you go" carousel: glyph, name,
+ * business, terracotta progress bar, "{x}/{y} visits", "Ends in {n} days" and a
+ * reward chip. Used only for joined / in-progress campaigns, so a fixed width is
+ * fine — the parent scrolls horizontally.
+ */
+export function CampaignCarouselCard({ campaign }: { campaign: Campaign }) {
+  const t = useT();
+  const p = campaign.my_progress;
+  const target = p?.target_count ?? campaign.rule.required_count ?? 0;
+  const current = p?.current_count ?? 0;
+  const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+
+  return (
+    <Link
+      href={`/campaigns/${campaign.id}`}
+      className="flex w-[230px] flex-none flex-col rounded-2xl border border-line bg-card p-4 shadow-card transition active:scale-[.99]"
+    >
+      <div className="flex items-center gap-2.5">
+        <GlyphTile glyph={campaign.glyph} size={42} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-[15px] font-bold text-ink">{campaign.name}</p>
+          <p className="truncate text-[12px] text-subtle">{campaign.business.name}</p>
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <div className="h-2 overflow-hidden rounded-pill bg-board">
+          <div className="h-full rounded-pill bg-brand" style={{ width: `${pct}%` }} />
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[12px] font-semibold text-subtle">
+          <span>
+            {t("cmp.card.progress")
+              .replace("{count}", String(current))
+              .replace("{total}", String(target))}
+          </span>
+          <span>{endsLabel(t, campaign)}</span>
+        </div>
+      </div>
+
+      <span className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-pill bg-brand-muted px-2.5 py-1 text-[12px] font-bold text-brand">
+        <span aria-hidden>🎁</span>
+        <span className="truncate">{campaign.reward.title}</span>
+      </span>
+    </Link>
+  );
+}
+
 /** Active-voucher card in the wallet (design `activeVouchers`). */
 export function VoucherCard({ voucher }: { voucher: CampaignVoucher }) {
   const t = useT();

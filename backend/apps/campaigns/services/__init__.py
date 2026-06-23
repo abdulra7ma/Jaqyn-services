@@ -9,7 +9,10 @@ from apps.campaigns.services.analytics import (
     CampaignAnalyticsService,
     CampaignMetrics,
 )
-from apps.campaigns.services.campaign import CampaignService
+from apps.campaigns.services.campaign import (
+    CampaignService,
+    CustomerProgressContext,
+)
 from apps.campaigns.services.eligibility import (
     CampaignEligibilityService,
     EligibilityResult,
@@ -35,6 +38,7 @@ from apps.campaigns.services.scanner import (
 
 __all__ = [
     "CampaignService",
+    "CustomerProgressContext",
     "CampaignEligibilityService",
     "EligibilityResult",
     "IneligibilityReason",

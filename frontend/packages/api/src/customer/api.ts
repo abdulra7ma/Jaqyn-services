@@ -23,6 +23,7 @@ import type {
   Business,
   BusinessRewardCard,
   Campaign,
+  CampaignListParams,
   CampaignVoucher,
   CampaignWallet,
   GroupDeal,
@@ -69,7 +70,7 @@ export interface CustomerApi {
   presentRedemption(id: string): Promise<Redemption>;
   businessRewardCard(businessId: string): Promise<BusinessRewardCard>;
   // ---- campaigns (plan §3) ----
-  listCampaigns(): Promise<Campaign[]>;
+  listCampaigns(params?: CampaignListParams): Promise<Campaign[]>;
   getCampaign(id: string): Promise<Campaign>;
   joinCampaign(id: string): Promise<Campaign>;
   campaignWallet(): Promise<CampaignWallet>;
@@ -87,7 +88,7 @@ export interface CustomerApi {
 // ----------------------------------------------------------------------------
 type Paginated<T> = { results: T[]; count?: number; next?: string | null };
 
-function queryString(params?: NearbyParams): string {
+function queryString(params?: Record<string, unknown>): string {
   const search = new URLSearchParams();
   Object.entries(params ?? {}).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
@@ -227,8 +228,10 @@ export const customerApi: CustomerApi = {
   presentRedemption: (id) => api.post<Redemption>(`/api/customer/redemptions/${id}/present/`),
   businessRewardCard: (businessId) =>
     api.get<BusinessRewardCard>(`/api/customer/businesses/${businessId}/rewards/`),
-  listCampaigns: () =>
-    api.get<Paginated<any>>("/api/customer/campaigns/").then((d) => d.results.map(adaptCampaign)),
+  listCampaigns: (params) =>
+    api
+      .get<Paginated<any>>(`/api/customer/campaigns/${queryString(params)}`)
+      .then((d) => d.results.map(adaptCampaign)),
   getCampaign: (id) => api.get<any>(`/api/customer/campaigns/${id}/`).then(adaptCampaign),
   // The join endpoint returns the participant/progress row, not a campaign. Re-read
   // the campaign detail (which carries my_progress) so the hook caches a real

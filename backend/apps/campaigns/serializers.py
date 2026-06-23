@@ -93,8 +93,14 @@ class CampaignSerializer(serializers.ModelSerializer):
     """Read representation of a campaign with its rule + reward summary.
 
     ``required_count`` and ``reward_title`` are flattened convenience fields the
-    list/detail screens read directly. All fields are read-only — writes go
-    through :class:`CampaignWriteSerializer`.
+    list/detail screens read directly. ``my_progress`` carries the requesting
+    customer's progress (the same ``{progress_count, required_count, status,
+    voucher_id}`` shape the detail serializer emits, or ``None`` when not joined)
+    so the redesigned customer campaigns list can render the "From places you go"
+    carousel without a second round-trip; it is populated from a
+    ``progress_context`` (:class:`CustomerProgressContext`) the view prefetches —
+    when no context is supplied (business/staff list paths) it is ``None``. All
+    fields are read-only — writes go through :class:`CampaignWriteSerializer`.
     """
 
     business_name = serializers.CharField(source="business.name", read_only=True)
@@ -102,6 +108,7 @@ class CampaignSerializer(serializers.ModelSerializer):
     reward = CampaignRewardSerializer(read_only=True)
     required_count = serializers.SerializerMethodField()
     reward_title = serializers.SerializerMethodField()
+    my_progress = serializers.SerializerMethodField()
     # Emit the *relative* media url (``/media/campaigns/..``) rather than the
     # default ImageField absolute url, so the image resolves through the
     # frontend's same-origin proxy. ``None`` when no image is set.
@@ -133,6 +140,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "reward",
             "required_count",
             "reward_title",
+            "my_progress",
             "created_at",
             "updated_at",
         )
@@ -148,6 +156,31 @@ class CampaignSerializer(serializers.ModelSerializer):
 
     def get_image(self, obj: Campaign) -> str | None:
         return obj.image.url if obj.image else None
+
+    def get_my_progress(self, obj: Campaign) -> ReturnDict | None:
+        """The requesting customer's progress for this campaign, or ``None``.
+
+        Reads the prefetched ``progress_context`` from serializer context (a
+        :class:`CustomerProgressContext`); ``None`` both when no context is
+        supplied (non-customer list paths) and when the customer has no
+        participant row for this campaign. The participant's ACTIVE ``voucher_id``
+        is resolved from the same context map so this field never issues a query
+        per row.
+        """
+        context = self.context.get("progress_context")
+        if context is None:
+            return None
+        participant = context.participants.get(str(obj.id))
+        if participant is None:
+            return None
+        # Reuse the list row's already-loaded Campaign (with its select_related
+        # rule) as the participant's campaign, so CampaignProgressSerializer's
+        # required_count lookup reads from memory instead of re-querying per row.
+        participant.campaign = obj
+        return CampaignProgressSerializer(
+            participant,
+            context={"active_voucher_ids": context.active_voucher_ids},
+        ).data
 
 
 class CampaignProgressSerializer(serializers.ModelSerializer):
@@ -185,6 +218,14 @@ class CampaignProgressSerializer(serializers.ModelSerializer):
         return rule.required_count if rule is not None else 1
 
     def get_voucher_id(self, obj: CampaignParticipant) -> str | None:
+        # When the caller has already prefetched the customer's ACTIVE vouchers
+        # (the campaigns list path — see CampaignService.progress_context_for),
+        # it passes a {campaign_id: voucher_id} map in context so this field
+        # resolves from memory and stays off the N+1 path. Absent that map (the
+        # detail path), fall back to the single bounded per-participant query.
+        voucher_map = self.context.get("active_voucher_ids")
+        if voucher_map is not None:
+            return voucher_map.get(str(obj.campaign_id))
         voucher = (
             CampaignRewardVoucher.objects.filter(
                 campaign_id=obj.campaign_id,
@@ -247,6 +288,24 @@ class CampaignDetailSerializer(CampaignSerializer):
         if participant is None:
             return None
         return CampaignProgressSerializer(participant).data
+
+
+class CampaignDiscoverQuerySerializer(serializers.Serializer):
+    """Query params for the customer campaigns list (campaigns-redesign).
+
+    Validates only the *shape* of the optional filters; the filtering rules live
+    in :meth:`CampaignService.discover_for_customer`.
+
+    * ``type`` — accepted as a free-form string so an unknown value degrades
+      gracefully (the service ignores anything that is not a real
+      ``Campaign.CampaignType``) rather than 400-ing the whole list. Empty/blank
+      is treated as "no filter".
+    * ``joined`` — ``true`` selects only the customer's JOINED/IN_PROGRESS
+      campaigns (the "From places you go" set); defaults to ``False``.
+    """
+
+    type = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    joined = serializers.BooleanField(required=False, default=False)
 
 
 class CampaignParticipantSerializer(serializers.ModelSerializer):

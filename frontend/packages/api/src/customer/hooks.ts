@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customerApi } from "./api";
-import type { NearbyParams, ProfilePatch } from "./types";
+import type { CampaignListParams, NearbyParams, ProfilePatch } from "./types";
 
 export const qk = {
   me: ["me"] as const,
@@ -18,7 +18,7 @@ export const qk = {
   nearby: (params?: NearbyParams) => ["nearby", params ?? {}] as const,
   business: (id: string) => ["business", id] as const,
   qr: (token: string) => ["qr", token] as const,
-  campaigns: ["campaigns"] as const,
+  campaigns: (params?: CampaignListParams) => ["campaigns", params ?? {}] as const,
   campaign: (id: string) => ["campaigns", id] as const,
   campaignWallet: ["campaign-wallet"] as const,
   campaignVoucher: (id: string) => ["campaign-vouchers", id] as const,
@@ -84,10 +84,16 @@ export const useBusinessRewardCard = (businessId: string, opts?: { refetchInterv
   });
 
 // ---- campaign queries ----
-export const useCampaigns = (opts?: { refetchInterval?: number }) =>
+// `params` filters the list server-side (?type / ?joined); it is folded into the
+// query key so each filter caches independently. Calling with no args keeps the
+// original unfiltered behavior (back-compat).
+export const useCampaigns = (
+  params?: CampaignListParams,
+  opts?: { refetchInterval?: number },
+) =>
   useQuery({
-    queryKey: qk.campaigns,
-    queryFn: () => customerApi.listCampaigns(),
+    queryKey: qk.campaigns(params),
+    queryFn: () => customerApi.listCampaigns(params),
     refetchInterval: opts?.refetchInterval,
   });
 
@@ -130,7 +136,8 @@ export const useJoinCampaign = () => {
     mutationFn: (id: string) => customerApi.joinCampaign(id),
     onSuccess: (campaign) => {
       qc.setQueryData(qk.campaign(campaign.id), campaign);
-      qc.invalidateQueries({ queryKey: qk.campaigns });
+      // Prefix-match invalidates every filtered campaigns list at once.
+      qc.invalidateQueries({ queryKey: ["campaigns"] });
     },
   });
 };
