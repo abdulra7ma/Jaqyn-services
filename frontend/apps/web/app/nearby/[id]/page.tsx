@@ -34,8 +34,13 @@ export default function BusinessProfilePage() {
                       {open ? t("nearby.open") : t("nearby.closed")}
                     </span>
                   )}
-                  <div className="flex h-20 w-20 items-center justify-center rounded-[22px] bg-card text-[38px] shadow-card">
-                    {b.glyph || b.name.charAt(0).toUpperCase()}
+                  <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-[22px] bg-card text-[38px] shadow-card">
+                    {b.logo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={b.logo_url} alt={b.name} className="h-full w-full object-cover" />
+                    ) : (
+                      b.glyph || b.name.charAt(0).toUpperCase()
+                    )}
                   </div>
                 </div>
                 <div className="p-5">

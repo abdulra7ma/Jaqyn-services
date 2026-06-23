@@ -95,9 +95,35 @@ export function ruleLines(t: Translate, c: Campaign): string[] {
   return lines;
 }
 
-/** Glyph tile (emoji on a warm-cream square), matching the design's icon chips. */
-export function GlyphTile({ glyph, size = 50 }: { glyph: string; size?: number }) {
+/**
+ * Glyph tile (emoji on a warm-cream square), matching the design's icon chips.
+ * When `image` is set (a business logo at /media/...), the photo takes
+ * precedence over the glyph. Plain <img> so the same-origin /media/ rewrite works.
+ */
+export function GlyphTile({
+  glyph,
+  size = 50,
+  image,
+}: {
+  glyph: string;
+  size?: number;
+  image?: string | null;
+}) {
   const radius = Math.round(size * 0.3);
+  if (image) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={image}
+        alt=""
+        width={size}
+        height={size}
+        className="flex-none object-cover"
+        style={{ width: size, height: size, borderRadius: radius }}
+        aria-hidden
+      />
+    );
+  }
   return (
     <div
       className="flex flex-none items-center justify-center bg-brand-muted"
@@ -127,7 +153,7 @@ export function CampaignCard({ campaign }: { campaign: Campaign }) {
       className="block rounded-2xl border border-line bg-card p-4 shadow-card transition active:scale-[.99]"
     >
       <div className="flex items-center gap-3">
-        <GlyphTile glyph={campaign.glyph} />
+        <GlyphTile glyph={campaign.glyph} image={campaign.business.logo_url} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-display text-base font-bold text-ink">{campaign.name}</span>
@@ -190,7 +216,7 @@ export function CampaignCarouselCard({ campaign }: { campaign: Campaign }) {
       className="flex w-[230px] flex-none flex-col rounded-2xl border border-line bg-card p-4 shadow-card transition active:scale-[.99]"
     >
       <div className="flex items-center gap-2.5">
-        <GlyphTile glyph={campaign.glyph} size={42} />
+        <GlyphTile glyph={campaign.glyph} size={42} image={campaign.business.logo_url} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-[15px] font-bold text-ink">{campaign.name}</p>
           <p className="truncate text-[12px] text-subtle">{campaign.business.name}</p>

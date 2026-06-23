@@ -9,6 +9,7 @@ import { useAuth } from "../_lib/auth";
 import { BottomNav, CUSTOMER_NAV } from "./BottomNav";
 import { ScanFab } from "./ScanFab";
 import { ScanIcon } from "./icons";
+import { UserAvatar } from "./kit";
 
 /**
  * Page chrome for customer screens. Responsive, mirroring the business OwnerShell:
@@ -162,7 +163,7 @@ function AccountCard() {
   }, [open]);
 
   const name = me.data?.user.name || me.data?.user.phone || t("account.role");
-  const initial = (me.data?.user.name?.charAt(0) || "J").toUpperCase();
+  const user = me.data?.user;
 
   function signOut() {
     logout();
@@ -208,9 +209,13 @@ function AccountCard() {
           open ? "bg-board/60" : "hover:bg-board/40"
         }`}
       >
-        <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-brand-gradient font-display text-sm font-bold text-brand-fg">
-          {initial}
-        </div>
+        {user ? (
+          <UserAvatar user={user} size={36} />
+        ) : (
+          <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-brand-gradient font-display text-sm font-bold text-brand-fg">
+            J
+          </div>
+        )}
         <div className="min-w-0 text-left">
           <div className="truncate text-[13.5px] font-semibold text-ink">{name}</div>
           <div className="text-[11.5px] text-subtle">{t("account.role")}</div>

@@ -19,12 +19,19 @@ from apps.accounts.services import otp_key
 pytestmark = pytest.mark.django_db
 
 
-# Minimal 1×1 PNG bytes (valid Pillow-parseable image)
-_PNG_1x1 = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
-    b"\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+def _png_bytes(width: int = 8, height: int = 8) -> bytes:
+    """A real, fully-decodable PNG. The avatar upload now decodes + re-encodes the
+    image server-side, so the test fixture must be a valid image (not a truncated
+    byte blob)."""
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (width, height), (200, 90, 60)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+# A valid Pillow-parseable PNG used across the avatar tests.
+_PNG_1x1 = _png_bytes()
 
 
 def _login(api_client, phone):
@@ -115,6 +122,40 @@ def test_photo_upload_sets_avatar_relative_url_and_clears_emoji(api_client):
     user.refresh_from_db()
     assert bool(user.avatar)
     assert user.avatar_emoji == ""
+    # The upload is compressed + re-encoded to webp server-side.
+    assert user.avatar.name.endswith(".webp")
+
+
+def test_avatar_upload_compresses_large_image(api_client, settings, tmp_path):
+    """A large avatar upload is downscaled to the avatar bound before saving."""
+    from PIL import Image
+
+    from core.images import AVATAR_MAX_DIM
+
+    settings.MEDIA_ROOT = str(tmp_path)
+    phone = "+996700555010"
+    _login(api_client, phone)
+
+    big = SimpleUploadedFile("big.png", _png_bytes(1000, 1000), content_type="image/png")
+    response = api_client.post("/api/auth/avatar/", {"avatar": big}, format="multipart")
+    assert response.status_code == 200
+
+    user = User.objects.get(phone=phone)
+    with user.avatar.open("rb") as fh:
+        out = Image.open(fh)
+        assert max(out.width, out.height) <= AVATAR_MAX_DIM
+
+
+def test_avatar_upload_rejects_unparseable_image(api_client):
+    """An undecodable avatar upload is rejected with a 400 (INVALID_IMAGE / validation)."""
+    phone = "+996700555011"
+    _login(api_client, phone)
+
+    bad = SimpleUploadedFile("bad.png", b"not really a png", content_type="image/png")
+    response = api_client.post("/api/auth/avatar/", {"avatar": bad}, format="multipart")
+
+    assert response.status_code == 400
+    assert response.data["success"] is False
 
 
 def test_avatar_upload_requires_file(api_client):

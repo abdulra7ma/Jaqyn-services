@@ -19,6 +19,7 @@ import type {
   BusinessGroupDeal,
   BusinessProfile,
   BusinessRegisterPayload,
+  BusinessReport,
   BusinessType,
   CampaignLifecycleAction,
   CampaignParticipantRow,
@@ -35,19 +36,49 @@ import type {
   MerchantQr,
   OnboardingProfilePatch,
   OnboardingState,
+  ReportPeriod,
+  ReportRange,
   RewardProgramFull,
   RewardProgramPayload,
   StaffInvite,
   StaffInviteList,
   StaffInvitePayload,
+  StaffPasswordReset,
+  TeamList,
+  TeamRole,
+  TeamRow,
 } from "./types";
 
 type Paginated<T> = { results: T[] };
+
+// Shared multipart upload for the brand/background images. The backend expects
+// the file under the `image` field and returns the owner business in the
+// {success,data} envelope (same as uploadCampaignImage).
+async function uploadBusinessImage(path: string, file: File): Promise<BusinessProfile> {
+  const form = new FormData();
+  form.append("image", file);
+  const access = tokenStore.getAccess();
+  const headers: Record<string, string> = {};
+  if (access) headers["Authorization"] = `Bearer ${access}`;
+  // Relative API_URL → same-origin (Next proxy); absolute → direct host.
+  const baseUrl = API_URL.startsWith("http") ? API_URL : "";
+  const res = await fetch(`${baseUrl}${path}`, { method: "POST", headers, body: form });
+  const json = (await res.json()) as { success?: boolean; data?: BusinessProfile };
+  if (!json || json.success === false || !json.data) {
+    throw new Error("Business image upload failed");
+  }
+  return json.data;
+}
 
 export const businessApi = {
   register: (payload: BusinessRegisterPayload) =>
     api.post<BusinessProfile>("/api/business/register/", payload),
   me: () => api.get<BusinessProfile>("/api/business/me/"),
+  // Brand image (logo) + background image (cover) uploads. Multipart, so they
+  // bypass the JSON `api` client (which forces a JSON body) — same pattern as
+  // customer uploadAvatar / uploadCampaignImage. Both return the owner business.
+  uploadLogo: (file: File) => uploadBusinessImage("/api/business/profile/logo/", file),
+  uploadCover: (file: File) => uploadBusinessImage("/api/business/profile/cover/", file),
   updateMe: (patch: Omit<Partial<BusinessProfile>, "working_hours"> & { working_hours?: unknown }) =>
     api.patch<BusinessProfile>("/api/business/me/", patch),
   dashboard: () => api.get<Dashboard>("/api/business/dashboard/"),
@@ -81,7 +112,14 @@ export const businessApi = {
   activateOffer: (id: string) =>
     api.post<GroupOfferFull>(`/api/business/group-offers/${id}/activate/`),
 
-  reports: () => api.get<Record<string, number | string>>("/api/business/reports/"),
+  reports: (period: ReportPeriod = "month", range?: ReportRange) => {
+    const params = new URLSearchParams({ period });
+    if (period === "custom" && range) {
+      params.set("date_from", range.date_from);
+      params.set("date_to", range.date_to);
+    }
+    return api.get<BusinessReport>(`/api/business/reports/?${params.toString()}`);
+  },
   customers: () =>
     api.get<Paginated<MaskedCustomer>>("/api/business/customers/").then((d) => d.results),
 
@@ -110,6 +148,17 @@ export const businessApi = {
   addStaffInvite: (payload: StaffInvitePayload) =>
     api.post<StaffInvite>("/api/business/staff-invites/", payload),
   removeStaffInvite: (id: string) => api.delete<unknown>(`/api/business/staff-invites/${id}/`),
+
+  // ---- team / manage staff (GET /api/business/staff/) ----
+  team: () => api.get<TeamList>("/api/business/staff/"),
+  staffMember: (id: string) => api.get<TeamRow>(`/api/business/staff/${id}/`),
+  updateStaffRole: (id: string, role: TeamRole) =>
+    api.patch<TeamRow>(`/api/business/staff/${id}/`, { role }),
+  suspendStaff: (id: string) => api.post<TeamRow>(`/api/business/staff/${id}/suspend/`),
+  reactivateStaff: (id: string) => api.post<TeamRow>(`/api/business/staff/${id}/reactivate/`),
+  resetStaffPassword: (id: string) =>
+    api.post<StaffPasswordReset>(`/api/business/staff/${id}/reset-password/`),
+  removeStaffMember: (id: string) => api.delete<unknown>(`/api/business/staff/${id}/`),
 
   // ---- campaigns (apps.campaigns — plan §1.3) ----
   listCampaigns: (): Promise<BusinessCampaignListResponse> =>

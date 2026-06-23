@@ -1,11 +1,11 @@
 "use client";
 
-import { staffApi } from "@jaqyn/api";
+import { staffApi, useMe } from "@jaqyn/api";
 import { useI18n, useT, type Locale } from "@jaqyn/i18n";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { InitialTile } from "../../_components/kit";
+import { InitialTile, UserAvatar } from "../../_components/kit";
 import { useStaffAuth } from "../_lib/staffAuth";
 import { STAFF_TABS, StaffNav } from "./StaffNav";
 
@@ -138,6 +138,8 @@ function StaffAccountFooter() {
   const t = useT();
   const { locale, setLocale } = useI18n();
   const router = useRouter();
+  const me = useMe();
+  const user = me.data?.user;
 
   function signOut() {
     staffApi.logout();
@@ -146,6 +148,20 @@ function StaffAccountFooter() {
 
   return (
     <div className="mt-auto pt-4">
+      {user && (
+        <Link
+          href="/staff/profile"
+          className="mb-2 flex items-center gap-2.5 rounded-[12px] p-2 transition hover:bg-board/40"
+        >
+          <UserAvatar user={user} size={34} />
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-semibold text-ink">
+              {user.name || user.phone}
+            </div>
+            <div className="text-[11px] text-subtle">{t("staff.tab.profile")}</div>
+          </div>
+        </Link>
+      )}
       <div className="px-2.5 pb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-subtle">
         {t("common.language")}
       </div>

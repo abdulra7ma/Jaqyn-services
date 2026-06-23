@@ -10,12 +10,20 @@ from apps.businesses.onboarding_views import (
     StaffInviteDetailView,
     StaffInviteListCreateView,
 )
-from apps.businesses.views import BusinessDashboardView, BusinessMeView, BusinessRegisterView
+from apps.businesses.views import (
+    BusinessCoverUploadView,
+    BusinessDashboardView,
+    BusinessLogoUploadView,
+    BusinessMeView,
+    BusinessRegisterView,
+)
 from apps.qr.views import BusinessQRView, RegenerateApprovalCodeView
 
 urlpatterns = [
     path("register/", BusinessRegisterView.as_view(), name="business-register"),
     path("me/", BusinessMeView.as_view(), name="business-me"),
+    path("profile/logo/", BusinessLogoUploadView.as_view(), name="business-logo-upload"),
+    path("profile/cover/", BusinessCoverUploadView.as_view(), name="business-cover-upload"),
     path("dashboard/", BusinessDashboardView.as_view(), name="business-dashboard"),
     path("qr/", BusinessQRView.as_view(), name="business-qr"),
     path("approval-code/regenerate/", RegenerateApprovalCodeView.as_view(), name="business-approval-code-regenerate"),

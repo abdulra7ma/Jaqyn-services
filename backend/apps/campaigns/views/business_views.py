@@ -33,6 +33,7 @@ from apps.campaigns.services import (
     build_social_post,
 )
 from apps.loyalty.services import get_staff_for_user
+from core.images import CAMPAIGN_MAX_DIM, compress_image
 from core.pagination import StandardResultsSetPagination
 from core.permissions import IsBusinessOwner, IsStaff
 from core.response import success_response
@@ -275,7 +276,8 @@ class CampaignImageUploadView(_OwnerMixin, APIView):
         campaign = CampaignService.get_for_business(campaign_id, business)
         serializer = CampaignImageUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        campaign.image = serializer.validated_data["image"]
+        # Compress before storing — social cards are shared at post/story size.
+        campaign.image = compress_image(serializer.validated_data["image"], max_dim=CAMPAIGN_MAX_DIM)
         campaign.save(update_fields=["image", "updated_at"])
         return success_response(CampaignSerializer(campaign).data)
 

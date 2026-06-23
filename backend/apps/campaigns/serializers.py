@@ -104,6 +104,9 @@ class CampaignSerializer(serializers.ModelSerializer):
     """
 
     business_name = serializers.CharField(source="business.name", read_only=True)
+    # Relative (/media/..) logo url of the owning business, so campaign cards can
+    # show the brand mark instead of a bare glyph. None when the business has no logo.
+    business_logo_url = serializers.SerializerMethodField()
     rule = CampaignRuleSerializer(read_only=True)
     reward = CampaignRewardSerializer(read_only=True)
     required_count = serializers.SerializerMethodField()
@@ -120,6 +123,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "id",
             "business",
             "business_name",
+            "business_logo_url",
             "created_by",
             "name",
             "description",
@@ -145,6 +149,11 @@ class CampaignSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_business_logo_url(self, obj: Campaign) -> str | None:
+        business = getattr(obj, "business", None)
+        logo = getattr(business, "logo", None)
+        return logo.url if logo else None
 
     def get_required_count(self, obj: Campaign) -> int:
         rule = getattr(obj, "rule", None)
@@ -257,6 +266,7 @@ class CampaignDetailSerializer(CampaignSerializer):
             "id",
             "business",
             "business_name",
+            "business_logo_url",
             "created_by",
             "name",
             "description",

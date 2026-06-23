@@ -1,14 +1,14 @@
 "use client";
 
-import { useMe, useUpdateProfile, type Language } from "@jaqyn/api";
+import { useMe, useUpdateProfile, useUploadAvatar, type Language } from "@jaqyn/api";
 import { useI18n, useT, type Locale } from "@jaqyn/i18n";
 import { Button, Card, Input } from "@jaqyn/ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CustomerShell } from "../_components/CustomerShell";
 import { QueryBoundary } from "../_components/QueryBoundary";
-import { InitialTile } from "../_components/kit";
+import { UserAvatar } from "../_components/kit";
 import { useErrMessage } from "../_lib/useErrMessage";
 import { useAuth, useRequireAuth } from "../_lib/auth";
 
@@ -21,6 +21,14 @@ export default function ProfilePage() {
   const { logout } = useAuth();
   const me = useMe(isAuthenticated);
   const update = useUpdateProfile();
+  const uploadAvatar = useUploadAvatar();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) uploadAvatar.mutate(file);
+    e.target.value = ""; // allow re-selecting the same file
+  }
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -51,12 +59,40 @@ export default function ProfilePage() {
             <div className="flex flex-col gap-4">
               {/* avatar header */}
               <Card className="flex items-center gap-4">
-                <InitialTile name={data.user.name || data.user.phone} size={58} variant="gradient" />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadAvatar.isPending}
+                  aria-label={t("profile.uploadPhoto")}
+                  className="relative flex-none rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-60"
+                >
+                  <UserAvatar user={data.user} size={58} />
+                  {uploadAvatar.isPending && (
+                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-ink/40 text-sm text-white">
+                      …
+                    </span>
+                  )}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
                 <div className="min-w-0">
                   <p className="truncate font-display text-lg font-bold text-ink">
                     {data.user.name || t("profile.title")}
                   </p>
                   <p className="text-sm text-subtle">{data.user.phone}</p>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadAvatar.isPending}
+                    className="mt-1 text-xs font-bold text-brand disabled:opacity-60"
+                  >
+                    {uploadAvatar.isPending ? t("common.loading") : t("profile.uploadPhoto")}
+                  </button>
                 </div>
               </Card>
 

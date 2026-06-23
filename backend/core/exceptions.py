@@ -18,6 +18,7 @@ ERROR_MESSAGES = {
     "PERMISSION_DENIED": "You do not have permission to perform this action",
     "RATE_LIMITED": "Too many attempts. Please try again later",
     "VALIDATION_ERROR": "Validation error",
+    "INVALID_IMAGE": "The uploaded file is not a valid image",
     # --- Campaign rewards (apps.campaigns) ---
     "WRONG_BUSINESS": "This belongs to another business",
     "CAMPAIGN_NOT_FOUND": "The campaign does not exist",

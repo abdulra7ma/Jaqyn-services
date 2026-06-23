@@ -31,6 +31,11 @@ export type BusinessProfile = {
   public_email?: string | null;
   website_url?: string | null;
   instagram_url: string | null;
+  // Brand image (logo) and background image (cover) URLs — relative `/media/...`
+  // (served same-origin through the Next proxy) or null when unset. `*_set`
+  // mirror the backend booleans (whether the owner has uploaded each image).
+  logo_url?: string | null;
+  cover_url?: string | null;
   logo_set?: boolean;
   cover_set?: boolean;
   glyph?: string;
@@ -105,6 +110,55 @@ export type StaffInvite = {
 export type StaffInvitePayload = { full_name?: string; contact: string; role: string };
 
 export type StaffInviteList = { results: StaffInvite[]; limit: number; used: number };
+
+// ---- Team / Manage Staff (GET /api/business/staff/) -------------------------
+// A row is either a confirmed member (`kind:"member"`) or a pending invite
+// (`kind:"invite"`). Member rows support role/suspend/reset/remove actions;
+// invite rows support only cancel (delete) — mirrors the backend contract.
+
+export type TeamMemberKind = "member" | "invite";
+// Access role drives the Access level chips: cashier = "Scan & redeem",
+// manager = "Full access".
+export type TeamRole = "cashier" | "manager";
+export type TeamStatus = "active" | "invited" | "suspended";
+
+export type TeamMemberStats = {
+  scans: number;
+  redemptions: number;
+  signups: number;
+};
+
+export type TeamRow = {
+  id: string;
+  kind: TeamMemberKind;
+  name: string;
+  role: TeamRole;
+  access_label: string;
+  email: string;
+  phone: string;
+  status: TeamStatus;
+  last_active: string | null;
+  joined: string;
+  avatar_url: string | null;
+  initials: string;
+  stats: TeamMemberStats;
+};
+
+export type TeamCounts = {
+  total: number;
+  active: number;
+  invited: number;
+  suspended: number;
+};
+
+export type TeamList = {
+  counts: TeamCounts;
+  members: TeamRow[];
+};
+
+// Returned once by the reset-password action — shown to the owner to share
+// securely. Never persisted client-side.
+export type StaffPasswordReset = { temp_password: string };
 
 export type ActivateResponse = {
   access: string;
@@ -433,3 +487,59 @@ export type CampaignSocialPost = {
   captions: SocialPostCaptions;
   hashtags: string[];
 };
+
+// ---- Reports (apps.reporting BusinessReportSerializer) ----------------------
+// Mirrors the typed BusinessReport dataclass. Values are display-ready strings
+// from the server ("38%", "1,420 som", "—"); deltas are signed percentages or
+// null when there is no prior-period baseline.
+
+export type ReportPeriod = "today" | "week" | "month" | "custom";
+
+export type ReportKpi = {
+  key: string;
+  value: string;
+  delta_pct: number | null;
+  hint: string;
+};
+
+export type ReportSeriesPoint = { label: string; value: number };
+
+export type ReportStackedPoint = { label: string; new: number; returning: number };
+
+export type ReportCohort = { label: string; count: number; pct: number };
+
+export type ReportStaffRow = {
+  id: string;
+  name: string;
+  role: string;
+  scans: number;
+  signups: number;
+  redemptions: number;
+  conversion_pct: number;
+  trend_pct: number | null;
+  top: boolean;
+};
+
+export type ReportTeamTotals = {
+  scans: number;
+  redemptions: number;
+  signups: number;
+  active_days: number;
+};
+
+export type ReportInsight = { icon: string; text: string };
+
+export type BusinessReport = {
+  period: ReportPeriod;
+  range_label: string;
+  kpis: ReportKpi[];
+  scans_over_time: ReportSeriesPoint[];
+  busiest_hours: ReportSeriesPoint[];
+  new_vs_returning: ReportStackedPoint[];
+  cohorts: ReportCohort[];
+  staff: ReportStaffRow[];
+  team_totals: ReportTeamTotals;
+  insights: ReportInsight[];
+};
+
+export type ReportRange = { date_from: string; date_to: string };

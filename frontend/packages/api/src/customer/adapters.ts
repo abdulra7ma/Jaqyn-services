@@ -210,7 +210,7 @@ export function adaptCampaign(raw: Raw): Campaign {
       id: biz?.id ?? raw.business,
       name: raw.business_name ?? biz?.name ?? "",
       category: biz?.category ?? "other",
-      logo_url: biz?.logo_url ?? null,
+      logo_url: raw.business_logo_url ?? biz?.logo_url ?? null,
       area: raw.business_area ?? biz?.area ?? "",
     },
     glyph: raw.glyph ?? "",

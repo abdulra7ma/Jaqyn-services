@@ -144,7 +144,7 @@ function NearbyCard({
       onFocus={onFocus}
       className={`flex items-center gap-3 rounded-[14px] border bg-card px-3.5 py-3 shadow-card transition active:scale-[.99] ${selected ? "border-brand" : "border-line"}`}
     >
-      <InitialTile name={b.glyph || b.name} size={42} />
+      <InitialTile name={b.glyph || b.name} size={42} image={b.logo_url} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-bold text-ink">{b.name}</span>

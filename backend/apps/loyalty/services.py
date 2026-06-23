@@ -263,6 +263,12 @@ def staff_collect(staff, raw_token, amount=None, program_id=None, request=None):
     Staff scans a customer's personal QR to award loyalty points.
     Returns a plain dict with state + customer/program/progress/reward/redemption.
     States: awarded | needs_amount | reward_ready
+
+    When ``amount`` is supplied it is recorded as ``amount_spend`` on the EARNED
+    transaction for *both* spend and count programs. Spend programs require it to
+    advance; count programs treat it as optional spend telemetry (feeds the
+    Reports spend KPIs — avg spend / visit, customer value). It never affects how
+    a count program advances.
     """
     qr_token = resolve_qr_token(raw_token, request, action="staff_collect")
 
@@ -391,6 +397,7 @@ def staff_collect(staff, raw_token, amount=None, program_id=None, request=None):
                 progress=progress,
                 action=RewardTransaction.Action.EARNED,
                 amount_count=1,
+                amount_spend=amount,  # optional spend telemetry for count programs
                 source=RewardTransaction.Source.STAFF_MANUAL,
                 staff=staff,
                 metadata={"raw_token": raw_token},

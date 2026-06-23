@@ -14,6 +14,8 @@ class BusinessSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(source="name", required=False)
     completion_score = serializers.SerializerMethodField()
     missing_required_fields = serializers.SerializerMethodField()
+    logo_url = serializers.SerializerMethodField()
+    cover_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Business
@@ -38,6 +40,8 @@ class BusinessSerializer(serializers.ModelSerializer):
             "instagram_url",
             "logo_set",
             "cover_set",
+            "logo_url",
+            "cover_url",
             "glyph",
             "accent_color",
             "price_level",
@@ -78,6 +82,16 @@ class BusinessSerializer(serializers.ModelSerializer):
         from apps.businesses.onboarding_services import missing_required
 
         return missing_required(obj)
+
+    def get_logo_url(self, obj):
+        # Relative /media/... url (via MEDIA_URL) so it passes through the
+        # frontend proxy; None when no logo is set.
+        return obj.logo.url if obj.logo else None
+
+    def get_cover_url(self, obj):
+        # Relative /media/... url (via MEDIA_URL) so it passes through the
+        # frontend proxy; None when no cover is set.
+        return obj.cover_image.url if obj.cover_image else None
 
 
 class PublicBusinessSerializer(serializers.ModelSerializer):
@@ -190,6 +204,16 @@ class PublicBusinessSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         url = obj.cover_image.url
         return request.build_absolute_uri(url) if request else url
+
+
+class BusinessImageUploadSerializer(serializers.Serializer):
+    """Brand-asset upload input — a single ``image`` file (logo or cover).
+
+    ``ImageField`` enforces that the upload is a decodable image (shape/format
+    validation). Compression + persistence is the service's concern.
+    """
+
+    image = serializers.ImageField()
 
 
 class CatalogItemSerializer(serializers.ModelSerializer):

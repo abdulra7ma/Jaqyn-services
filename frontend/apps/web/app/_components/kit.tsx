@@ -67,17 +67,36 @@ export function UserAvatar({
   );
 }
 
-/** Square tile with a business/program initial. */
+/**
+ * Square tile with a business/program initial. When `image` is set (e.g. a
+ * business logo at /media/...), the photo takes precedence over the initial.
+ * Uses a plain <img> (not next/image) so the same-origin /media/ rewrite works.
+ */
 export function InitialTile({
   name,
   size = 48,
   variant = "cream",
+  image,
 }: {
   name: string;
   size?: number;
   variant?: "cream" | "gradient";
+  image?: string | null;
 }) {
   const radius = Math.round(size * 0.3);
+  if (image) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={image}
+        alt={name}
+        width={size}
+        height={size}
+        className="flex-none object-cover"
+        style={{ width: size, height: size, borderRadius: radius }}
+      />
+    );
+  }
   return (
     <div
       className={cn(

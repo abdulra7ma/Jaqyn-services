@@ -156,7 +156,10 @@ class AvatarUploadView(APIView):
             from core.exceptions import JaqynAPIException
 
             raise JaqynAPIException(code="AVATAR_REQUIRED", message="avatar file is required", status_code=400)
-        request.user.avatar = avatar_file
+        from core.images import AVATAR_MAX_DIM, compress_image
+
+        # Compress before storing — avatars render small, so bound them tightly.
+        request.user.avatar = compress_image(avatar_file, max_dim=AVATAR_MAX_DIM)
         request.user.avatar_emoji = ""
         request.user.save()
         return success_response({"user": UserSerializer(request.user).data})

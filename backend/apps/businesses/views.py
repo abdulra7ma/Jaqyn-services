@@ -2,15 +2,25 @@ import math
 
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.businesses.models import Business
-from apps.businesses.serializers import BusinessSerializer, PublicBusinessSerializer
-from apps.businesses.services import register_business
+from apps.businesses.serializers import (
+    BusinessImageUploadSerializer,
+    BusinessSerializer,
+    PublicBusinessSerializer,
+)
+from apps.businesses.services import (
+    register_business,
+    set_business_cover,
+    set_business_logo,
+)
 from apps.reporting.services import business_metrics
 from core.exceptions import JaqynAPIException
-from core.permissions import IsBusinessOwnerOrAdmin
+from core.permissions import IsBusinessOwner, IsBusinessOwnerOrAdmin
 from core.response import success_response
 
 
@@ -105,6 +115,58 @@ class BusinessMeView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return success_response(BusinessSerializer(business).data)
+
+
+class _BusinessImageUploadView(APIView):
+    """Shared base for the owner brand-asset upload endpoints.
+
+    Owner-only (``IsBusinessOwner``); the owner must already own a business.
+    Views stay thin: validate the file with the serializer, hand it to the
+    service (which compresses + saves), and return the owner profile via
+    :class:`BusinessSerializer` (carries ``logo_url`` / ``cover_url``). The write
+    is scoped-throttled. Subclasses set ``_save`` to the service function.
+    """
+
+    permission_classes = [IsBusinessOwner]
+    parser_classes = [MultiPartParser, FormParser]
+    serializer_class = BusinessImageUploadSerializer
+    throttle_scope = "business_image"
+
+    def get_throttles(self):
+        return [ScopedRateThrottle()]
+
+    def _business(self, request):
+        try:
+            return request.user.owned_business
+        except Business.DoesNotExist:
+            raise JaqynAPIException("VALIDATION_ERROR", "Business not found", status_code=404)
+
+    def post(self, request):
+        business = self._business(request)
+        serializer = BusinessImageUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self._save(business, serializer.validated_data["image"])
+        return success_response(BusinessSerializer(business).data)
+
+    @staticmethod
+    def _save(business, image):  # pragma: no cover - overridden by subclasses
+        raise NotImplementedError
+
+
+class BusinessLogoUploadView(_BusinessImageUploadView):
+    """POST /api/business/profile/logo/ — compress + store the brand logo."""
+
+    @staticmethod
+    def _save(business, image):
+        return set_business_logo(business, image)
+
+
+class BusinessCoverUploadView(_BusinessImageUploadView):
+    """POST /api/business/profile/cover/ — compress + store the cover image."""
+
+    @staticmethod
+    def _save(business, image):
+        return set_business_cover(business, image)
 
 
 class BusinessDashboardView(APIView):

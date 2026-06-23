@@ -9,8 +9,14 @@ from apps.groups.serializers import GroupDealSerializer
 from apps.loyalty.models import RewardProgram
 from apps.loyalty.serializers import CustomerRewardProgressSerializer
 from apps.qr.models import QRCodeToken
-from apps.reporting.services import admin_metrics, business_customers, business_metrics
-from apps.reporting.serializers import AdminReasonSerializer, ManualAdjustmentSerializer
+from apps.reporting.business_reports import build_business_report, resolve_period
+from apps.reporting.services import admin_metrics, business_customers
+from apps.reporting.serializers import (
+    AdminReasonSerializer,
+    BusinessReportSerializer,
+    ManualAdjustmentSerializer,
+    ReportQuerySerializer,
+)
 from apps.reporting.services import (
     block_user,
     disable_business_and_tokens,
@@ -26,9 +32,18 @@ from core.response import success_response
 
 class BusinessReportsView(APIView):
     permission_classes = [IsBusinessOwner]
+    serializer_class = BusinessReportSerializer
 
     def get(self, request):
-        return success_response(business_metrics(request.user.owned_business))
+        query = ReportQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        window = resolve_period(
+            query.validated_data["period"],
+            query.validated_data.get("date_from"),
+            query.validated_data.get("date_to"),
+        )
+        report = build_business_report(request.user.owned_business, window)
+        return success_response(BusinessReportSerializer(report).data)
 
 
 class BusinessCustomersView(APIView):

@@ -117,6 +117,13 @@ REST_FRAMEWORK = {
         "campaign_join": "30/min",  # customer join / group start
         "campaign_present": "60/min",  # customer presents a voucher (polled UI)
         "campaign_scan": "120/min",  # staff scan/confirm/redeem at the till
+        # Business brand-asset uploads (logo + cover). Rare, heavy writes; bound
+        # tightly so an owner can't hammer the compressor/storage.
+        "business_image": "20/min",
+        # Owner "Manage Staff" mutations (role change, suspend/reactivate,
+        # password reset, remove). Owner-only, low-frequency administrative
+        # writes — bounded so credential resets can't be hammered.
+        "staff_manage": "30/min",
     },
 }
 

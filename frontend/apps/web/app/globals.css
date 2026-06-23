@@ -14,6 +14,16 @@
   }
 }
 
+/* Slide-in drawer from the right edge (Jaqyn.dc.html staff detail drawer). */
+@keyframes jqSlide {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
 /* Auth background: slow drifting blobs. */
 @keyframes jqFloatA {
   0%, 100% { transform: translate(0, 0) scale(1); }

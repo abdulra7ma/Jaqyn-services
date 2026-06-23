@@ -21,7 +21,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.models import CustomerProfile, User
-from apps.businesses.models import Business
+from apps.businesses.models import Business, StaffInvite
 from apps.campaigns.models import (
     Campaign,
     CampaignParticipant,
@@ -31,7 +31,7 @@ from apps.campaigns.models import (
 )
 from apps.groups.models import GroupDeal, GroupMember, GroupOffer
 from apps.loyalty.models import CustomerRewardProgress, RewardProgram, RewardRedemption
-from apps.qr.models import QRCodeToken
+from apps.qr.models import QRCodeToken, ScanLog
 from apps.staff.models import StaffMember
 
 # Documented demo passwords (dev/staging only — never used in production).
@@ -55,8 +55,8 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             owner, staff_users, customers, biz = self._seed_accounts(rows)
-            self._seed_staff(biz, staff_users, rows)
             counts = {}
+            counts["staff"] = self._seed_staff(biz, staff_users, customers, rows)
             counts["loyalty"] = self._seed_loyalty(biz, customers)
             counts["campaigns"] = self._seed_campaigns(biz, owner, customers)
             counts["groups"] = self._seed_groups(biz, customers)
@@ -128,8 +128,9 @@ class Command(BaseCommand):
 
         return owner, staff_users, customers, biz
 
-    def _seed_staff(self, biz, staff_users, rows):
+    def _seed_staff(self, biz, staff_users, customers, rows):
         pin_hash = make_password(STAFF_PIN)
+        members = {}
         for user, role, name in (
             (staff_users[0], StaffMember.Role.MANAGER, "Adina M."),
             (staff_users[1], StaffMember.Role.CASHIER, "Bektur K."),
@@ -140,6 +141,53 @@ class Command(BaseCommand):
             sm.pin_hash = pin_hash
             sm.is_active = True
             sm.save()
+            members[name] = sm
+
+        # A SUSPENDED member (no linked user) so the Manage Staff page shows the
+        # "suspended" status and the reactivate/no-login paths have demo data.
+        suspended, _ = StaffMember.objects.get_or_create(
+            business=biz, name="Cholpon D.", user=None,
+            defaults={"role": StaffMember.Role.CASHIER},
+        )
+        suspended.role = StaffMember.Role.CASHIER
+        suspended.pin_hash = pin_hash
+        suspended.is_active = False
+        suspended.save()
+
+        # A PENDING invite so the merged team list shows an "invited" row.
+        invite, _ = StaffInvite.objects.get_or_create(
+            business=biz, contact="aibek.b@manas.coffee",
+            defaults={"full_name": "Aibek B.", "role": StaffInvite.Role.STAFF,
+                      "status": StaffInvite.Status.PENDING},
+        )
+        invite.full_name = "Aibek B."
+        invite.role = StaffInvite.Role.STAFF
+        invite.status = StaffInvite.Status.PENDING
+        invite.save()
+
+        # SUCCESS scan logs attributed to the manager + cashier so the
+        # performance stats (scans / signups / last-active) render non-zero.
+        # Idempotent: only seed when this business has no scan logs yet.
+        scan_count = 0
+        if not ScanLog.objects.filter(business=biz).exists():
+            now = timezone.now()
+            plan = [
+                (members["Adina M."], customers[0]),
+                (members["Adina M."], customers[1]),
+                (members["Bektur K."], customers[1]),
+                (members["Bektur K."], customers[2]),
+                (members["Bektur K."], customers[0]),
+            ]
+            for i, (member, customer) in enumerate(plan):
+                log = ScanLog.objects.create(
+                    business=biz, staff=member, customer=customer,
+                    action="staff_collect", status=ScanLog.Status.SUCCESS,
+                )
+                # created_at is auto_now_add, so backdate it explicitly to give
+                # the demo a spread of "last active" times.
+                ScanLog.objects.filter(pk=log.pk).update(created_at=now - timedelta(hours=i + 1))
+                scan_count += 1
+        return {"members": 3, "invited": 1, "suspended": 1, "scans": scan_count}
 
     # ----- loyalty --------------------------------------------------------
     def _seed_loyalty(self, biz, customers):
@@ -347,6 +395,10 @@ class Command(BaseCommand):
         w("All logins also accept dev OTP code 000000 (when DEV_LOGIN_OTP=000000). Staff PIN: " + STAFF_PIN)
         w("")
         w(self.style.MIGRATE_HEADING("=== Seeded data ==="))
+        w(f"Staff     : {counts['staff']['members']} members "
+          f"({counts['staff']['suspended']} suspended), "
+          f"{counts['staff']['invited']} pending invite(s), "
+          f"{counts['staff']['scans']} scan log(s)")
         w(f"Loyalty   : program '{counts['loyalty']['program']}', "
           f"{counts['loyalty']['progress_rows']} progress rows, "
           f"{counts['loyalty']['pending_vouchers']} pending voucher(s)")

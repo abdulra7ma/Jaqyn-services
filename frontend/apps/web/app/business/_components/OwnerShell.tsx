@@ -7,6 +7,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useBusinessMe, useMe } from "@jaqyn/api";
+import { UserAvatar } from "../../_components/kit";
 import { useAuth } from "../../_lib/auth";
 
 type NavItem = { label: string; icon: string; href: string };
@@ -39,6 +41,7 @@ export const OWNER_NAV: NavGroup[] = [
     label: "Account",
     items: [
       { label: "Profile", icon: "◑", href: "/business/profile" },
+      { label: "Manage Staff", icon: "◍", href: "/business/staff" },
       { label: "Staff Mode", icon: "⊕", href: "/staff" },
     ],
   },
@@ -81,6 +84,9 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
 function OwnerCard() {
   const router = useRouter();
   const { logout } = useAuth();
+  const me = useMe();
+  const user = me.data?.user;
+  const ownerName = user?.name || user?.phone || BIZ.owner;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -125,11 +131,15 @@ function OwnerCard() {
         aria-expanded={open}
         className={`flex w-full items-center gap-[11px] rounded-[14px] p-3.5 transition ${open ? "bg-white/10" : "bg-white/5 hover:bg-white/[0.08]"}`}
       >
-        <div className="flex h-[38px] w-[38px] flex-none items-center justify-center rounded-full bg-brand font-display text-[15px] font-bold text-brand-fg">
-          {BIZ.owner.charAt(0)}
-        </div>
+        {user ? (
+          <UserAvatar user={user} size={38} />
+        ) : (
+          <div className="flex h-[38px] w-[38px] flex-none items-center justify-center rounded-full bg-brand font-display text-[15px] font-bold text-brand-fg">
+            {BIZ.owner.charAt(0)}
+          </div>
+        )}
         <div className="min-w-0 text-left">
-          <div className="truncate text-[13.5px] font-semibold text-white">{BIZ.owner}</div>
+          <div className="truncate text-[13.5px] font-semibold text-white">{ownerName}</div>
           <div className="text-[11.5px] text-[#9A8B7B]">Owner</div>
         </div>
         <span className={`ml-auto flex-none text-[#9A8B7B] transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
@@ -141,6 +151,11 @@ function OwnerCard() {
 export function OwnerShell({ title, children }: { title: string; children: ReactNode }) {
   const pathname = usePathname();
   const [drawer, setDrawer] = useState(false);
+  const biz = useBusinessMe();
+  const bizName = biz.data?.name || BIZ.name;
+  const bizMeta = [biz.data?.category || BIZ.cat, biz.data?.area || BIZ.area]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="flex min-h-screen flex-col bg-cream font-sans text-ink lg:h-screen lg:flex-row">
@@ -211,7 +226,8 @@ export function OwnerShell({ title, children }: { title: string; children: React
           <div>
             <div className="font-display text-[22px] font-bold text-ink">{title}</div>
             <div className="mt-0.5 text-[13px] text-subtle">
-              {BIZ.name} · {BIZ.cat} · {BIZ.area}
+              {bizName}
+              {bizMeta ? ` · ${bizMeta}` : ""}
             </div>
           </div>
           <span className="inline-flex items-center gap-[7px] rounded-pill bg-sage-soft px-3.5 py-2 text-[12.5px] font-bold text-ok">

@@ -12,9 +12,12 @@ import {
   useRemoveCatalogItem,
   useSubmitOnboarding,
   useUpdateBusiness,
+  useUploadBusinessCover,
+  useUploadBusinessLogo,
 } from "@jaqyn/api";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useT } from "@jaqyn/i18n";
 import { OwnerShell } from "../_components/OwnerShell";
 import { useAuth } from "../../_lib/auth";
 
@@ -38,6 +41,7 @@ const ACCENTS = ["#C25E3C", "#5E8B6A", "#E7A23E", "#6A6BC2", "#B0563A"];
 export default function BusinessProfilePage() {
   const { isAuthenticated, ready } = useAuth();
   const enabled = ready && isAuthenticated;
+  const t = useT();
   const me = useBusinessMe(enabled);
   const onboarding = useOnboardingState(enabled);
   const catalog = useCatalog(enabled);
@@ -45,6 +49,26 @@ export default function BusinessProfilePage() {
   const submit = useSubmitOnboarding();
   const addItem = useAddCatalogItem();
   const removeItem = useRemoveCatalogItem();
+  const uploadLogo = useUploadBusinessLogo();
+  const uploadCover = useUploadBusinessCover();
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  // The fresh business (with logo_url / cover_url) comes from the me query, which
+  // both upload mutations write back into the cache on success.
+  const logoUrl = me.data?.logo_url ?? null;
+  const coverUrl = me.data?.cover_url ?? null;
+
+  function onLogoPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) uploadLogo.mutate(file);
+    e.target.value = "";
+  }
+  function onCoverPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) uploadCover.mutate(file);
+    e.target.value = "";
+  }
 
   const [name, setName] = useState("");
   const [cat, setCat] = useState("cafe");
@@ -296,6 +320,67 @@ export default function BusinessProfilePage() {
 
           <div className={CARD}>
             <div className="font-display text-[15px] font-bold text-ink">Appearance</div>
+
+            {/* Brand image (logo) + background image (cover) uploads. */}
+            <div className="mt-3.5 flex flex-wrap items-end gap-4">
+              <div className="flex-none">
+                <span className={LABEL}>{t("business.profile.logo")}</span>
+                <div className="mt-1.5 flex items-center gap-3">
+                  <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-[18px] border border-line bg-brand-muted text-2xl">
+                    {logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={logoUrl} alt={t("business.profile.logo")} className="h-full w-full object-cover" />
+                    ) : (
+                      glyph
+                    )}
+                  </div>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={onLogoPick}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    disabled={uploadLogo.isPending}
+                    className="rounded-xl border-[1.5px] border-line bg-card px-3.5 py-2.5 text-[13px] font-bold text-ink disabled:opacity-60"
+                  >
+                    {uploadLogo.isPending ? t("common.loading") : t("business.profile.uploadLogo")}
+                  </button>
+                </div>
+              </div>
+              <div className="min-w-[180px] flex-1">
+                <span className={LABEL}>{t("business.profile.cover")}</span>
+                <div className="mt-1.5">
+                  <div
+                    className="flex h-16 w-full items-center justify-center overflow-hidden rounded-[14px] border border-line bg-board/40"
+                    style={
+                      coverUrl
+                        ? { background: `url(${coverUrl}) center/cover` }
+                        : { background: `linear-gradient(150deg, ${accent}, ${shade(accent)})` }
+                    }
+                  />
+                  <input
+                    ref={coverInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={onCoverPick}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => coverInputRef.current?.click()}
+                    disabled={uploadCover.isPending}
+                    className="mt-2 w-full rounded-xl border-[1.5px] border-line bg-card px-3.5 py-2.5 text-[13px] font-bold text-ink disabled:opacity-60"
+                  >
+                    {uploadCover.isPending ? t("common.loading") : t("business.profile.uploadCover")}
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div className="mt-3.5 flex items-start gap-5">
               <label className="flex-none">
                 <span className={LABEL}>Icon</span>
@@ -400,8 +485,22 @@ export default function BusinessProfilePage() {
         <div className="w-full flex-none sm:w-[300px]">
           <div className="mb-[11px] text-xs font-bold uppercase tracking-[0.05em] text-subtle">Customer preview</div>
           <div className="overflow-hidden rounded-[18px] border border-line bg-card shadow-card">
-            <div className="flex h-[118px] items-end justify-center pb-3.5" style={{ background: `linear-gradient(150deg, ${accent}, ${shade(accent)})` }}>
-              <div className="flex h-16 w-16 items-center justify-center rounded-[18px] bg-card text-[30px] shadow-card">{glyph}</div>
+            <div
+              className="flex h-[118px] items-end justify-center pb-3.5"
+              style={
+                coverUrl
+                  ? { background: `url(${coverUrl}) center/cover` }
+                  : { background: `linear-gradient(150deg, ${accent}, ${shade(accent)})` }
+              }
+            >
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[18px] bg-card text-[30px] shadow-card">
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt={name || "logo"} className="h-full w-full object-cover" />
+                ) : (
+                  glyph
+                )}
+              </div>
             </div>
             <div className="px-[18px] pb-5 pt-4">
               <div className="flex items-center justify-between gap-2">

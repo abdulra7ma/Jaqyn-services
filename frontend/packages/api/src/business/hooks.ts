@@ -9,8 +9,11 @@ import type {
   CatalogItemPayload,
   GroupOfferPayload,
   OnboardingProfilePatch,
+  ReportPeriod,
+  ReportRange,
   RewardProgramPayload,
   StaffInvitePayload,
+  TeamRole,
 } from "./types";
 
 export const bqk = {
@@ -20,12 +23,15 @@ export const bqk = {
   rewards: ["business", "rewards"] as const,
   reward: (id: string) => ["business", "rewards", id] as const,
   offers: ["business", "offers"] as const,
-  reports: ["business", "reports"] as const,
+  reports: (period: ReportPeriod, range?: ReportRange) =>
+    ["business", "reports", period, range?.date_from ?? null, range?.date_to ?? null] as const,
   customers: ["business", "customers"] as const,
   types: ["business", "types"] as const,
   onboarding: ["business", "onboarding"] as const,
   catalog: ["business", "catalog"] as const,
   staffInvites: ["business", "staff-invites"] as const,
+  team: ["business", "team"] as const,
+  staffMember: (id: string) => ["business", "team", id] as const,
   campaigns: ["business", "campaigns"] as const,
   campaign: (id: string) => ["business", "campaigns", id] as const,
   campaignParticipants: (id: string) => ["business", "campaigns", id, "participants"] as const,
@@ -48,8 +54,15 @@ export const useBusinessOffers = () =>
   useQuery({ queryKey: bqk.offers, queryFn: () => businessApi.listOffers() });
 export const useBusinessGroupDeals = (enabled = true) =>
   useQuery({ queryKey: ["business", "group-deals"], queryFn: () => businessApi.listGroupDeals(), enabled });
-export const useBusinessReports = () =>
-  useQuery({ queryKey: bqk.reports, queryFn: () => businessApi.reports() });
+export const useBusinessReports = (period: ReportPeriod = "month", range?: ReportRange) =>
+  useQuery({
+    queryKey: bqk.reports(period, range),
+    queryFn: () => businessApi.reports(period, range),
+    // Custom needs both endpoints of the range before it can fetch.
+    enabled: period !== "custom" || (!!range?.date_from && !!range?.date_to),
+    placeholderData: (prev) => prev, // keep last data visible while switching period
+    staleTime: 60_000,
+  });
 export const useBusinessCustomers = () =>
   useQuery({ queryKey: bqk.customers, queryFn: () => businessApi.customers() });
 
@@ -72,6 +85,34 @@ export const useUpdateBusiness = () => {
 };
 export const useRegenerateApprovalCode = () =>
   useMutation({ mutationFn: () => businessApi.regenerateApprovalCode() });
+
+// Brand image (logo) + background image (cover) uploads. Both write the fresh
+// business into the `me` cache and invalidate the customer-facing `me` key
+// (["me"]) — that endpoint embeds a `business` summary, so its avatar/logo
+// derivations refresh — plus the onboarding query (completion score depends on
+// logo_set / cover_set).
+export const useUploadBusinessLogo = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => businessApi.uploadLogo(file),
+    onSuccess: (b) => {
+      qc.setQueryData(bqk.me, b);
+      qc.invalidateQueries({ queryKey: bqk.onboarding });
+      qc.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+};
+export const useUploadBusinessCover = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => businessApi.uploadCover(file),
+    onSuccess: (b) => {
+      qc.setQueryData(bqk.me, b);
+      qc.invalidateQueries({ queryKey: bqk.onboarding });
+      qc.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+};
 
 export const useCreateReward = () => {
   const qc = useQueryClient();
@@ -206,6 +247,71 @@ export const useRemoveStaffInvite = () => {
   return useMutation({
     mutationFn: (id: string) => businessApi.removeStaffInvite(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: bqk.staffInvites }),
+  });
+};
+
+// ---- team / manage staff ----
+// The team list merges members + invites, so every mutation (including invite
+// create/delete on the Manage Staff page) invalidates bqk.team to refetch counts
+// and rows together.
+
+export const useTeam = (enabled = true) =>
+  useQuery({ queryKey: bqk.team, queryFn: () => businessApi.team(), enabled });
+
+export const useStaffMember = (id: string, enabled = true) =>
+  useQuery({
+    queryKey: bqk.staffMember(id),
+    queryFn: () => businessApi.staffMember(id),
+    enabled: enabled && !!id,
+  });
+
+export const useUpdateStaffRole = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, role }: { id: string; role: TeamRole }) =>
+      businessApi.updateStaffRole(id, role),
+    onSuccess: (m) => {
+      qc.setQueryData(bqk.staffMember(m.id), m);
+      qc.invalidateQueries({ queryKey: bqk.team });
+    },
+  });
+};
+
+export const useSuspendStaff = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => businessApi.suspendStaff(id),
+    onSuccess: (m) => {
+      qc.setQueryData(bqk.staffMember(m.id), m);
+      qc.invalidateQueries({ queryKey: bqk.team });
+    },
+  });
+};
+
+export const useReactivateStaff = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => businessApi.reactivateStaff(id),
+    onSuccess: (m) => {
+      qc.setQueryData(bqk.staffMember(m.id), m);
+      qc.invalidateQueries({ queryKey: bqk.team });
+    },
+  });
+};
+
+export const useResetStaffPassword = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => businessApi.resetStaffPassword(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.team }),
+  });
+};
+
+export const useRemoveStaffMember = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => businessApi.removeStaffMember(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.team }),
   });
 };
 
