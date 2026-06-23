@@ -276,6 +276,146 @@ export type GroupDeal = {
   checked_in: boolean;
 };
 
+// ---- Campaigns (apps.campaigns — plan §2.1 / §3) -----------------------------
+// Temporary, dated challenges: complete a challenge → unlock a voucher → redeem.
+// Three types ship in MVP (plan D7): VISIT, TIME_WINDOW, GROUP. Mirrors only the
+// fields the campaign screens render; the API layer is the boundary, so raw
+// backend rows are coerced through ./adapters before reaching these types.
+
+export type CampaignType = "visit" | "timewindow" | "group";
+
+// Lifecycle states (plan §1.1 Campaign.status). DRAFT/SCHEDULED/PAUSED are
+// business-side; customers mostly see ACTIVE/ENDED/CANCELLED.
+export type CampaignStatus =
+  | "draft"
+  | "scheduled"
+  | "active"
+  | "paused"
+  | "ended"
+  | "cancelled";
+
+// Repeat policy (plan §1.1 completion_limit_per_customer).
+export type CampaignRepeatPolicy = "once" | "repeatable";
+
+export type CampaignRewardType = "free_item" | "discount" | "upgrade" | "custom";
+
+// Group-only: who receives the voucher. MVP issues to the leader (plan Q4).
+export type CampaignRewardReceiver = "leader" | "every_member" | "table";
+
+export type CampaignRule = {
+  // VISIT / TIME_WINDOW: number of verified visits required.
+  required_count: number | null;
+  // VISIT: cap on visits counted per calendar day.
+  max_count_per_day: number | null;
+  // VISIT: human-readable minimum gap between counted visits (e.g. "4 hours").
+  min_time_between: string | null;
+  // TIME_WINDOW: visits only count before this wall-clock time (e.g. "12:00").
+  window_before_time: string | null;
+  // GROUP: required group size and the check-in window (e.g. "15 min").
+  required_group_size: number | null;
+  group_checkin_window: string | null;
+};
+
+export type CampaignReward = {
+  type: CampaignRewardType;
+  title: string;
+  description: string;
+  // Days the voucher stays valid after it is unlocked (plan §1.1).
+  expiry_days_after_unlock: number;
+  max_redemptions: number | null;
+  receiver?: CampaignRewardReceiver;
+};
+
+// The viewer's own enrolment + progress for a campaign. Null when not joined.
+export type CampaignProgress = {
+  joined: boolean;
+  status: "joined" | "in_progress" | "completed" | "redeemed" | null;
+  current_count: number;
+  target_count: number | null;
+  completed: boolean;
+  // Voucher id once the campaign is completed (links to the wallet view).
+  voucher_id: string | null;
+};
+
+export type Campaign = {
+  id: string;
+  business: Pick<Business, "id" | "name" | "category" | "logo_url" | "area">;
+  glyph: string;
+  name: string;
+  description: string;
+  // Short marketing line shown on the discover card.
+  blurb: string;
+  campaign_type: CampaignType;
+  status: CampaignStatus;
+  // Human-readable dates as the design renders them (e.g. "1 Jul").
+  start_label: string;
+  end_label: string;
+  days_left: number;
+  active_days: string;
+  active_hours: string;
+  repeat_policy: CampaignRepeatPolicy;
+  max_participants: number | null;
+  rule: CampaignRule;
+  reward: CampaignReward;
+  // Present on customer detail/discover responses; absent on business lists.
+  my_progress: CampaignProgress | null;
+  // Auto-join acquisition link (plan D9) — e.g. "jaqyn.kg/c/<token>".
+  auto_join_link?: string | null;
+};
+
+export type CampaignVoucherStatus = "active" | "redeemed" | "expired" | "cancelled";
+
+export type CampaignVoucher = {
+  id: string;
+  code: string;
+  status: CampaignVoucherStatus;
+  glyph: string;
+  business: Pick<Business, "id" | "name">;
+  campaign: { id: string; name: string };
+  reward_title: string;
+  reward_description: string;
+  // The QR payload the customer presents; type CAMPAIGN_REWARD (plan D2/D4).
+  qr_token: string;
+  issued_label: string;
+  expires_label: string;
+  // True when the voucher is close to expiry (drives the amber pill).
+  expiring_soon: boolean;
+  // Populated only once redeemed.
+  redeemed_at_label: string | null;
+  redeemed_by: string | null;
+  redeemed_branch: string | null;
+};
+
+// Wallet groups vouchers by lifecycle for the three design sections.
+export type CampaignWallet = {
+  active: CampaignVoucher[];
+  used: CampaignVoucher[];
+  expired: CampaignVoucher[];
+};
+
+export type GroupSessionStatus = "forming" | "full" | "checked_in" | "completed" | "expired";
+
+export type GroupSessionMember = {
+  id: string;
+  name: string;
+  initial: string;
+  is_leader: boolean;
+  is_you: boolean;
+  checked_in: boolean;
+};
+
+export type GroupSession = {
+  id: string;
+  campaign: { id: string; name: string; glyph: string };
+  invite_code: string;
+  status: GroupSessionStatus;
+  required_size: number;
+  joined_count: number;
+  members: GroupSessionMember[];
+  // QR payload shown to staff once the group is full (type GROUP_CHECKIN).
+  checkin_token: string | null;
+};
+
 // ---- request payloads ----
 export type CustomerQr = { token: string; type: string; url: string; png: string };
 export type NearbyParams = Partial<{

@@ -12,6 +12,7 @@ class NotificationPreference(TimeStampedModel):
     reward_updates = models.BooleanField(default=True)
     group_reminders = models.BooleanField(default=True)
     business_reports = models.BooleanField(default=True)
+    campaign_updates = models.BooleanField(default=True)
 
 
 class NotificationLog(UUIDModel):

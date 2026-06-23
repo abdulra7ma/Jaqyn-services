@@ -7,7 +7,8 @@ from apps.accounts.models import User
 from apps.accounts.tasks import send_otp
 from apps.businesses.models import Business
 from apps.groups.models import GroupDeal, GroupMember, GroupOffer
-from apps.notifications.models import NotificationLog
+from apps.notifications.models import NotificationLog, NotificationPreference
+from apps.notifications.services import notifier
 from apps.notifications.tasks import send_business_weekly_report, send_group_full_notification
 
 
@@ -60,6 +61,37 @@ def test_notification_preferences_endpoint(api_client):
     assert initial.data["data"]["sms_enabled"] is True
     assert updated.data["data"]["sms_enabled"] is False
     assert updated.data["data"]["group_reminders"] is False
+
+
+def test_campaign_updates_preference_round_trips(api_client):
+    user = User.objects.create_user(phone="+996708000033", role=User.Role.CUSTOMER, is_phone_verified=True)
+    api_client.force_authenticate(user)
+
+    initial = api_client.get("/api/notifications/preferences/")
+    updated = api_client.patch("/api/notifications/preferences/", {"campaign_updates": False}, format="json")
+
+    assert initial.data["data"]["campaign_updates"] is True
+    assert updated.data["data"]["campaign_updates"] is False
+
+
+def test_notify_campaign_event_honours_campaign_updates_preference():
+    user = User.objects.create_user(phone="+996708000034", role=User.Role.CUSTOMER, is_phone_verified=True)
+    NotificationPreference.objects.create(user=user, campaign_updates=False)
+
+    log = notifier.notify_campaign_event(user, "campaign_visit_counted", {"campaign_name": "Buy 5"})
+
+    assert log.event == "campaign_visit_counted"
+    assert log.channel == "sms"
+    assert log.status == NotificationLog.Status.SKIPPED
+
+
+def test_notify_campaign_event_sends_when_enabled():
+    user = User.objects.create_user(phone="+996708000035", role=User.Role.CUSTOMER, is_phone_verified=True)
+
+    log = notifier.notify_campaign_event(user, "campaign_ending", {"campaign_name": "Buy 5"})
+
+    assert log.status == NotificationLog.Status.SENT
+    assert log.event == "campaign_ending"
 
 
 def test_otp_task_logs_dev_sms_notification():

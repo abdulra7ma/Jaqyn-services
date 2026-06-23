@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "apps.qr",
     "apps.loyalty",
     "apps.groups",
+    "apps.campaigns",
     "apps.reporting",
     "apps.notifications",
     "apps.system",
@@ -107,6 +108,15 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "100/min",
         "user": "300/min",
+        # --- Campaign write surfaces (apps.campaigns, plan §1.3) ---
+        # Every campaign write endpoint is rate-limited via a ScopedRateThrottle so
+        # no write surface is unthrottled (backend.md). Authoring is the rarest
+        # action; the scan/redeem path is the hottest (a busy till), so it gets the
+        # most generous rate.
+        "campaign_write": "60/min",  # owner CRUD + lifecycle + voucher cancel
+        "campaign_join": "30/min",  # customer join / group start
+        "campaign_present": "60/min",  # customer presents a voucher (polled UI)
+        "campaign_scan": "120/min",  # staff scan/confirm/redeem at the till
     },
 }
 

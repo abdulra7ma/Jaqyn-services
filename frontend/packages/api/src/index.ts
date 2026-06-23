@@ -7,13 +7,7 @@ export { useHealth } from "./hooks";
 export type { ApiEnvelope, ApiSuccess, ApiError, HealthData } from "./types";
 
 // ---- customer API layer ----
-export {
-  customerApi,
-  liveCustomerApi,
-  mockCustomerApi,
-  USE_MOCKS,
-  type CustomerApi,
-} from "./customer/api";
+export { customerApi, type CustomerApi } from "./customer/api";
 export * from "./customer/hooks";
 export type * from "./customer/types";
 

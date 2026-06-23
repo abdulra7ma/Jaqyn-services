@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "easier-life-skills": {
+      "source": {
+        "source": "github",
+        "repo": "dan323/easier-life-skills"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "find-skills@easier-life-skills": true
+  }
+}

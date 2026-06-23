@@ -3,6 +3,7 @@ node_modules/
 .turbo/
 dist/
 out/
+.test-tmp/
 *.tsbuildinfo
 .env
 .env.local

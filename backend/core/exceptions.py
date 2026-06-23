@@ -18,6 +18,27 @@ ERROR_MESSAGES = {
     "PERMISSION_DENIED": "You do not have permission to perform this action",
     "RATE_LIMITED": "Too many attempts. Please try again later",
     "VALIDATION_ERROR": "Validation error",
+    # --- Campaign rewards (apps.campaigns) ---
+    "WRONG_BUSINESS": "This belongs to another business",
+    "CAMPAIGN_NOT_FOUND": "The campaign does not exist",
+    "CAMPAIGN_NOT_ELIGIBLE": "You are not eligible for this campaign right now",
+    "CAMPAIGN_NOT_ACTIVE": "The campaign is not active",
+    "CAMPAIGN_OUTSIDE_WINDOW": "The campaign is not active at this time",
+    "CAMPAIGN_FULL": "The campaign has reached its participant limit",
+    "CAMPAIGN_REWARD_LIMIT_REACHED": "The campaign has issued all of its rewards",
+    "CAMPAIGN_DAILY_LIMIT_REACHED": "The daily limit for this campaign has been reached",
+    "CAMPAIGN_MIN_GAP": "Not enough time has passed since the last visit",
+    "CAMPAIGN_ALREADY_COMPLETED": "You have already completed this campaign",
+    "CAMPAIGN_INVALID_STATE": "The campaign cannot transition to that state",
+    "CAMPAIGN_NOT_PUBLISHABLE": "The campaign is missing details required to publish",
+    "VOUCHER_NOT_FOUND": "The voucher does not exist",
+    "VOUCHER_EXPIRED": "The voucher has expired",
+    "VOUCHER_ALREADY_REDEEMED": "The voucher has already been redeemed",
+    "VOUCHER_CANCELLED": "The voucher has been cancelled",
+    "VOUCHER_NOT_ACTIVE": "The voucher is not active",
+    "GROUP_SESSION_NOT_FOUND": "The group session does not exist",
+    "GROUP_SESSION_INVALID_STATE": "The group session is not in a valid state",
+    "GROUP_SESSION_FULL": "The group session is already full",
 }
 
 

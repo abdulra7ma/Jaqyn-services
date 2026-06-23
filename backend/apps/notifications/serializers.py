@@ -14,6 +14,7 @@ class NotificationPreferenceSerializer(serializers.ModelSerializer):
             "reward_updates",
             "group_reminders",
             "business_reports",
+            "campaign_updates",
         )
 
 

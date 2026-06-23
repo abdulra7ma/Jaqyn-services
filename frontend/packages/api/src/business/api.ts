@@ -1,13 +1,27 @@
 // Business API layer — wired live to the backend (envelope unwrapped by client,
 // lists arrive as {results:[…]}). Screens consume only the hooks in ./hooks.
+// Campaign methods (apps.campaigns) map raw rows through ./adapters.
 import { api } from "../client";
+import {
+  adaptBusinessCampaign,
+  adaptCampaignList,
+  adaptParticipant,
+  adaptVoucherRow,
+  toCampaignWritePayload,
+} from "./adapters";
 import type {
   ActivateResponse,
   ApprovalCode,
+  BusinessCampaign,
+  BusinessCampaignListResponse,
   BusinessGroupDeal,
   BusinessProfile,
   BusinessRegisterPayload,
   BusinessType,
+  CampaignLifecycleAction,
+  CampaignParticipantRow,
+  CampaignPayload,
+  CampaignVoucherRow,
   CatalogItem,
   CatalogItemPayload,
   Dashboard,
@@ -93,6 +107,42 @@ export const businessApi = {
   addStaffInvite: (payload: StaffInvitePayload) =>
     api.post<StaffInvite>("/api/business/staff-invites/", payload),
   removeStaffInvite: (id: string) => api.delete<unknown>(`/api/business/staff-invites/${id}/`),
+
+  // ---- campaigns (apps.campaigns — plan §1.3) ----
+  listCampaigns: (): Promise<BusinessCampaignListResponse> =>
+    api.get<any>("/api/business/campaigns/").then(adaptCampaignList),
+  getCampaign: (id: string): Promise<BusinessCampaign> =>
+    api.get<any>(`/api/business/campaigns/${id}/`).then(adaptBusinessCampaign),
+  createCampaign: (payload: CampaignPayload): Promise<BusinessCampaign> =>
+    api
+      .post<any>("/api/business/campaigns/", toCampaignWritePayload(payload))
+      .then(adaptBusinessCampaign),
+  updateCampaign: (id: string, patch: Partial<CampaignPayload>): Promise<BusinessCampaign> =>
+    api
+      .put<any>(`/api/business/campaigns/${id}/`, toCampaignWritePayload(patch))
+      .then(adaptBusinessCampaign),
+  campaignAction: (id: string, action: CampaignLifecycleAction): Promise<BusinessCampaign> =>
+    api.post<any>(`/api/business/campaigns/${id}/${action}/`).then(adaptBusinessCampaign),
+  duplicateCampaign: (id: string): Promise<BusinessCampaign> =>
+    api.post<any>(`/api/business/campaigns/${id}/duplicate/`).then(adaptBusinessCampaign),
+  campaignParticipants: (id: string): Promise<CampaignParticipantRow[]> =>
+    api
+      .get<Paginated<any>>(`/api/business/campaigns/${id}/participants/`)
+      .then((d) => d.results.map(adaptParticipant)),
+  campaignVouchers: (id: string): Promise<CampaignVoucherRow[]> =>
+    api
+      .get<Paginated<any>>(`/api/business/campaigns/${id}/vouchers/`)
+      .then((d) => d.results.map(adaptVoucherRow)),
+  // The analytics endpoint returns the analytics block flat; reuse the campaign
+  // adapter by nesting the raw row under `analytics` so the shape matches.
+  campaignAnalytics: (id: string): Promise<BusinessCampaign["analytics"]> =>
+    api
+      .get<any>(`/api/business/campaigns/${id}/analytics/`)
+      .then((raw) => adaptBusinessCampaign({ ...raw, analytics: raw }).analytics),
+  cancelCampaignVoucher: (voucherId: string, reason: string): Promise<CampaignVoucherRow> =>
+    api
+      .post<any>(`/api/business/campaigns/vouchers/${voucherId}/cancel/`, { reason })
+      .then(adaptVoucherRow),
 };
 
 export type BusinessApi = typeof businessApi;

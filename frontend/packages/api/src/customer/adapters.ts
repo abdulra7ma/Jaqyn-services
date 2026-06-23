@@ -8,9 +8,15 @@
 import { session } from "./session";
 import type {
   Business,
+  Campaign,
+  CampaignProgress,
+  CampaignVoucher,
+  CampaignWallet,
   GroupDeal,
   GroupMember,
   GroupOffer,
+  GroupSession,
+  GroupSessionMember,
   RewardProgram,
   RewardProgress,
 } from "./types";
@@ -157,5 +163,201 @@ export function adaptDeal(raw: Raw): GroupDeal {
     is_member: !!selfRaw,
     is_leader: uid != null && leaderId === uid,
     checked_in: selfRaw?.status === "checked_in",
+  };
+}
+
+// ---- Campaigns ---------------------------------------------------------------
+// Boundary validation for campaign payloads. The backend may send `business` as
+// a bare UUID (like rewards/offers) — businessRef fills a placeholder the cards
+// tolerate. Progress is relative to the authenticated user.
+
+// The backend campaign_type enum is "time_window" (underscored); the UI type is
+// "timewindow". Normalize so the screens' type checks match.
+function normalizeCampaignType(raw: string | undefined): Campaign["campaign_type"] {
+  if (raw === "time_window" || raw === "timewindow") return "timewindow";
+  if (raw === "group") return "group";
+  return "visit";
+}
+
+function adaptCampaignProgress(raw: Raw | null | undefined): CampaignProgress | null {
+  if (!raw) return null;
+  const status = raw.status ?? (raw.completed ? "completed" : raw.joined ? "in_progress" : null);
+  const completed = raw.completed ?? (status === "completed" || status === "redeemed");
+  return {
+    joined: raw.joined ?? status != null,
+    status: status ?? null,
+    // LOCKED FE/BE CONTRACT: the backend CampaignProgressSerializer emits
+    // `progress_count` / `required_count` / `voucher_id` (see plan §3 + the
+    // serializer in apps.campaigns). Map them onto the UI's
+    // current_count / target_count / voucher_id. The legacy `current_count` /
+    // `target_count` / `progress` / `goal` keys are kept only as a tolerant
+    // fallback so the typed mock objects (which already use UI names) still pass
+    // through unchanged.
+    current_count: raw.progress_count ?? raw.current_count ?? raw.progress ?? 0,
+    target_count: raw.required_count ?? raw.target_count ?? raw.goal ?? null,
+    completed,
+    voucher_id: raw.voucher_id ?? null,
+  };
+}
+
+export function adaptCampaign(raw: Raw): Campaign {
+  const biz = typeof raw.business === "object" ? raw.business : null;
+  const rule = raw.rule ?? {};
+  const reward = raw.reward ?? {};
+  return {
+    id: raw.id,
+    business: {
+      id: biz?.id ?? raw.business,
+      name: raw.business_name ?? biz?.name ?? "",
+      category: biz?.category ?? "other",
+      logo_url: biz?.logo_url ?? null,
+      area: raw.business_area ?? biz?.area ?? "",
+    },
+    glyph: raw.glyph ?? "",
+    name: raw.name,
+    description: raw.description ?? "",
+    blurb: raw.blurb ?? raw.description ?? "",
+    campaign_type: normalizeCampaignType(raw.campaign_type ?? raw.type),
+    status: raw.status,
+    start_label: raw.start_label ?? raw.start ?? "",
+    end_label: raw.end_label ?? raw.end ?? "",
+    days_left: raw.days_left ?? 0,
+    active_days: raw.active_days ?? raw.days ?? "",
+    active_hours: raw.active_hours ?? raw.hours ?? "",
+    repeat_policy: raw.repeat_policy ?? raw.repeat ?? "once",
+    max_participants: raw.max_participants ?? null,
+    rule: {
+      // Backend keys: minimum_time_between_actions (ISO duration string),
+      // group_checkin_window_minutes (int), window_before_time (HH:MM:SS).
+      required_count: rule.required_count ?? rule.visits ?? null,
+      max_count_per_day: rule.max_count_per_day ?? rule.perDay ?? null,
+      min_time_between: rule.minimum_time_between_actions ?? rule.min_time_between ?? rule.minGap ?? null,
+      window_before_time:
+        (rule.window_before_time ?? rule.windowBefore ?? null)?.slice?.(0, 5) ??
+        rule.window_before_time ??
+        null,
+      required_group_size: rule.required_group_size ?? rule.groupSize ?? null,
+      group_checkin_window:
+        rule.group_checkin_window_minutes != null
+          ? `${rule.group_checkin_window_minutes} min`
+          : (rule.group_checkin_window ?? rule.checkin ?? null),
+    },
+    reward: {
+      // Backend serializes reward_type / reward_receiver_type (not type / receiver).
+      type: reward.reward_type ?? reward.type ?? "free_item",
+      title: reward.title ?? "",
+      description: reward.description ?? reward.desc ?? "",
+      expiry_days_after_unlock: reward.expiry_days_after_unlock ?? reward.expiryDays ?? 7,
+      max_redemptions: reward.max_redemptions ?? reward.max ?? null,
+      receiver: reward.reward_receiver_type ?? reward.receiver ?? undefined,
+    },
+    my_progress: adaptCampaignProgress(raw.my_progress),
+    auto_join_link: raw.auto_join_link ?? null,
+  };
+}
+
+// The voucher serializer returns ISO timestamps (issued_at / expires_at /
+// redeemed_at), not the pre-formatted labels the design mocks assumed. Reduce an
+// ISO value to its date portion for display; null/empty stays empty. NOTE: this
+// is a stopgap — locale-aware formatting belongs in the component via @jaqyn/i18n.
+function dateLabel(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return String(iso).slice(0, 10);
+}
+
+// "Expiring soon" = within EXPIRING_SOON_DAYS of expiry. Source: design's amber
+// pill threshold (voucher window is ~7 days after unlock per plan §1.1).
+const EXPIRING_SOON_DAYS = 3;
+
+function isExpiringSoon(expiresIso: string | null | undefined): boolean {
+  if (!expiresIso) return false;
+  const expires = Date.parse(expiresIso);
+  if (Number.isNaN(expires)) return false;
+  const msLeft = expires - Date.now();
+  return msLeft > 0 && msLeft <= EXPIRING_SOON_DAYS * 24 * 60 * 60 * 1000;
+}
+
+export function adaptCampaignVoucher(raw: Raw): CampaignVoucher {
+  const biz = typeof raw.business === "object" ? raw.business : null;
+  const camp = typeof raw.campaign === "object" ? raw.campaign : null;
+  return {
+    id: raw.id,
+    code: raw.code ?? raw.voucher_code,
+    status: raw.status,
+    glyph: raw.glyph ?? "",
+    business: {
+      id: biz?.id ?? raw.business ?? "",
+      name: raw.business_name ?? biz?.name ?? raw.bizName ?? "",
+    },
+    campaign: {
+      id: camp?.id ?? raw.campaign ?? "",
+      name: raw.campaign_name ?? camp?.name ?? "",
+    },
+    reward_title: raw.reward_title ?? raw.reward ?? "",
+    reward_description: raw.reward_description ?? "",
+    // The serializer exposes both the raw qr_token string and a full qr_url; the
+    // staff scanner accepts either (parseScanned strips a /q/<token> URL), so the
+    // raw token is the smallest stable payload to render.
+    qr_token: raw.qr_token ?? raw.token ?? raw.code ?? "",
+    issued_label: raw.issued_label ?? dateLabel(raw.issued_at) ?? raw.issued ?? "",
+    expires_label: raw.expires_label ?? dateLabel(raw.expires_at) ?? raw.expires ?? "",
+    expiring_soon: raw.expiring_soon ?? raw.soon ?? isExpiringSoon(raw.expires_at),
+    redeemed_at_label: raw.redeemed_at_label ?? dateLabel(raw.redeemed_at) ?? raw.redeemedAt ?? null,
+    // The serializer does not expose the redeeming staff member or a branch
+    // (branch scope is deferred — plan D5); both stay null.
+    redeemed_by: raw.redeemed_by ?? raw.redeemedBy ?? null,
+    redeemed_branch: raw.redeemed_branch ?? raw.branch ?? null,
+  };
+}
+
+// Groups a flat voucher list into the wallet's three lifecycle sections.
+export function adaptCampaignWallet(rows: Raw[]): CampaignWallet {
+  const vouchers = rows.map(adaptCampaignVoucher);
+  return {
+    active: vouchers.filter((v) => v.status === "active"),
+    used: vouchers.filter((v) => v.status === "redeemed" || v.status === "cancelled"),
+    expired: vouchers.filter((v) => v.status === "expired"),
+  };
+}
+
+function adaptGroupSessionMember(raw: Raw, leaderId: string | null, uid: string | null): GroupSessionMember {
+  const customerId: string = raw.customer ?? raw.id;
+  const name: string = raw.customer_name || raw.name || `#${String(customerId).slice(0, 6)}`;
+  return {
+    id: raw.id,
+    name,
+    initial: raw.initial ?? name.charAt(0).toUpperCase(),
+    is_leader: raw.is_leader ?? (leaderId != null && customerId === leaderId),
+    is_you: raw.is_you ?? (uid != null && customerId === uid),
+    checked_in: raw.checked_in ?? raw.status === "checked_in",
+  };
+}
+
+export function adaptGroupSession(raw: Raw): GroupSession {
+  const uid = session.getUserId();
+  const leaderId: string | null = raw.group_leader ?? raw.leader ?? null;
+  // The backend members payload is one row per active member; only joined /
+  // checked-in members count toward the group size (left/no-show rows, if any,
+  // are excluded from the joined tally).
+  const members = (raw.members ?? []).map((m: Raw) => adaptGroupSessionMember(m, leaderId, uid));
+  const camp = typeof raw.campaign === "object" ? raw.campaign : null;
+  return {
+    id: raw.id,
+    campaign: {
+      id: camp?.id ?? raw.campaign ?? "",
+      name: raw.campaign_name ?? camp?.name ?? "",
+      glyph: raw.glyph ?? camp?.glyph ?? "",
+    },
+    // Backend GroupSessionSerializer emits `invite_token`; the UI surfaces it as
+    // `invite_code` (the short code rendered into the jaqyn.kg/g/<code> link).
+    invite_code: raw.invite_token ?? raw.invite_code ?? raw.code ?? "",
+    status: raw.status,
+    required_size: raw.required_size ?? raw.size ?? members.length,
+    joined_count: raw.joined_count ?? members.length,
+    members,
+    // The group check-in QR token is not part of the session serializer yet
+    // (it's minted when the group fills); tolerate either `checkin_token` or a
+    // bare `token`, else null so the full-state QR simply doesn't render.
+    checkin_token: raw.checkin_token ?? raw.token ?? null,
   };
 }

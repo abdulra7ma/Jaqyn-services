@@ -18,6 +18,11 @@ export const qk = {
   nearby: (params?: NearbyParams) => ["nearby", params ?? {}] as const,
   business: (id: string) => ["business", id] as const,
   qr: (token: string) => ["qr", token] as const,
+  campaigns: ["campaigns"] as const,
+  campaign: (id: string) => ["campaigns", id] as const,
+  campaignWallet: ["campaign-wallet"] as const,
+  campaignVoucher: (id: string) => ["campaign-vouchers", id] as const,
+  groupSession: (id: string) => ["group-sessions", id] as const,
 };
 
 // ---- queries ----
@@ -77,6 +82,89 @@ export const useBusinessRewardCard = (businessId: string, opts?: { refetchInterv
     enabled: !!businessId,
     refetchInterval: opts?.refetchInterval,
   });
+
+// ---- campaign queries ----
+export const useCampaigns = (opts?: { refetchInterval?: number }) =>
+  useQuery({
+    queryKey: qk.campaigns,
+    queryFn: () => customerApi.listCampaigns(),
+    refetchInterval: opts?.refetchInterval,
+  });
+
+export const useCampaign = (id: string, opts?: { refetchInterval?: number }) =>
+  useQuery({
+    queryKey: qk.campaign(id),
+    queryFn: () => customerApi.getCampaign(id),
+    enabled: !!id,
+    refetchInterval: opts?.refetchInterval,
+  });
+
+export const useCampaignWallet = (opts?: { refetchInterval?: number }) =>
+  useQuery({
+    queryKey: qk.campaignWallet,
+    queryFn: () => customerApi.campaignWallet(),
+    refetchInterval: opts?.refetchInterval,
+  });
+
+// Voucher view polls so a staff-side redemption flips the customer's screen live.
+export const useCampaignVoucher = (id: string, opts?: { refetchInterval?: number }) =>
+  useQuery({
+    queryKey: qk.campaignVoucher(id),
+    queryFn: () => customerApi.getCampaignVoucher(id),
+    enabled: !!id,
+    refetchInterval: opts?.refetchInterval,
+  });
+
+export const useGroupSession = (id: string, opts?: { refetchInterval?: number }) =>
+  useQuery({
+    queryKey: qk.groupSession(id),
+    queryFn: () => customerApi.getGroupSession(id),
+    enabled: !!id,
+    refetchInterval: opts?.refetchInterval,
+  });
+
+// ---- campaign mutations ----
+export const useJoinCampaign = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => customerApi.joinCampaign(id),
+    onSuccess: (campaign) => {
+      qc.setQueryData(qk.campaign(campaign.id), campaign);
+      qc.invalidateQueries({ queryKey: qk.campaigns });
+    },
+  });
+};
+
+export const usePresentVoucher = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => customerApi.presentCampaignVoucher(id),
+    onSuccess: (voucher) => {
+      qc.setQueryData(qk.campaignVoucher(voucher.id), voucher);
+      qc.invalidateQueries({ queryKey: qk.campaignWallet });
+    },
+  });
+};
+
+export const useStartGroupSession = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (campaignId: string) => customerApi.startGroupSession(campaignId),
+    onSuccess: (session) => {
+      qc.setQueryData(qk.groupSession(session.id), session);
+    },
+  });
+};
+
+export const useInviteToGroupSession = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => customerApi.inviteToGroupSession(id),
+    onSuccess: (session) => {
+      qc.setQueryData(qk.groupSession(session.id), session);
+    },
+  });
+};
 
 // ---- mutations ----
 export const useRequestOtp = () =>

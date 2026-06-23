@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { businessApi } from "./api";
 import type {
   BusinessRegisterPayload,
+  CampaignLifecycleAction,
+  CampaignPayload,
   CatalogItemPayload,
   GroupOfferPayload,
   OnboardingProfilePatch,
@@ -24,6 +26,11 @@ export const bqk = {
   onboarding: ["business", "onboarding"] as const,
   catalog: ["business", "catalog"] as const,
   staffInvites: ["business", "staff-invites"] as const,
+  campaigns: ["business", "campaigns"] as const,
+  campaign: (id: string) => ["business", "campaigns", id] as const,
+  campaignParticipants: (id: string) => ["business", "campaigns", id, "participants"] as const,
+  campaignVouchers: (id: string) => ["business", "campaigns", id, "vouchers"] as const,
+  campaignAnalytics: (id: string) => ["business", "campaigns", id, "analytics"] as const,
 };
 
 export const useBusinessMe = (enabled = true) =>
@@ -198,5 +205,87 @@ export const useRemoveStaffInvite = () => {
   return useMutation({
     mutationFn: (id: string) => businessApi.removeStaffInvite(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: bqk.staffInvites }),
+  });
+};
+
+// ---- campaigns (apps.campaigns — plan §1.3) ----
+
+export const useBusinessCampaigns = (enabled = true) =>
+  useQuery({ queryKey: bqk.campaigns, queryFn: () => businessApi.listCampaigns(), enabled });
+
+export const useBusinessCampaign = (id: string) =>
+  useQuery({ queryKey: bqk.campaign(id), queryFn: () => businessApi.getCampaign(id), enabled: !!id });
+
+export const useCampaignParticipants = (id: string, enabled = true) =>
+  useQuery({
+    queryKey: bqk.campaignParticipants(id),
+    queryFn: () => businessApi.campaignParticipants(id),
+    enabled: enabled && !!id,
+  });
+
+export const useCampaignVouchers = (id: string, enabled = true) =>
+  useQuery({
+    queryKey: bqk.campaignVouchers(id),
+    queryFn: () => businessApi.campaignVouchers(id),
+    enabled: enabled && !!id,
+  });
+
+export const useCampaignAnalytics = (id: string, enabled = true) =>
+  useQuery({
+    queryKey: bqk.campaignAnalytics(id),
+    queryFn: () => businessApi.campaignAnalytics(id),
+    enabled: enabled && !!id,
+  });
+
+export const useCreateCampaign = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: CampaignPayload) => businessApi.createCampaign(p),
+    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.campaigns }),
+  });
+};
+
+export const useUpdateCampaign = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<CampaignPayload> }) =>
+      businessApi.updateCampaign(id, patch),
+    onSuccess: (c) => {
+      qc.setQueryData(bqk.campaign(c.id), c);
+      qc.invalidateQueries({ queryKey: bqk.campaigns });
+    },
+  });
+};
+
+export const useCampaignAction = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, action }: { id: string; action: CampaignLifecycleAction }) =>
+      businessApi.campaignAction(id, action),
+    onSuccess: (c) => {
+      qc.setQueryData(bqk.campaign(c.id), c);
+      qc.invalidateQueries({ queryKey: bqk.campaigns });
+    },
+  });
+};
+
+export const useDuplicateCampaign = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => businessApi.duplicateCampaign(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.campaigns }),
+  });
+};
+
+export const useCancelCampaignVoucher = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      businessApi.cancelCampaignVoucher(id, reason),
+    onSuccess: (_v, vars) => {
+      // We don't know the campaign id here; invalidate all voucher lists.
+      qc.invalidateQueries({ queryKey: ["business", "campaigns"], predicate: (q) => q.queryKey.includes("vouchers") });
+      void vars;
+    },
   });
 };

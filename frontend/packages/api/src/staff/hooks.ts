@@ -62,3 +62,37 @@ export const useStaffCollect = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: sqk.activity }),
   });
 };
+
+// ---- campaign-aware scan (apps.campaigns — plan §3) ----
+
+export const useScanCustomerForCampaigns = () =>
+  useMutation({ mutationFn: (token: string) => staffApi.scanCustomerForCampaigns(token) });
+
+export const useConfirmVisit = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { token: string; campaign_id: string }) => staffApi.confirmVisit(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: sqk.activity }),
+  });
+};
+
+export const useScanCampaignVoucher = () =>
+  useMutation({ mutationFn: (token: string) => staffApi.scanCampaignVoucher(token) });
+
+export const useRedeemCampaignVoucher = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    // Redeems by the voucher code surfaced on the scan result (the backend redeem
+    // endpoint keys on token/code, not the voucher id).
+    mutationFn: (code: string) => staffApi.redeemCampaignVoucher(code),
+    onSuccess: () => qc.invalidateQueries({ queryKey: sqk.activity }),
+  });
+};
+
+export const useConfirmGroup = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: string) => staffApi.confirmGroup(sessionId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: sqk.groups }),
+  });
+};

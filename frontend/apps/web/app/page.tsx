@@ -88,7 +88,7 @@ function AuthedHome() {
         </Link>
       )}
 
-      {/* group deals + campaigns entry cards */}
+      {/* group deals entry card */}
       <Link
         href="/group-offers"
         className="relative flex items-center gap-3.5 overflow-hidden rounded-2xl bg-gradient-to-br from-[#3C2E22] to-[#5A4330] p-4 text-cream shadow-card"
@@ -100,18 +100,6 @@ function AuthedHome() {
           <p className="text-xs text-cream/80">{t("home.groupDealsSub")}</p>
         </div>
         <span aria-hidden className="text-cream/70">›</span>
-      </Link>
-
-      <Link
-        href="/campaigns"
-        className="flex items-center gap-3.5 rounded-2xl border border-line bg-card p-4 shadow-card"
-      >
-        <div className="flex h-12 w-12 flex-none items-center justify-center rounded-xl bg-brand-muted text-xl">🎟️</div>
-        <div className="flex-1">
-          <p className="font-bold text-ink">{t("campaigns.title")}</p>
-          <p className="text-xs text-subtle">{t("campaigns.subtitle")}</p>
-        </div>
-        <span aria-hidden className="text-subtle">›</span>
       </Link>
 
       <section>

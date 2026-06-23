@@ -12,6 +12,7 @@ class QRCodeToken(UUIDModel):
         GROUP_CHECKIN = "group_checkin", "Group check-in"
         GROUP_REWARD = "group_reward", "Group reward"
         CAMPAIGN = "campaign", "Campaign"
+        CAMPAIGN_REWARD = "campaign_reward", "Campaign reward"
 
     token = models.CharField(max_length=128, unique=True, db_index=True)
     type = models.CharField(max_length=32, choices=Type.choices)

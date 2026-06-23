@@ -19,7 +19,14 @@ export const CUSTOMER_NAV: NavItem[] = [
   { href: "/rewards", key: "nav.rewards", Icon: GiftIcon, match: (p) => p.startsWith("/rewards") },
   { href: "/group-offers", key: "nav.groups", Icon: UsersIcon, match: (p) => p.startsWith("/group") },
   { href: "/nearby", key: "nav.nearby", Icon: PinIcon, match: (p) => p.startsWith("/nearby") },
-  { href: "/campaigns", key: "nav.campaigns", Icon: FlagIcon, match: (p) => p.startsWith("/campaigns") },
+  {
+    href: "/campaigns",
+    key: "nav.campaigns",
+    Icon: FlagIcon,
+    // Keep the Campaigns tab active across the voucher wallet too — it lives under
+    // /campaign-wallet but is reached from within the Campaigns tab (no sub-nav).
+    match: (p) => p.startsWith("/campaigns") || p.startsWith("/campaign-wallet"),
+  },
   { href: "/profile", key: "nav.profile", Icon: UserIcon, match: (p) => p.startsWith("/profile") },
 ];
 

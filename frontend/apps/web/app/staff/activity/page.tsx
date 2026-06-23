@@ -14,6 +14,16 @@ function fmtTime(iso?: string) {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+// Campaign scan-log action codes → i18n keys (FE-4). The backend logs every
+// campaign confirm/redeem through apps.qr.ScanLog (plan §1.1); map the known
+// codes to friendly copy and fall back to the raw action for loyalty scans.
+const CAMPAIGN_ACTION_LABELS: Record<string, string> = {
+  campaign_visit: "staff.activity.campaignVisit",
+  campaign_complete: "staff.activity.campaignComplete",
+  campaign_redeem: "staff.activity.campaignRedeem",
+  campaign_group: "staff.activity.campaignGroup",
+};
+
 type Row = { id: string; who: string; what: string; time: string; tone: "ok" | "danger" | "warn" | "neutral" };
 
 export default function StaffActivityPage() {
@@ -42,13 +52,16 @@ export default function StaffActivityPage() {
                   time: fmtTime(r.created_at),
                   tone: (r.status === "redeemed" ? "ok" : "neutral") as Row["tone"],
                 })),
-                ...data.scans.map((s) => ({
-                  id: `s-${s.id}`,
-                  who: s.action,
-                  what: s.action,
-                  time: fmtTime(s.created_at),
-                  tone: (s.status === "success" ? "ok" : s.status === "blocked" ? "danger" : "warn") as Row["tone"],
-                })),
+                ...data.scans.map((s) => {
+                  const campaignKey = CAMPAIGN_ACTION_LABELS[s.action];
+                  return {
+                    id: `s-${s.id}`,
+                    who: s.action,
+                    what: campaignKey ? t(campaignKey) : s.action,
+                    time: fmtTime(s.created_at),
+                    tone: (s.status === "success" ? "ok" : s.status === "blocked" ? "danger" : "warn") as Row["tone"],
+                  };
+                }),
               ];
 
               if (rows.length === 0) {
