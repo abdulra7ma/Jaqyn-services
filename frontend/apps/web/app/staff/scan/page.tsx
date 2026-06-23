@@ -2,7 +2,7 @@
 
 import {
   useConfirmGroup,
-  useConfirmVisit,
+  useConfirmVisitUnified,
   useRedeemCampaignVoucher,
   useScanCampaignVoucher,
   useScanCustomerForCampaigns,
@@ -11,9 +11,9 @@ import type {
   CampaignScanRow,
   CampaignVoucherScanResult,
   ConfirmGroupResult,
-  ConfirmVisitResult,
   GroupVoucherScan,
   ScanCustomerResult,
+  UnifiedScanResult,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import Link from "next/link";
@@ -32,8 +32,7 @@ type ScanMode = "visit" | "redeem";
 
 type OverlayState =
   | { kind: "visit_eligibility"; result: ScanCustomerResult }
-  | { kind: "visit_counted"; result: ConfirmVisitResult }
-  | { kind: "visit_complete"; result: ConfirmVisitResult }
+  | { kind: "visit_unified"; result: UnifiedScanResult }
   | { kind: "group_eligible"; group: GroupVoucherScan }
   | { kind: "reward_valid"; result: CampaignVoucherScanResult }
   | { kind: "reward_redeemed"; rewardTitle: string }
@@ -124,7 +123,9 @@ function VisitEligibilitySheet({
 }) {
   const t = useT();
   const initial = (result.customer.name.trim()[0] ?? "•").toUpperCase();
-  const canConfirm = selectedId !== null && !isPending;
+  // Confirm is always allowed: even with no campaign tapped, the unified confirm
+  // still advances the loyalty card (and the backend auto-picks a campaign).
+  const canConfirm = !isPending;
 
   return (
     <SheetBackdrop onDismiss={onDismiss}>
@@ -226,66 +227,141 @@ function VisitEligibilitySheet({
   );
 }
 
-// ─── sheet: visit counted ───────────────────────────────────────────────────────
+// ─── sheet: combined visit (loyalty + campaign in one confirm) ──────────────────
 
-function VisitCountedSheet({ result, onDismiss }: { result: ConfirmVisitResult; onDismiss: () => void }) {
+// One confirm advances both the regular loyalty card and the prioritized
+// campaign. Each leg renders its own row; a null leg shows a muted skipped line.
+// A completed campaign gets the celebratory amber/gift treatment (mirrors the
+// former visit_complete sheet); the green success flash + countdown are kept.
+function VisitUnifiedSheet({ result, onDismiss }: { result: UnifiedScanResult; onDismiss: () => void }) {
   const t = useT();
+  const { loyalty, campaign } = result;
+  const campaignComplete = campaign?.state === "completed";
+
+  // A completed campaign warrants the longer, amber celebratory treatment.
+  const flashColor = campaignComplete ? "var(--amber, #E7A23E)" : "var(--sage, #3F7355)";
+  const duration = campaignComplete ? 3200 : 2800;
+
   return (
     <SheetBackdrop dim="rgba(8,6,3,.5)" onDismiss={onDismiss}>
-      <Flash color="var(--sage, #3F7355)" />
-      <div style={{ ...SHEET_STYLE, padding: "30px 26px 30px", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
-        <CountdownBar duration={2800} onDone={onDismiss} />
-        <div style={{
-          width: 78, height: 78, borderRadius: "50%", background: "var(--sage, #3F7355)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: "#fff", fontSize: 40, margin: "0 auto", animation: "jqPop .5s ease",
-          boxShadow: "0 14px 30px -8px rgba(94,139,106,.6)",
-        }}>✓</div>
-        <div style={{ fontSize: 13.5, color: "var(--soft, #8C7A6A)", fontWeight: 600, marginTop: 18 }}>
-          {result.customer_name} · {t("staff.campaign.visitConfirmed")}
+      <Flash color={flashColor} />
+      <div style={{ ...SHEET_STYLE, padding: "30px 26px 30px" }} onClick={(e) => e.stopPropagation()}>
+        <CountdownBar duration={duration} onDone={onDismiss} />
+
+        <div style={{ textAlign: "center" }}>
+          <div style={{
+            width: 70, height: 70, borderRadius: "50%", background: "var(--sage, #3F7355)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#fff", fontSize: 36, margin: "0 auto", animation: "jqPop .5s ease",
+            boxShadow: "0 14px 30px -8px rgba(94,139,106,.6)",
+          }}>✓</div>
+          <div style={{ fontSize: 13.5, color: "var(--soft, #8C7A6A)", fontWeight: 600, marginTop: 14 }}>
+            {result.customer.name} · {t("cmp.staff.bothCounted")}
+          </div>
         </div>
-        <div style={{ font: "800 26px 'Bricolage Grotesque',sans-serif", marginTop: 4, letterSpacing: "-.01em" }}>
-          {result.campaign_name}
-        </div>
-        <div style={{ font: "700 18px 'Bricolage Grotesque',sans-serif", color: "var(--accent, #C25E3C)", marginTop: 8 }}>
-          {t("staff.campaign.progressOf").replace("{current}", String(result.current_count)).replace("{goal}", String(result.goal))}
-        </div>
-        <div style={{ fontSize: 13, color: "var(--soft, #8C7A6A)", marginTop: 12, maxWidth: 250, marginLeft: "auto", marginRight: "auto", lineHeight: 1.5 }}>
-          {t("staff.campaign.visitCountedHint")}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
+          {/* Loyalty leg */}
+          <VisitLegRow
+            icon="🎟️"
+            title={t("cmp.staff.loyaltyTitle")}
+            heading={loyalty?.program.title ?? ""}
+            value={
+              loyalty
+                ? loyalty.state === "reward_ready"
+                  ? t("cmp.staff.rewardReady")
+                  : t("cmp.staff.stampAdded")
+                      .replace("{current}", String(loyalty.progress?.current_count ?? 0))
+                      .replace("{target}", String(loyalty.progress?.target_count ?? loyalty.program.required_count ?? 0))
+                : null
+            }
+            muted={
+              loyalty
+                ? null
+                : result.loyalty_skipped
+                  ? t("cmp.staff.noStampReason").replace("{reason}", result.loyalty_skipped)
+                  : t("cmp.staff.noStamp")
+            }
+          />
+
+          {/* Campaign leg */}
+          {campaignComplete && campaign ? (
+            <div style={{
+              background: "#FBEFD9", borderRadius: 14, padding: "14px 16px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 30, animation: "jqPop .5s ease" }}>🎉</div>
+              <div style={{ font: "800 18px 'Bricolage Grotesque',sans-serif", color: "#B07A1E", marginTop: 4 }}>
+                {campaign.campaign_name}
+              </div>
+              <div style={{
+                display: "inline-block", background: "#fff", color: "#B07A1E",
+                borderRadius: 11, padding: "7px 14px", marginTop: 8,
+                font: "700 14px 'Bricolage Grotesque',sans-serif",
+              }}>
+                🎁 {t("cmp.staff.campaignComplete").replace("{reward}", campaign.reward_title ?? "")}
+              </div>
+            </div>
+          ) : (
+            <VisitLegRow
+              icon="🎯"
+              title={t("cmp.staff.campaignTitle")}
+              heading={campaign?.campaign_name ?? ""}
+              value={
+                campaign
+                  ? t("cmp.staff.campaignProgress")
+                      .replace("{current}", String(campaign.current_count))
+                      .replace("{goal}", String(campaign.goal))
+                  : null
+              }
+              muted={
+                campaign
+                  ? null
+                  : result.campaign_skipped
+                    ? t("cmp.staff.noCampaignReason").replace("{reason}", result.campaign_skipped)
+                    : t("cmp.staff.noCampaign")
+              }
+            />
+          )}
         </div>
       </div>
     </SheetBackdrop>
   );
 }
 
-// ─── sheet: campaign complete → reward issued ───────────────────────────────────
-
-function VisitCompleteSheet({ result, onDismiss }: { result: ConfirmVisitResult; onDismiss: () => void }) {
-  const t = useT();
-  return (
-    <SheetBackdrop dim="rgba(8,6,3,.5)" onDismiss={onDismiss}>
-      <Flash color="var(--amber, #E7A23E)" />
-      <div style={{ ...SHEET_STYLE, padding: "30px 26px 30px", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
-        <CountdownBar duration={3200} onDone={onDismiss} />
-        <div style={{ fontSize: 46, animation: "jqPop .5s ease" }}>🎉</div>
-        <div style={{ fontSize: 13.5, color: "var(--soft, #8C7A6A)", fontWeight: 600, marginTop: 10 }}>
-          {result.customer_name} · {result.campaign_name}
-        </div>
-        <div style={{ font: "800 27px 'Bricolage Grotesque',sans-serif", marginTop: 4, letterSpacing: "-.01em" }}>
-          {t("staff.campaign.campaignCompleted")}
-        </div>
-        {result.reward_title && (
-          <div style={{
-            display: "inline-block", background: "#FBEFD9", color: "#B07A1E",
-            borderRadius: 13, padding: "9px 18px", marginTop: 13,
-            font: "700 16px 'Bricolage Grotesque',sans-serif",
-          }}>🎁 {result.reward_title}</div>
-        )}
-        <div style={{ fontSize: 13, color: "var(--soft, #8C7A6A)", marginTop: 14, lineHeight: 1.5, maxWidth: 270, marginLeft: "auto", marginRight: "auto" }}>
-          {t("staff.campaign.voucherIssuedHint").replace("{expires}", result.expires_label ?? "")}
-        </div>
+// One leg (loyalty or campaign) of the combined visit sheet. Either a live row
+// (title + heading + progress value) or a muted skipped line when the leg is null.
+function VisitLegRow({
+  icon,
+  title,
+  heading,
+  value,
+  muted,
+}: {
+  icon: string;
+  title: string;
+  heading: string;
+  value: string | null;
+  muted: string | null;
+}) {
+  if (muted) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 11, background: "#F6F0E6", borderRadius: 14, padding: "13px 15px" }}>
+        <span style={{ fontSize: 18, opacity: 0.5 }}>{icon}</span>
+        <span style={{ fontSize: 12.5, color: "var(--soft, #8C7A6A)", lineHeight: 1.4 }}>{muted}</span>
       </div>
-    </SheetBackdrop>
+    );
+  }
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 11, background: "#F8F4EC", borderRadius: 14, padding: "13px 15px" }}>
+      <span style={{ fontSize: 18 }}>{icon}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)" }}>{title}</span>
+        <span style={{ display: "block", font: "700 15px 'Bricolage Grotesque',sans-serif", marginTop: 2 }}>{heading}</span>
+      </span>
+      <span style={{ font: "700 15px 'Bricolage Grotesque',sans-serif", whiteSpace: "nowrap", color: "var(--accent, #C25E3C)" }}>
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -594,7 +670,7 @@ export default function StaffScanPage() {
   const { isStaff, ready, staff } = useStaffAuth();
 
   const scanCustomer = useScanCustomerForCampaigns();
-  const confirmVisit = useConfirmVisit();
+  const confirmVisit = useConfirmVisitUnified();
   const scanVoucher = useScanCampaignVoucher();
   const redeemVoucher = useRedeemCampaignVoucher();
   const confirmGroup = useConfirmGroup();
@@ -684,16 +760,14 @@ export default function StaffScanPage() {
   };
 
   const handleConfirmVisit = () => {
-    if (overlay?.kind !== "visit_eligibility" || !selectedCampaignId) return;
+    if (overlay?.kind !== "visit_eligibility") return;
+    // Pass the campaign the staff tapped, or omit to let the backend auto-pick.
+    // One confirm advances both the loyalty card and the prioritized campaign.
     confirmVisit.mutate(
-      { token: scannedTokenRef.current, campaign_id: selectedCampaignId },
+      { token: scannedTokenRef.current, campaignId: selectedCampaignId ?? undefined },
       {
         onSuccess(data) {
-          setOverlay(
-            data.state === "completed"
-              ? { kind: "visit_complete", result: data }
-              : { kind: "visit_counted", result: data },
-          );
+          setOverlay({ kind: "visit_unified", result: data });
         },
         onError(error) { showError(error); },
       },
@@ -820,8 +894,7 @@ export default function StaffScanPage() {
             isPending={confirmVisit.isPending}
           />
         )}
-        {overlay?.kind === "visit_counted" && <VisitCountedSheet result={overlay.result} onDismiss={dismiss} />}
-        {overlay?.kind === "visit_complete" && <VisitCompleteSheet result={overlay.result} onDismiss={dismiss} />}
+        {overlay?.kind === "visit_unified" && <VisitUnifiedSheet result={overlay.result} onDismiss={dismiss} />}
         {overlay?.kind === "group_eligible" && (
           <GroupEligibleSheet group={overlay.group} onConfirm={handleConfirmGroup} onDismiss={dismiss} isPending={confirmGroup.isPending} />
         )}

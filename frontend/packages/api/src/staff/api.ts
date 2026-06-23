@@ -9,6 +9,7 @@ import {
   adaptConfirmVisitResult,
   adaptRedeemResult,
   adaptScanCustomerResult,
+  adaptUnifiedScan,
   adaptVoucherScanResult,
 } from "./adapters";
 import type {
@@ -21,6 +22,7 @@ import type {
   ScanCustomerResult,
   ScanResult,
   StaffCollectResult,
+  UnifiedScanResult,
   StaffGroup,
   StaffProgram,
   StaffRedemption,
@@ -68,6 +70,17 @@ export const staffApi = {
       .then(adaptScanCustomerResult),
   confirmVisit: (body: { token: string; campaign_id: string }): Promise<ConfirmVisitResult> =>
     api.post<any>("/api/staff/campaigns/confirm-visit/", body).then(adaptConfirmVisitResult),
+  // One confirm advances BOTH the regular loyalty card and the prioritized
+  // eligible campaign. Omit campaign_id to let the backend auto-pick. The backend
+  // returns 200 even when one (or neither) leg advanced; only an invalid token
+  // errors. Maps the raw two-leg envelope through adaptUnifiedScan.
+  confirmVisitUnified: (token: string, campaignId?: string): Promise<UnifiedScanResult> =>
+    api
+      .post<any>("/api/staff/campaigns/visit/", {
+        token,
+        ...(campaignId ? { campaign_id: campaignId } : {}),
+      })
+      .then(adaptUnifiedScan),
   async scanCampaignVoucher(token: string): Promise<CampaignVoucherScanResult> {
     // A valid voucher resolves to the voucher object; the backend raises a typed
     // error for an invalid one. Map the known voucher-error codes to the design's

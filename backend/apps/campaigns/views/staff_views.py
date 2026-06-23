@@ -21,6 +21,8 @@ from apps.campaigns.serializers import (
     ProgressResultSerializer,
     ScanCustomerSerializer,
     ScanVoucherSerializer,
+    UnifiedConfirmVisitSerializer,
+    UnifiedScanResultSerializer,
 )
 from apps.campaigns.services import StaffScannerService
 from apps.loyalty.services import get_staff_for_user
@@ -68,6 +70,31 @@ class ConfirmVisitView(_StaffScanView):
         )
         return success_response(
             ProgressResultSerializer(result, context={"request": request}).data
+        )
+
+
+class UnifiedConfirmVisitView(_StaffScanView):
+    """Advance loyalty + one prioritized campaign in a single staff scan (§14).
+
+    Parses the customer token (and optional ``campaign_id``), calls
+    ``StaffScannerService.confirm_visit_unified`` (which runs the two independent
+    legs), and shapes the unified response. Only an invalid token hard-fails.
+    """
+
+    serializer_class = UnifiedConfirmVisitSerializer
+
+    def post(self, request):
+        serializer = UnifiedConfirmVisitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        staff = get_staff_for_user(request.user)
+        result = StaffScannerService.confirm_visit_unified(
+            staff,
+            serializer.validated_data["token"],
+            campaign_id=serializer.validated_data.get("campaign_id"),
+            request=request,
+        )
+        return success_response(
+            UnifiedScanResultSerializer(result, context={"request": request}).data
         )
 
 

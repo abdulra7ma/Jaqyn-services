@@ -138,6 +138,21 @@ export type ConfirmVisitResult = {
   expires_label: string | null;
 };
 
+// Unified scan (plan: one staff confirm advances BOTH the regular loyalty card
+// and the prioritized eligible campaign). The backend returns 200 even when one
+// leg is null; *_skipped carries a human reason (e.g. min-interval) for the gap.
+export type UnifiedScanResult = {
+  customer: { name: string; phone: string };
+  // The regular loyalty-card leg — mirrors /api/staff/collect/. null when no
+  // stamp was added; loyalty_skipped explains why.
+  loyalty: StaffCollectResult | null;
+  loyalty_skipped: string | null;
+  // The prioritized campaign leg — same shape as confirm-visit. null when no
+  // campaign was counted; campaign_skipped explains why.
+  campaign: ConfirmVisitResult | null;
+  campaign_skipped: string | null;
+};
+
 export type CampaignVoucherScanState = "valid" | "redeemed" | "expired" | "cancelled" | "not_found";
 
 // Result of scanning a campaign reward voucher QR.

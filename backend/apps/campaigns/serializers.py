@@ -422,6 +422,18 @@ class ConfirmVisitSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=128)
 
 
+class UnifiedConfirmVisitSerializer(serializers.Serializer):
+    """Unified staff scan input — the customer's QR token + optional campaign.
+
+    ``campaign_id`` is optional: when omitted the service picks the single
+    prioritized eligible campaign (§14); when present the staff tapped a specific
+    campaign and that one is targeted.
+    """
+
+    token = serializers.CharField(max_length=128)
+    campaign_id = serializers.UUIDField(required=False)
+
+
 class ScanVoucherSerializer(serializers.Serializer):
     """Staff scan/redeem-voucher input — a redeem QR token or a typed-in code."""
 
@@ -496,6 +508,56 @@ class ProgressResultSerializer(serializers.Serializer):
         return CampaignRewardVoucherSerializer(
             obj.voucher, context=self.context
         ).data
+
+
+def _mask_phone(phone: str | None) -> str:
+    """Mask a phone number to its last two digits (``+99670XXXX01`` → ``…01``).
+
+    Staff sees only enough to disambiguate; the rest is hidden so the unified
+    scan response never leaks a full PII phone number.
+    """
+    if not phone:
+        return ""
+    tail = phone[-2:]
+    return f"{'•' * max(len(phone) - 2, 0)}{tail}"
+
+
+class UnifiedScanResultSerializer(serializers.Serializer):
+    """Shape of a :class:`StaffScannerService.UnifiedScanResult` (unified scan).
+
+    Emits exactly: ``customer`` (name + masked phone), the passthrough
+    ``staff_collect`` ``loyalty`` dict (or ``null``) with its
+    ``loyalty_skipped`` reason code, and the campaign ``ProgressResult`` shape
+    (or ``null``) with its ``campaign_skipped`` reason code. The two legs are
+    independent — either may be present while the other is skipped.
+    """
+
+    customer = serializers.SerializerMethodField()
+    loyalty = serializers.SerializerMethodField()
+    loyalty_skipped = serializers.SerializerMethodField()
+    campaign = serializers.SerializerMethodField()
+    campaign_skipped = serializers.SerializerMethodField()
+
+    def get_customer(self, obj) -> dict:
+        return {
+            "name": getattr(obj.customer, "name", None),
+            "phone": _mask_phone(getattr(obj.customer, "phone", None)),
+        }
+
+    def get_loyalty(self, obj) -> dict | None:
+        # The staff_collect dict is passed through verbatim (already a plain dict).
+        return obj.loyalty
+
+    def get_loyalty_skipped(self, obj) -> str | None:
+        return obj.loyalty_skipped_reason
+
+    def get_campaign(self, obj) -> ReturnDict | None:
+        if obj.campaign is None:
+            return None
+        return ProgressResultSerializer(obj.campaign, context=self.context).data
+
+    def get_campaign_skipped(self, obj) -> str | None:
+        return obj.campaign_skipped_reason
 
 
 class GroupConfirmResultSerializer(serializers.Serializer):

@@ -30,6 +30,7 @@ from apps.campaigns.services.scanner import (
     CustomerScanResult,
     EligibleCampaignView,
     StaffScannerService,
+    UnifiedScanResult,
 )
 
 __all__ = [
@@ -45,6 +46,7 @@ __all__ = [
     "StaffScannerService",
     "CustomerScanResult",
     "EligibleCampaignView",
+    "UnifiedScanResult",
     "FraudService",
     "FraudSignal",
     "CampaignGroupService",

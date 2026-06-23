@@ -76,6 +76,16 @@ export const useConfirmVisit = () => {
   });
 };
 
+// One confirm advances both the loyalty card and the prioritized campaign.
+export const useConfirmVisitUnified = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { token: string; campaignId?: string }) =>
+      staffApi.confirmVisitUnified(body.token, body.campaignId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: sqk.activity }),
+  });
+};
+
 export const useScanCampaignVoucher = () =>
   useMutation({ mutationFn: (token: string) => staffApi.scanCampaignVoucher(token) });
 

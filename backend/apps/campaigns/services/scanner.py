@@ -55,6 +55,32 @@ class EligibleCampaignView:
 
 
 @dataclass(frozen=True)
+class UnifiedScanResult:
+    """Result of a single staff scan that advances loyalty + one campaign (§14).
+
+    One staff action drives two independent legs:
+
+    * ``loyalty`` — the baseline leg, always attempted. Holds the
+      ``staff_collect`` result dict on success, else ``None`` with
+      ``loyalty_skipped_reason`` carrying the domain error code (e.g. no active
+      program, scan interval, needs-amount for SPEND).
+    * ``campaign`` — the conditional leg. Holds the
+      :class:`~apps.campaigns.services.progress.ProgressResult` for the single
+      prioritized eligible campaign on success, else ``None`` with
+      ``campaign_skipped_reason``. ``None`` for both when no eligible campaign.
+
+    The two legs are independent: neither failure aborts the other. Only an
+    invalid / non-CUSTOMER_PROFILE token hard-fails (raised before this is built).
+    """
+
+    customer: object
+    loyalty: dict | None
+    loyalty_skipped_reason: str | None
+    campaign: "ProgressResult | None"
+    campaign_skipped_reason: str | None
+
+
+@dataclass(frozen=True)
 class CustomerScanResult:
     """Result of scanning a customer's personal QR for campaigns (plan §1.2).
 
@@ -232,6 +258,95 @@ class StaffScannerService:
             customer=qr_token.customer,
             request=request,
             now=now,
+        )
+
+    @staticmethod
+    def confirm_visit_unified(
+        staff: StaffMember,
+        raw_token: str,
+        campaign_id=None,
+        request=None,
+        now: datetime | None = None,
+    ) -> "UnifiedScanResult":
+        """Advance loyalty (baseline) + one prioritized campaign in one scan (§14).
+
+        Resolves the customer's ``CUSTOMER_PROFILE`` token to the customer; an
+        invalid / non-CUSTOMER_PROFILE / customer-less token is the **only** hard
+        failure (``INVALID_QR_TOKEN``). Guards the business is active.
+
+        LOYALTY leg (baseline, always attempted): delegates to
+        ``apps.loyalty.services.staff_collect``. Its result dict is returned on
+        success; on a ``JaqynAPIException`` the code is captured in
+        ``loyalty_skipped_reason`` and the scan continues — a loyalty failure
+        never aborts the campaign leg.
+
+        CAMPAIGN leg (conditional): the target is the explicitly tapped
+        ``campaign_id`` when given, else the single prioritized *eligible*
+        campaign chosen by the §14 resolver over ``scan_customer_qr``'s
+        eligibility rows. If a target exists it is confirmed via
+        :meth:`confirm_visit`; on a ``JaqynAPIException`` the code is captured in
+        ``campaign_skipped_reason`` and the scan still returns. With no eligible
+        campaign both campaign fields are ``None``. A campaign failure never
+        aborts the loyalty award.
+
+        The two legs are independent — each runs its own atomic/lock seam inside
+        its own service. They are deliberately NOT wrapped in one outer
+        transaction, so skipping one leg never rolls back the other.
+        """
+        from apps.loyalty import services as loyalty_services
+
+        now = now or timezone.now()
+        qr_token = resolve_qr_token(raw_token, request, action="unified_confirm_visit")
+        if (
+            qr_token.type != QRCodeToken.Type.CUSTOMER_PROFILE
+            or qr_token.customer is None
+        ):
+            raise JaqynAPIException(
+                "INVALID_QR_TOKEN", status_code=status.HTTP_400_BAD_REQUEST
+            )
+        customer = qr_token.customer
+        ensure_business_active(staff.business)
+
+        # --- LOYALTY leg (baseline) -----------------------------------------
+        loyalty: dict | None = None
+        loyalty_skipped_reason: str | None = None
+        try:
+            loyalty = loyalty_services.staff_collect(
+                staff=staff, raw_token=raw_token, program_id=None, request=request
+            )
+        except JaqynAPIException as exc:
+            loyalty_skipped_reason = exc.code
+
+        # --- CAMPAIGN leg (conditional) -------------------------------------
+        campaign_result: ProgressResult | None = None
+        campaign_skipped_reason: str | None = None
+        target_id = campaign_id
+        if target_id is None:
+            # Resolve the single prioritized eligible campaign (§14). Reuses the
+            # eligibility pipeline directly so the resolver gets the real
+            # EligibilityResult rows (not the flattened scan views).
+            results = CampaignEligibilityService.eligible_campaigns_for_customer(
+                staff.business, customer.id, now
+            )
+            target = CampaignProgressService.resolve_priority_campaign(
+                results, now=now
+            )
+            target_id = target.id if target is not None else None
+
+        if target_id is not None:
+            try:
+                campaign_result = StaffScannerService.confirm_visit(
+                    staff, target_id, customer, request=request, now=now
+                )
+            except JaqynAPIException as exc:
+                campaign_skipped_reason = exc.code
+
+        return UnifiedScanResult(
+            customer=customer,
+            loyalty=loyalty,
+            loyalty_skipped_reason=loyalty_skipped_reason,
+            campaign=campaign_result,
+            campaign_skipped_reason=campaign_skipped_reason,
         )
 
     @staticmethod

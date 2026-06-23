@@ -18,6 +18,8 @@ import type {
   ConfirmVisitResult,
   RedeemCampaignVoucherResult,
   ScanCustomerResult,
+  StaffCollectResult,
+  UnifiedScanResult,
 } from "./types";
 
 type Raw = Record<string, any>;
@@ -104,6 +106,24 @@ export function adaptVoucherScanResult(raw: Raw): CampaignVoucherScanResult {
     reason: null,
     // Group check-in resolution is a Phase 2 seam (plan Q4); single vouchers only.
     group: null,
+  };
+}
+
+// Unified visit endpoint → UnifiedScanResult. The loyalty leg is the staff
+// collect result verbatim (StaffCollectResult mirrors that serializer, so it
+// passes through unchanged); the campaign leg reuses adaptConfirmVisitResult.
+// Either leg may be null with a *_skipped reason — the backend returns 200 even
+// when only one (or neither) advanced.
+export function adaptUnifiedScan(raw: Raw): UnifiedScanResult {
+  return {
+    customer: {
+      name: raw.customer?.name ?? "",
+      phone: raw.customer?.phone ?? "",
+    },
+    loyalty: raw.loyalty ? (raw.loyalty as StaffCollectResult) : null,
+    loyalty_skipped: raw.loyalty_skipped ?? null,
+    campaign: raw.campaign ? adaptConfirmVisitResult(raw.campaign) : null,
+    campaign_skipped: raw.campaign_skipped ?? null,
   };
 }
 
