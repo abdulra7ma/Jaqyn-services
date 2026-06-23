@@ -13,7 +13,11 @@ export function parseScanned(text: string): string {
 const REGION_ID = "qr-reader-region";
 // Html5QrcodeScannerState: SCANNING = 2, PAUSED = 3.
 const RUNNING_STATES = new Set([2, 3]);
+// Default (boxed) scan config draws the library's own 220×220 shaded target.
 const SCAN_CONFIG = { fps: 10, qrbox: { width: 220, height: 220 } };
+// Fill mode scans the whole frame and draws no shaded box — the host page
+// (e.g. staff scanner) overlays its own corner frame instead.
+const FILL_SCAN_CONFIG = { fps: 10 };
 
 type Reason = "https" | "permission" | "none" | "generic";
 
@@ -32,7 +36,17 @@ function secureContextOk(): boolean {
   return (window.isSecureContext || local) && !!navigator.mediaDevices?.getUserMedia;
 }
 
-export function QrScanner({ onResult, autoStart = false }: { onResult: (token: string) => void; autoStart?: boolean }) {
+export function QrScanner({
+  onResult,
+  autoStart = false,
+  fill = false,
+}: {
+  onResult: (token: string) => void;
+  autoStart?: boolean;
+  // Full-bleed mode: video covers the parent, no library chrome or buttons. The
+  // host page is responsible for its own target frame and start/stop controls.
+  fill?: boolean;
+}) {
   const t = useT();
   const [active, setActive] = useState(false);
   const [reason, setReason] = useState<Reason | null>(null);
@@ -83,6 +97,7 @@ export function QrScanner({ onResult, autoStart = false }: { onResult: (token: s
       };
       const scanner = new Html5Qrcode(REGION_ID);
       scannerRef.current = scanner;
+      const cfg = fill ? FILL_SCAN_CONFIG : SCAN_CONFIG;
       const onScan = (decoded: string) => {
         onResultRef.current(parseScanned(decoded));
         setActive(false);
@@ -90,7 +105,7 @@ export function QrScanner({ onResult, autoStart = false }: { onResult: (token: s
 
       // Try the back camera, then fall back to whatever cameras exist.
       try {
-        await scanner.start({ facingMode: "environment" }, SCAN_CONFIG, onScan, () => {});
+        await scanner.start({ facingMode: "environment" }, cfg, onScan, () => {});
         return;
       } catch (err) {
         if (cancelled) return;
@@ -105,7 +120,7 @@ export function QrScanner({ onResult, autoStart = false }: { onResult: (token: s
         const cams = await Html5Qrcode.getCameras();
         if (cancelled) return;
         if (cams?.length) {
-          await scanner.start(cams[cams.length - 1]!.id, SCAN_CONFIG, onScan, () => {});
+          await scanner.start(cams[cams.length - 1]!.id, cfg, onScan, () => {});
           return;
         }
         scannerRef.current = null;
@@ -124,7 +139,7 @@ export function QrScanner({ onResult, autoStart = false }: { onResult: (token: s
       cancelled = true;
       void stopSafe();
     };
-  }, [active]);
+  }, [active, fill]);
 
   const message =
     reason === "https"
@@ -136,6 +151,13 @@ export function QrScanner({ onResult, autoStart = false }: { onResult: (token: s
           : reason === "generic"
             ? t("staff.scan.denied")
             : null;
+
+  // Full-bleed: just the camera region covering the parent. No buttons/labels —
+  // the host page owns the chrome. `qr-fill` (globals.css) makes the injected
+  // <video> cover the box and strips the library's default border.
+  if (fill) {
+    return <div id={REGION_ID} className="qr-fill h-full w-full" />;
+  }
 
   return (
     <div className="flex flex-col items-center gap-3">

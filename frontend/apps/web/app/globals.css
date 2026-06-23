@@ -76,6 +76,24 @@
   to { transform: scaleX(0); }
 }
 
+/* Full-bleed QR scanner (staff): make html5-qrcode's injected <video> cover the
+ * container and remove the library's default border/box so the host page's own
+ * corner-frame overlay is the only visible target. */
+.qr-fill {
+  position: absolute;
+  inset: 0;
+  border: 0 !important;
+}
+.qr-fill video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block;
+}
+.qr-fill canvas {
+  display: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   [class*="animate-["] { animation: none !important; }
   .jq-marquee { animation: none !important; }

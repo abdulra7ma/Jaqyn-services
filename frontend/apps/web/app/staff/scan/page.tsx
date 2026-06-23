@@ -752,19 +752,19 @@ export default function StaffScanPage() {
       <div className="relative flex-1 overflow-hidden">
 
         {cameraActive && (
-          <div className="absolute inset-0">
-            {/* Dark radial bg */}
-            <div style={{ position: "absolute", inset: 0, background: "radial-gradient(125% 80% at 68% 16%, #3c3024 0%, #221a12 46%, #14100B 100%)" }} />
+          <div className="absolute inset-0" style={{ background: "#14100B" }}>
+            {/* Live camera feed — fills the container; video styled via global CSS */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              <QrScanner key={scanKey} onResult={handleScan} autoStart fill />
+            </div>
+            {/* Dim everything except the central target a touch for legibility */}
+            <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 90% at 50% 42%, transparent 0%, transparent 26%, rgba(8,6,3,.55) 70%, rgba(8,6,3,.78) 100%)" }} />
+
             {/* Warm corner glows */}
-            <div style={{ position: "absolute", top: -40, left: -34, width: 250, height: 250, borderRadius: "50%", background: "radial-gradient(circle, rgba(231,162,62,.20), transparent 64%)", filter: "blur(7px)" }} />
-            <div style={{ position: "absolute", bottom: 150, right: -44, width: 230, height: 230, borderRadius: "50%", background: "radial-gradient(circle, rgba(194,94,60,.18), transparent 66%)", filter: "blur(9px)" }} />
+            <div style={{ position: "absolute", top: -40, left: -34, width: 250, height: 250, borderRadius: "50%", background: "radial-gradient(circle, rgba(231,162,62,.20), transparent 64%)", filter: "blur(7px)", pointerEvents: "none" }} />
+            <div style={{ position: "absolute", bottom: 150, right: -44, width: 230, height: 230, borderRadius: "50%", background: "radial-gradient(circle, rgba(194,94,60,.18), transparent 66%)", filter: "blur(9px)", pointerEvents: "none" }} />
             {/* Scan lines texture */}
             <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "repeating-linear-gradient(0deg, rgba(255,255,255,.015) 0 2px, transparent 2px 4px)" }} />
-
-            {/* Real QrScanner (hidden beneath UI — scans the full viewport) */}
-            <div className="pointer-events-none absolute inset-0 opacity-0">
-              <QrScanner key={scanKey} onResult={handleScan} autoStart />
-            </div>
 
             {/* Top overlay: business + staff pill + mode toggle */}
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: "16px 18px 30px", background: "linear-gradient(to bottom, rgba(10,7,4,.78), transparent)", zIndex: 6 }}>
