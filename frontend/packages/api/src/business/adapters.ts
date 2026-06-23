@@ -8,7 +8,9 @@ import type {
   CampaignAnalytics,
   CampaignParticipantRow,
   CampaignPayload,
+  CampaignSocialPost,
   CampaignVoucherRow,
+  SocialPostCaptions,
 } from "./types";
 
 type Raw = Record<string, any>;
@@ -191,4 +193,36 @@ export function toCampaignWritePayload(payload: Partial<CampaignPayload>): Raw {
   if (Object.keys(reward).length > 0) body.reward = reward;
 
   return body;
+}
+
+// ---- Social Post Studio ----------------------------------------------------
+
+const SOCIAL_PLATFORMS = ["instagram", "tiktok", "facebook", "whatsapp"] as const;
+
+// Coerce the raw /social-post/ payload into CampaignSocialPost. Missing string
+// fields default to "" and missing captions to "" so the studio always has a
+// defined value to render and edit (boundary validation, adapter pattern).
+export function adaptSocialPost(raw: Raw): CampaignSocialPost {
+  const str = (v: unknown): string => (typeof v === "string" ? v : "");
+  const rawCaptions = (raw.captions ?? {}) as Raw;
+  const captions = SOCIAL_PLATFORMS.reduce(
+    (acc, p) => {
+      acc[p] = str(rawCaptions[p]);
+      return acc;
+    },
+    {} as SocialPostCaptions,
+  );
+  const hashtags = Array.isArray(raw.hashtags)
+    ? raw.hashtags.filter((h: unknown): h is string => typeof h === "string")
+    : [];
+  return {
+    headline: str(raw.headline),
+    reward_title: str(raw.reward_title),
+    subtext: str(raw.subtext),
+    button_text: str(raw.button_text),
+    auto_join_url: str(raw.auto_join_url),
+    image_url: typeof raw.image_url === "string" ? raw.image_url : null,
+    captions,
+    hashtags,
+  };
 }

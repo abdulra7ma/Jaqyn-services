@@ -12,20 +12,25 @@ service, not in the view.
 
 from __future__ import annotations
 
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.campaigns.serializers import (
+    CampaignImageUploadSerializer,
     CampaignMetricsSerializer,
     CampaignParticipantSerializer,
     CampaignRewardVoucherSerializer,
     CampaignSerializer,
     CampaignWriteSerializer,
     CancelVoucherSerializer,
+    SocialPostSerializer,
 )
 from apps.campaigns.services import (
     CampaignAnalyticsService,
     CampaignRewardService,
     CampaignService,
+    build_social_post,
 )
 from apps.loyalty.services import get_staff_for_user
 from core.pagination import StandardResultsSetPagination
@@ -247,6 +252,47 @@ class CampaignAnalyticsView(_OwnerMixin, APIView):
         campaign = CampaignService.get_for_business(campaign_id, self._business(request))
         metrics = CampaignAnalyticsService.campaign_metrics(campaign)
         return success_response(CampaignMetricsSerializer(metrics).data)
+
+
+class CampaignImageUploadView(_OwnerMixin, APIView):
+    """Upload the campaign's social-share image (social-share feature).
+
+    Owner-only (``_OwnerMixin``). The serializer validates the file is a real
+    image; the view sets it on the owned campaign and returns the updated campaign
+    via :class:`CampaignSerializer` (whose ``image`` field is the relative media
+    url). Write surface, so it is scoped-throttled like the other campaign writes.
+    """
+
+    serializer_class = CampaignImageUploadSerializer
+    parser_classes = [MultiPartParser, FormParser]
+    throttle_scope = "campaign_write"
+
+    def get_throttles(self):
+        return [ScopedRateThrottle()]
+
+    def post(self, request, campaign_id):
+        business = self._business(request)
+        campaign = CampaignService.get_for_business(campaign_id, business)
+        serializer = CampaignImageUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        campaign.image = serializer.validated_data["image"]
+        campaign.save(update_fields=["image", "updated_at"])
+        return success_response(CampaignSerializer(campaign).data)
+
+
+class CampaignSocialPostView(_OwnerMixin, APIView):
+    """Return the campaign's ready-to-paste social-share kit (social-share feature).
+
+    Owner-only. Delegates the copy/link/hashtag generation to
+    :func:`build_social_post` and shapes it with :class:`SocialPostSerializer`.
+    """
+
+    serializer_class = SocialPostSerializer
+
+    def get(self, request, campaign_id):
+        campaign = CampaignService.get_for_business(campaign_id, self._business(request))
+        post = build_social_post(campaign)
+        return success_response(SocialPostSerializer(post).data)
 
 
 class CampaignVoucherCancelView(APIView):

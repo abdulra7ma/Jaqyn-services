@@ -1,11 +1,13 @@
 // Business API layer — wired live to the backend (envelope unwrapped by client,
 // lists arrive as {results:[…]}). Screens consume only the hooks in ./hooks.
 // Campaign methods (apps.campaigns) map raw rows through ./adapters.
-import { api } from "../client";
+import { API_URL, api } from "../client";
+import { tokenStore } from "../tokens";
 import {
   adaptBusinessCampaign,
   adaptCampaignList,
   adaptParticipant,
+  adaptSocialPost,
   adaptVoucherRow,
   toCampaignWritePayload,
 } from "./adapters";
@@ -21,6 +23,7 @@ import type {
   CampaignLifecycleAction,
   CampaignParticipantRow,
   CampaignPayload,
+  CampaignSocialPost,
   CampaignVoucherRow,
   CatalogItem,
   CatalogItemPayload,
@@ -143,6 +146,30 @@ export const businessApi = {
     api
       .post<any>(`/api/business/campaigns/vouchers/${voucherId}/cancel/`, { reason })
       .then(adaptVoucherRow),
+
+  // Social Post Studio. The image upload is multipart, so it bypasses the JSON
+  // `api` client (which forces a JSON body) — mirrors customer uploadAvatar.
+  campaignSocialPost: (id: string): Promise<CampaignSocialPost> =>
+    api.get<any>(`/api/business/campaigns/${id}/social-post/`).then(adaptSocialPost),
+  uploadCampaignImage: async (id: string, file: File): Promise<BusinessCampaign> => {
+    const form = new FormData();
+    form.append("image", file);
+    const access = tokenStore.getAccess();
+    const headers: Record<string, string> = {};
+    if (access) headers["Authorization"] = `Bearer ${access}`;
+    // Relative API_URL → same-origin (Next proxy); absolute → direct host.
+    const baseUrl = API_URL.startsWith("http") ? API_URL : "";
+    const res = await fetch(`${baseUrl}/api/business/campaigns/${id}/image/`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    const json = (await res.json()) as { success?: boolean; data?: any };
+    if (!json || json.success === false || !json.data) {
+      throw new Error("Campaign image upload failed");
+    }
+    return adaptBusinessCampaign(json.data);
+  },
 };
 
 export type BusinessApi = typeof businessApi;

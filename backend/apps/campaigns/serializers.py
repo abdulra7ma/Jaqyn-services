@@ -102,6 +102,10 @@ class CampaignSerializer(serializers.ModelSerializer):
     reward = CampaignRewardSerializer(read_only=True)
     required_count = serializers.SerializerMethodField()
     reward_title = serializers.SerializerMethodField()
+    # Emit the *relative* media url (``/media/campaigns/..``) rather than the
+    # default ImageField absolute url, so the image resolves through the
+    # frontend's same-origin proxy. ``None`` when no image is set.
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = Campaign
@@ -141,6 +145,9 @@ class CampaignSerializer(serializers.ModelSerializer):
     def get_reward_title(self, obj: Campaign) -> str | None:
         reward = getattr(obj, "reward", None)
         return reward.title if reward is not None else None
+
+    def get_image(self, obj: Campaign) -> str | None:
+        return obj.image.url if obj.image else None
 
 
 class CampaignProgressSerializer(serializers.ModelSerializer):
@@ -373,6 +380,33 @@ class CancelVoucherSerializer(serializers.Serializer):
     """Manager voucher-cancel input — a non-blank reason is required (§1.2)."""
 
     reason = serializers.CharField(max_length=500)
+
+
+class CampaignImageUploadSerializer(serializers.Serializer):
+    """Campaign image-upload input — a single ``image`` file (social-share feature).
+
+    ``ImageField`` enforces that the upload is a valid, decodable image (shape/
+    format validation); persisting it onto the campaign is the view's concern.
+    """
+
+    image = serializers.ImageField()
+
+
+class SocialPostSerializer(serializers.Serializer):
+    """Shape of the :class:`apps.campaigns.services.SocialPost` dataclass.
+
+    Read-only presentation payload for the campaign social-share screen — the
+    captions map and hashtag list are emitted verbatim for the business to paste.
+    """
+
+    headline = serializers.CharField()
+    reward_title = serializers.CharField(allow_blank=True)
+    subtext = serializers.CharField(allow_blank=True)
+    button_text = serializers.CharField()
+    auto_join_url = serializers.CharField()
+    image_url = serializers.CharField(allow_null=True)
+    captions = serializers.DictField(child=serializers.CharField())
+    hashtags = serializers.ListField(child=serializers.CharField())
 
 
 class ScanCustomerSerializer(serializers.Serializer):

@@ -25,6 +25,7 @@ from apps.campaigns.services.progress import (
     ProgressResult,
 )
 from apps.campaigns.services.rewards import CampaignRewardService
+from apps.campaigns.services.social import SocialPost, build_social_post
 from apps.campaigns.services.scanner import (
     CustomerScanResult,
     EligibleCampaignView,
@@ -39,6 +40,8 @@ __all__ = [
     "CampaignProgressService",
     "ProgressResult",
     "CampaignRewardService",
+    "SocialPost",
+    "build_social_post",
     "StaffScannerService",
     "CustomerScanResult",
     "EligibleCampaignView",

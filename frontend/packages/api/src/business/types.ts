@@ -414,3 +414,22 @@ export type CampaignPayload = {
 
 // Lifecycle transitions exposed as POST actions (plan §1.3).
 export type CampaignLifecycleAction = "publish" | "pause" | "resume" | "end" | "cancel";
+
+// ---- Social Post Studio (design SOCIAL POST STUDIO) -------------------------
+// Server-composed, copy-ready post payload + the campaign image upload result.
+// Validated with zod at the boundary (see ./adapters socialPostSchema).
+
+export type SocialPlatform = "instagram" | "tiktok" | "facebook" | "whatsapp";
+
+export type SocialPostCaptions = Record<SocialPlatform, string>;
+
+export type CampaignSocialPost = {
+  headline: string;
+  reward_title: string;
+  subtext: string;
+  button_text: string;
+  auto_join_url: string;
+  image_url: string | null;
+  captions: SocialPostCaptions;
+  hashtags: string[];
+};

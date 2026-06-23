@@ -14,6 +14,7 @@
     "@jaqyn/i18n": "workspace:*",
     "@jaqyn/ui": "workspace:*",
     "@tanstack/react-query": "^5.45.0",
+    "html-to-image": "^1.11.13",
     "html5-qrcode": "^2.3.8",
     "next": "^14.2.4",
     "react": "^18.3.1",

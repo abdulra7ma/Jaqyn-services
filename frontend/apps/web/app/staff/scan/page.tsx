@@ -602,6 +602,8 @@ export default function StaffScanPage() {
   const [mode, setMode] = useState<ScanMode>("visit");
   const [overlay, setOverlay] = useState<OverlayState>(null);
   const [cameraActive, setCameraActive] = useState(false);
+  // Incremented on dismiss so QrScanner remounts and auto-restarts after each scan.
+  const [scanKey, setScanKey] = useState(0);
   // The campaign the staff tapped to count in the eligibility sheet.
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   // The token most recently scanned — needed to confirm the visit against it.
@@ -628,6 +630,7 @@ export default function StaffScanPage() {
     setOverlay(null);
     setSelectedCampaignId(null);
     busyRef.current = false;
+    setScanKey((k) => k + 1);
     scanCustomer.reset();
     confirmVisit.reset();
     scanVoucher.reset();
@@ -760,7 +763,7 @@ export default function StaffScanPage() {
 
             {/* Real QrScanner (hidden beneath UI — scans the full viewport) */}
             <div className="pointer-events-none absolute inset-0 opacity-0">
-              <QrScanner onResult={handleScan} />
+              <QrScanner key={scanKey} onResult={handleScan} autoStart />
             </div>
 
             {/* Top overlay: business + staff pill + mode toggle */}

@@ -11,6 +11,8 @@ from apps.campaigns.views.business_views import (
     CampaignPauseView,
     CampaignPublishView,
     CampaignResumeView,
+    CampaignSocialPostView,
+    CampaignImageUploadView,
     CampaignVoucherCancelView,
     CampaignVouchersView,
 )
@@ -37,6 +39,8 @@ urlpatterns = [
         CampaignParticipantsView.as_view(),
         name="business-campaign-participants",
     ),
+    path("<uuid:campaign_id>/image/", CampaignImageUploadView.as_view(), name="business-campaign-image"),
+    path("<uuid:campaign_id>/social-post/", CampaignSocialPostView.as_view(), name="business-campaign-social-post"),
     path("<uuid:campaign_id>/vouchers/", CampaignVouchersView.as_view(), name="business-campaign-vouchers"),
     path("<uuid:campaign_id>/analytics/", CampaignAnalyticsView.as_view(), name="business-campaign-analytics"),
 ]

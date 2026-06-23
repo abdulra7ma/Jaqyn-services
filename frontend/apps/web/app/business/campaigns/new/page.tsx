@@ -6,10 +6,10 @@
 // publish rules for UX — the service is the authority. Publish calls useCreateCampaign
 // and routes to the new campaign's detail.
 
-import { useCreateCampaign, type BusinessCampaignType } from "@jaqyn/api";
+import { businessApi, useCreateCampaign, type BusinessCampaignType } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { OwnerShell } from "../../_components/OwnerShell";
 import { useErrMessage } from "../../../_lib/useErrMessage";
 import { useRequireAuth } from "../../../_lib/auth";
@@ -66,6 +66,9 @@ export default function NewCampaignPage() {
 
   const [stepIndex, setStepIndex] = useState(0);
   const [form, setForm] = useState<WizardForm>(WIZARD_DEFAULT);
+  // Campaign image is held in form-local state and uploaded after the campaign
+  // exists (the upload endpoint is keyed by the new campaign's id).
+  const [image, setImage] = useState<File | null>(null);
   const create = useCreateCampaign();
 
   const step: WizardStep = WIZARD_STEPS[stepIndex]!;
@@ -87,7 +90,18 @@ export default function NewCampaignPage() {
     if (isLast) {
       if (invalidKey) return; // review step surfaces the message
       create.mutate(toPayload(form), {
-        onSuccess: (c) => router.replace(`/business/campaigns/${c.id}`),
+        onSuccess: async (c) => {
+          // Best-effort image upload; a failed upload shouldn't block navigation
+          // to the freshly created campaign (the owner can re-upload on detail).
+          if (image) {
+            try {
+              await businessApi.uploadCampaignImage(c.id, image);
+            } catch {
+              /* surfaced on the detail page where re-upload is available */
+            }
+          }
+          router.replace(`/business/campaigns/${c.id}`);
+        },
       });
       return;
     }
@@ -141,7 +155,9 @@ export default function NewCampaignPage() {
 
           {/* step body */}
           <div className="min-w-0 flex-1 lg:max-w-[640px]">
-            {step === "type" && <StepType form={form} set={set} />}
+            {step === "type" && (
+              <StepType form={form} set={set} image={image} setImage={setImage} />
+            )}
             {step === "rules" && <StepRules form={form} set={set} />}
             {step === "reward" && <StepReward form={form} set={set} />}
             {step === "limits" && <StepLimits form={form} set={set} estCost={estCost} />}
@@ -185,8 +201,21 @@ type SetFn = <K extends keyof WizardForm>(key: K, val: WizardForm[K]) => void;
 
 const PANEL = "rounded-[20px] border border-line bg-card p-6";
 
-function StepType({ form, set }: { form: WizardForm; set: SetFn }) {
+function StepType({
+  form,
+  set,
+  image,
+  setImage,
+}: {
+  form: WizardForm;
+  set: SetFn;
+  image: File | null;
+  setImage: (f: File | null) => void;
+}) {
   const t = useT();
+  const fileRef = useRef<HTMLInputElement>(null);
+  // Object URL for the local preview; revoked implicitly when the file changes.
+  const previewUrl = useMemo(() => (image ? URL.createObjectURL(image) : null), [image]);
   return (
     <div className={PANEL}>
       <h2 className="font-display text-[17px] font-bold text-ink">{t("cmp.biz.wiz.typeTitle")}</h2>
@@ -244,6 +273,49 @@ function StepType({ form, set }: { form: WizardForm; set: SetFn }) {
           className={`${FIELD} resize-none leading-relaxed`}
         />
       </label>
+
+      <div className="mt-3.5">
+        <span className={LABEL}>{t("cmp.social.imageField")}</span>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const f = e.target.files?.[0] ?? null;
+            e.target.value = "";
+            setImage(f);
+          }}
+          className="hidden"
+        />
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="mt-1.5 flex w-full items-center gap-3.5 overflow-hidden rounded-xl border-[1.5px] border-dashed border-line bg-card p-3.5 text-left"
+        >
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- local object-URL preview, not a remote asset
+            <img
+              src={previewUrl}
+              alt=""
+              className="h-14 w-14 flex-none rounded-lg object-cover"
+            />
+          ) : (
+            <span
+              className="flex h-14 w-14 flex-none items-center justify-center rounded-lg bg-brand-muted text-2xl"
+              aria-hidden
+            >
+              🖼️
+            </span>
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] font-semibold text-ink">
+              {image ? image.name : t("cmp.social.imageHint")}
+            </span>
+            <span className="mt-0.5 block text-xs text-brand">
+              {image ? t("cmp.social.imageChange") : t("cmp.social.addPhoto")}
+            </span>
+          </span>
+        </button>
+      </div>
     </div>
   );
 }

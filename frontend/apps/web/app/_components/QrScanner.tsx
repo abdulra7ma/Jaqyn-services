@@ -32,7 +32,7 @@ function secureContextOk(): boolean {
   return (window.isSecureContext || local) && !!navigator.mediaDevices?.getUserMedia;
 }
 
-export function QrScanner({ onResult }: { onResult: (token: string) => void }) {
+export function QrScanner({ onResult, autoStart = false }: { onResult: (token: string) => void; autoStart?: boolean }) {
   const t = useT();
   const [active, setActive] = useState(false);
   const [reason, setReason] = useState<Reason | null>(null);
@@ -48,6 +48,11 @@ export function QrScanner({ onResult }: { onResult: (token: string) => void }) {
     }
     setActive(true);
   };
+
+  useEffect(() => {
+    if (autoStart) start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart]);
 
   useEffect(() => {
     if (!active) return;

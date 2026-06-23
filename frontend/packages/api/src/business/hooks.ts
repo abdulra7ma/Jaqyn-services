@@ -31,6 +31,7 @@ export const bqk = {
   campaignParticipants: (id: string) => ["business", "campaigns", id, "participants"] as const,
   campaignVouchers: (id: string) => ["business", "campaigns", id, "vouchers"] as const,
   campaignAnalytics: (id: string) => ["business", "campaigns", id, "analytics"] as const,
+  campaignSocialPost: (id: string) => ["business", "campaigns", id, "social-post"] as const,
 };
 
 export const useBusinessMe = (enabled = true) =>
@@ -274,6 +275,25 @@ export const useDuplicateCampaign = () => {
   return useMutation({
     mutationFn: (id: string) => businessApi.duplicateCampaign(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: bqk.campaigns }),
+  });
+};
+
+export const useCampaignSocialPost = (id: string, enabled = true) =>
+  useQuery({
+    queryKey: bqk.campaignSocialPost(id),
+    queryFn: () => businessApi.campaignSocialPost(id),
+    enabled: enabled && !!id,
+  });
+
+export const useUploadCampaignImage = (id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => businessApi.uploadCampaignImage(id, file),
+    onSuccess: (c) => {
+      qc.setQueryData(bqk.campaign(c.id), c);
+      qc.invalidateQueries({ queryKey: bqk.campaigns });
+      qc.invalidateQueries({ queryKey: bqk.campaignSocialPost(id) });
+    },
   });
 };
 

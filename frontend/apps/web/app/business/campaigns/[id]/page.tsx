@@ -7,19 +7,22 @@
 
 import {
   useBusinessCampaign,
+  useBusinessMe,
   useCampaignAction,
   useCampaignParticipants,
   useCampaignVouchers,
   useCancelCampaignVoucher,
   useDuplicateCampaign,
+  useUploadCampaignImage,
   type BusinessCampaign,
   type CampaignLifecycleAction,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Badge } from "@jaqyn/ui";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { OwnerShell } from "../../_components/OwnerShell";
+import { SocialPostStudio } from "../../_components/SocialPostStudio";
 import { StatusPill, TYPE_GLYPH, VoucherStatusPill, ruleSummary } from "../../_components/campaigns";
 import { QueryBoundary } from "../../../_components/QueryBoundary";
 import { useErrMessage } from "../../../_lib/useErrMessage";
@@ -53,6 +56,16 @@ function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
 
   const action = useCampaignAction();
   const duplicate = useDuplicateCampaign();
+  const me = useBusinessMe();
+  const uploadImage = useUploadCampaignImage(c.id);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [studioOpen, setStudioOpen] = useState(false);
+
+  function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (file) uploadImage.mutate(file);
+  }
 
   // Available lifecycle controls per status (plan §1.3 / design controls).
   const controls: { action: CampaignLifecycleAction; labelKey: string }[] = [];
@@ -100,10 +113,33 @@ function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
             })}
           </p>
         </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          onChange={onPickPhoto}
+          className="hidden"
+        />
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploadImage.isPending}
+          className="absolute right-4 top-4 rounded-xl bg-white/15 px-3 py-2 text-[12px] font-semibold text-white transition hover:bg-white/25 disabled:opacity-60"
+        >
+          {uploadImage.isPending ? t("cmp.social.uploading") : t("cmp.social.changePhoto")}
+        </button>
       </div>
+      {uploadImage.isError && (
+        <p className="mt-2 text-[12.5px] font-semibold text-danger">{t("common.error")}</p>
+      )}
 
       {/* controls */}
       <div className="mt-4 flex flex-wrap gap-2.5">
+        <button
+          onClick={() => setStudioOpen(true)}
+          className="rounded-xl border-[1.5px] border-brand bg-brand-muted px-4 py-2.5 text-[13px] font-semibold text-brand-deep transition active:scale-[.99]"
+        >
+          {t("cmp.social.open")}
+        </button>
         {controls.map((ctrl) => (
           <button
             key={ctrl.action}
@@ -151,6 +187,15 @@ function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
       {tab === "overview" && <OverviewTab campaign={c} />}
       {tab === "participants" && <ParticipantsTab id={c.id} />}
       {tab === "vouchers" && <VouchersTab id={c.id} />}
+
+      {studioOpen && (
+        <SocialPostStudio
+          campaignId={c.id}
+          campaignName={c.name}
+          businessName={me.data?.display_name || me.data?.name || ""}
+          onClose={() => setStudioOpen(false)}
+        />
+      )}
     </div>
   );
 }

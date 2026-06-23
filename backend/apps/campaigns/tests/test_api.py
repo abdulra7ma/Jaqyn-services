@@ -276,6 +276,113 @@ def test_voucher_cancel_requires_reason():
     assert response.status_code == 400
 
 
+# --- social-share surface ---------------------------------------------------
+
+
+def _png_upload():
+    """A tiny valid 1x1 PNG as an in-memory upload for image-field validation."""
+    import io
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (1, 1), (255, 0, 0)).save(buf, format="PNG")
+    buf.seek(0)
+    return SimpleUploadedFile("promo.png", buf.read(), content_type="image/png")
+
+
+def test_campaign_image_upload_requires_auth():
+    business = make_business()
+    campaign = make_campaign(business)
+    response = APIClient().post(
+        f"/api/business/campaigns/{campaign.id}/image/",
+        {"image": _png_upload()},
+        format="multipart",
+    )
+    assert response.status_code == 401
+
+
+def test_campaign_image_upload_rejects_non_owner():
+    business = make_business("001")
+    other = make_business("002")
+    campaign = make_campaign(other)
+    response = owner_client(business).post(
+        f"/api/business/campaigns/{campaign.id}/image/",
+        {"image": _png_upload()},
+        format="multipart",
+    )
+    # The owner of a *different* business cannot see/upload — get_for_business
+    # makes another business's campaign indistinguishable from a missing one.
+    assert response.status_code == 404
+    assert response.data["error"]["code"] == "CAMPAIGN_NOT_FOUND"
+
+
+def test_campaign_image_upload_happy_path_sets_image():
+    business = make_business()
+    campaign = make_campaign(business)
+    response = owner_client(business).post(
+        f"/api/business/campaigns/{campaign.id}/image/",
+        {"image": _png_upload()},
+        format="multipart",
+    )
+    assert response.status_code == 200
+    image_url = response.data["data"]["image"]
+    assert image_url is not None
+    # Relative media url so it resolves through the frontend same-origin proxy.
+    assert image_url.startswith("/media/campaigns/")
+    campaign.refresh_from_db()
+    assert bool(campaign.image) is True
+
+
+def test_campaign_social_post_requires_auth():
+    business = make_business()
+    campaign = make_campaign(business)
+    response = APIClient().get(f"/api/business/campaigns/{campaign.id}/social-post/")
+    assert response.status_code == 401
+
+
+def test_campaign_social_post_rejects_customer():
+    business = make_business()
+    campaign = make_campaign(business)
+    response = customer_client(make_customer()).get(
+        f"/api/business/campaigns/{campaign.id}/social-post/"
+    )
+    assert response.status_code == 403
+
+
+def test_campaign_social_post_response_shape():
+    business = make_business()
+    campaign = make_campaign(business)
+    response = owner_client(business).get(
+        f"/api/business/campaigns/{campaign.id}/social-post/"
+    )
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert set(data.keys()) == {
+        "headline",
+        "reward_title",
+        "subtext",
+        "button_text",
+        "auto_join_url",
+        "image_url",
+        "captions",
+        "hashtags",
+    }
+    assert data["headline"] == campaign.name
+    assert data["reward_title"] == "Free coffee"
+    assert data["button_text"] == "Tap to join · bonus reward"
+    assert data["auto_join_url"].endswith(f"/c/{campaign.id}")
+    assert data["image_url"] is None
+    assert set(data["captions"].keys()) == {
+        "instagram",
+        "tiktok",
+        "facebook",
+        "whatsapp",
+    }
+    assert "#Jaqyn" in data["hashtags"]
+
+
 # --- customer surface -------------------------------------------------------
 
 
