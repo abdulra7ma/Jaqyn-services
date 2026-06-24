@@ -30,6 +30,8 @@ export function CustomerShell({
   hideChromeTitle?: boolean;
   children: ReactNode;
 }) {
+  const t = useT();
+  const pathname = usePathname();
   const { isAuthenticated, ready } = useAuth();
   // The desktop sidebar always stays for signed-in users, on every page (incl. detail
   // pages). `showNav` only governs the MOBILE bottom nav — the mobile back-arrow pattern.
@@ -37,6 +39,11 @@ export function CustomerShell({
   const mobileNav = showNav && sidebar;
   // Desktop header is rendered when there's something to show: a title or a back affordance.
   const showDesktopHeader = sidebar && (!hideChromeTitle || !!back);
+  // Guests get no sidebar/bottom-nav, so the top header doubles as their nav bar: brand
+  // logo (→ home) on the left, sign-in / sign-up on the right. Return to the current page
+  // after auth.
+  const guest = ready && !isAuthenticated;
+  const loginHref = `/login?return=${encodeURIComponent(pathname || "/")}`;
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-cream font-sans text-ink lg:h-screen lg:flex-row">
@@ -44,18 +51,45 @@ export function CustomerShell({
       {sidebar && <DesktopSidebar />}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* header — mobile (and any non-authed page) */}
+        {/* header — mobile (and any non-authed page). For guests it's the top nav bar. */}
         <header
-          className={`sticky top-0 z-10 flex items-center justify-between gap-2 bg-cream px-4 py-3 ${sidebar ? "lg:hidden" : ""}`}
+          className={`sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-3 ${
+            sidebar ? "bg-cream lg:hidden" : "border-b border-line bg-cream/95 backdrop-blur"
+          }`}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             {back && (
               <Link href={back} aria-label="back" className="text-subtle hover:text-brand">
                 ←
               </Link>
             )}
-            {!hideChromeTitle && <h1 className="text-lg font-semibold text-brand">{title}</h1>}
+            {guest ? (
+              <Link href="/" aria-label="Jaqyn — home" className="flex items-center gap-2">
+                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-[10px] bg-brand-gradient font-display text-lg font-extrabold text-brand-fg shadow-glow">
+                  J
+                </span>
+                <span className="font-display text-[17px] font-bold text-ink">Jaqyn</span>
+              </Link>
+            ) : (
+              !hideChromeTitle && <h1 className="truncate text-lg font-semibold text-brand">{title}</h1>
+            )}
           </div>
+          {guest && (
+            <div className="flex flex-none items-center gap-1.5">
+              <Link
+                href={loginHref}
+                className="rounded-pill px-3 py-1.5 text-sm font-bold text-brand transition hover:bg-brand-muted active:scale-[.98]"
+              >
+                {t("auth.login")}
+              </Link>
+              <Link
+                href={loginHref}
+                className="rounded-pill bg-brand-gradient px-3.5 py-1.5 text-sm font-bold text-brand-fg shadow-glow transition active:scale-[.98]"
+              >
+                {t("auth.signup")}
+              </Link>
+            </div>
+          )}
         </header>
 
         {/* header — desktop */}

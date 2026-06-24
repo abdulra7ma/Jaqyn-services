@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 
 from apps.businesses.models import Business
 from apps.businesses.serializers import (
+    BusinessCategorySerializer,
     BusinessImageUploadSerializer,
     BusinessSerializer,
     PublicBusinessSerializer,
@@ -69,6 +70,21 @@ class PublicBusinessListView(APIView):
         businesses = businesses[:limit]
 
         return success_response({"results": PublicBusinessSerializer(businesses, many=True, context={"request": request}).data})
+
+
+class PublicBusinessCategoriesView(APIView):
+    """Customer discovery filter options — the ``Business.Category`` enum (value + label).
+
+    The model is the single source of truth; clients render their category chips from this
+    response instead of hardcoding the list, so adding a category server-side surfaces it
+    everywhere without a frontend change.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        categories = [{"value": value, "label": label} for value, label in Business.Category.choices]
+        return success_response({"results": BusinessCategorySerializer(categories, many=True).data})
 
 
 class PublicBusinessDetailView(APIView):

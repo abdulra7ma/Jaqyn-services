@@ -23,6 +23,7 @@ import type {
   Business,
   BusinessRewardCard,
   Campaign,
+  CategoryOption,
   CampaignListParams,
   CampaignVoucher,
   CampaignWallet,
@@ -65,6 +66,7 @@ export interface CustomerApi {
   checkInGroup(id: string, approvalCode?: string): Promise<GroupDeal>;
   listMyGroups(): Promise<GroupDeal[]>;
   listNearby(params?: NearbyParams): Promise<Business[]>;
+  listCategories(): Promise<CategoryOption[]>;
   getBusiness(id: string, params?: Pick<NearbyParams, "lat" | "lng">): Promise<Business>;
   wallet(): Promise<Wallet>;
   presentRedemption(id: string): Promise<Redemption>;
@@ -222,6 +224,10 @@ export const customerApi: CustomerApi = {
     api
       .get<Paginated<any>>(`/api/businesses/nearby/${queryString(params)}`, { auth: false })
       .then((d) => d.results.map(adaptBusiness)),
+  listCategories: () =>
+    api
+      .get<Paginated<CategoryOption>>("/api/businesses/categories/", { auth: false })
+      .then((d) => d.results),
   getBusiness: (id, params) =>
     api.get<any>(`/api/businesses/${id}/${queryString(params)}`, { auth: false }).then(adaptBusiness),
   wallet: () => api.get<Wallet>("/api/customer/wallet/"),

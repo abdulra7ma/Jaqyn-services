@@ -1,9 +1,10 @@
 "use client";
 
-import { useNearby, type Business } from "@jaqyn/api";
+import { useCategories, useNearby, type Business } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Badge } from "@jaqyn/ui";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CustomerShell } from "../_components/CustomerShell";
 import { MiniMap } from "../_components/MiniMap";
@@ -11,38 +12,36 @@ import { QueryBoundary } from "../_components/QueryBoundary";
 import { FilterChips, InitialTile } from "../_components/kit";
 import { isOpenNow } from "../_lib/hours";
 
-const CATEGORIES = [
-  { key: "all", label: "All" },
-  { key: "cafe", label: "Cafe" },
-  { key: "restaurant", label: "Restaurant" },
-  { key: "bakery", label: "Bakery" },
-  { key: "barber", label: "Barber" },
-  { key: "beauty", label: "Beauty" },
-  { key: "retail", label: "Retail" },
-  { key: "other", label: "Other" },
-] as const;
-type CatKey = (typeof CATEGORIES)[number]["key"];
+// Sentinel for the "no category filter" chip; not a real Business.Category value.
+const ALL_CATEGORY = "all";
 
 export default function NearbyPage() {
   const t = useT();
+  const router = useRouter();
   const [search, setSearch] = useState("");
-  const [cat, setCat] = useState<CatKey>("all");
+  const [cat, setCat] = useState<string>(ALL_CATEGORY);
   const [selected, setSelected] = useState<string | null>(null);
   const [loc, setLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [locMsg, setLocMsg] = useState<string | null>(null);
   const askedForLocation = useRef(false);
+  // Category options come from the backend (Business.Category) — never hardcoded here.
+  const categoriesQuery = useCategories();
   const nearby = useNearby({
     search: search.trim() || undefined,
-    category: cat === "all" ? undefined : cat,
+    category: cat === ALL_CATEGORY ? undefined : cat,
     lat: loc?.lat,
     lng: loc?.lng,
     radius_km: loc ? 25 : undefined,
     limit: 6,
   });
 
+  // "All" chip is local (no backend value); the rest are the fetched categories.
   const cats = useMemo(
-    () => CATEGORIES.map((c) => ({ key: c.key, label: c.key === "all" ? t("nearby.all") : c.label })),
-    [t],
+    () => [
+      { key: ALL_CATEGORY, label: t("nearby.all") },
+      ...(categoriesQuery.data ?? []).map((c) => ({ key: c.value, label: c.label })),
+    ],
+    [categoriesQuery.data, t],
   );
 
   useEffect(() => {
@@ -90,6 +89,7 @@ export default function NearbyPage() {
               <MiniMap
                 selectedId={active}
                 onSelect={setSelected}
+                onOpen={(id) => router.push(`/nearby/${id}`)}
                 userLocation={loc}
                 onUseLocation={requestLocation}
                 pins={shown.map((b, i) => ({
@@ -101,6 +101,8 @@ export default function NearbyPage() {
                   lat: toNum(b.latitude),
                   lng: toNum(b.longitude),
                   accent: b.accent_color,
+                  category: b.category,
+                  reward: b.reward ?? undefined,
                 }))}
               />
 

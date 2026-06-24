@@ -10,6 +10,17 @@ class BusinessTypeSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class BusinessCategorySerializer(serializers.Serializer):
+    """Read-only shape for one ``Business.Category`` choice: enum value + human label.
+
+    Lets the customer discovery filter pull its options from the model's source of truth
+    instead of hardcoding the category list on the client.
+    """
+
+    value = serializers.CharField()
+    label = serializers.CharField()
+
+
 class BusinessSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(source="name", required=False)
     completion_score = serializers.SerializerMethodField()

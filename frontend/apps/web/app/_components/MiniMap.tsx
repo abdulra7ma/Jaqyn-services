@@ -13,15 +13,33 @@ export type MapPin = {
   lat?: number | null;
   lng?: number | null;
   accent?: string;
+  // Optional details surfaced in the hover tooltip.
+  category?: string;
+  reward?: string;
 };
+
+// Brand orange for the live "you are here" dot.
+const USER_DOT_COLOR = "#F2741B";
 
 type Point = MapPin & { x: number; y: number };
 type UserLocation = { lat: number; lng: number } | null;
+// 2GIS MapGL exposes a single global `mapgl`; its Map/Marker have no public TS types.
+type DgisMap = any;
+type DgisMarker = any;
 type GoogleMap = any;
 type GoogleMarker = any;
 
+// 2GIS MapGL API key. Public by design (ships in the client bundle, domain-restricted
+// in the 2GIS account). Env-driven so prod/staging can rotate without a code change.
+const DGIS_KEY = process.env.NEXT_PUBLIC_DGIS_MAPGL_KEY;
+// Google Maps JS API key (the alternative provider).
 const GOOGLE_MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+// Which map provider to render: "google" or "2gis" (default). Set via env so we can flip
+// providers per-environment without a code change; falls back to the SVG map if the
+// chosen provider has no key or fails to load.
+const MAP_PROVIDER = (process.env.NEXT_PUBLIC_MAP_PROVIDER ?? "2gis").toLowerCase();
 const BISHKEK = { lat: 42.8746, lng: 74.5698 };
+let mapglPromise: Promise<any> | null = null;
 let googleMapsPromise: Promise<any> | null = null;
 
 const FALLBACK_SPOTS = [
@@ -45,23 +63,30 @@ export function MiniMap({
   pins,
   selectedId,
   onSelect,
+  onOpen,
   userLocation,
   onUseLocation,
 }: {
   pins: MapPin[];
   selectedId?: string | null;
   onSelect?: (id: string) => void;
+  /** Fired when a business is clicked to be opened (navigates to its profile). */
+  onOpen?: (id: string) => void;
   userLocation?: UserLocation;
   onUseLocation?: () => void;
 }) {
   const t = useT();
   const [zoom, setZoom] = useState(1);
   const [full, setFull] = useState(false);
+  const [dgisFailed, setDgisFailed] = useState(false);
   const [googleFailed, setGoogleFailed] = useState(false);
   const points = useMemo(() => placePins(pins, userLocation), [pins, userLocation]);
   const userPoint = useMemo(() => placeUser(points, userLocation), [points, userLocation]);
   const selected = points.find((p) => p.id === selectedId) ?? points[0] ?? null;
-  const useGoogle = !!GOOGLE_MAPS_KEY && !googleFailed;
+  // Provider selection: honour NEXT_PUBLIC_MAP_PROVIDER, but only if that provider has a
+  // key and hasn't errored at runtime. Otherwise fall through to the SVG fallback.
+  const useGoogle = MAP_PROVIDER === "google" && !!GOOGLE_MAPS_KEY && !googleFailed;
+  const useDgis = MAP_PROVIDER !== "google" && !!DGIS_KEY && !dgisFailed;
 
   function changeZoom(delta: number) {
     setZoom((z) => Math.min(2.2, Math.max(0.85, Number((z + delta).toFixed(2)))));
@@ -94,7 +119,7 @@ export function MiniMap({
           return (
             <button
               key={p.id}
-              onClick={() => onSelect?.(p.id)}
+              onClick={() => (onOpen ? onOpen(p.id) : onSelect?.(p.id))}
               className="absolute z-[8] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center outline-none"
               style={{ left: `${p.x}%`, top: `${p.y}%` }}
             >
@@ -129,7 +154,11 @@ export function MiniMap({
       </div>
 
       {selected && (
-        <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-3 rounded-[14px] border border-line bg-card/95 p-3 shadow-card backdrop-blur">
+        <button
+          type="button"
+          onClick={() => (onOpen ? onOpen(selected.id) : onSelect?.(selected.id))}
+          className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-3 rounded-[14px] border border-line bg-card/95 p-3 text-left shadow-card backdrop-blur transition active:scale-[.99]"
+        >
           <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-brand-muted font-display font-bold text-brand">
             {selected.initial}
           </span>
@@ -137,7 +166,8 @@ export function MiniMap({
             <div className="truncate text-sm font-bold text-ink">{selected.name}</div>
             <div className="text-xs font-semibold text-subtle">{selected.dist || t("nearby.title")}</div>
           </div>
-        </div>
+          <span className="flex-none text-subtle" aria-hidden>›</span>
+        </button>
       )}
 
       {full && points.length > 0 && (
@@ -145,7 +175,7 @@ export function MiniMap({
           {points.map((p) => (
             <button
               key={p.id}
-              onClick={() => onSelect?.(p.id)}
+              onClick={() => (onOpen ? onOpen(p.id) : onSelect?.(p.id))}
               className={cn(
                 "min-w-[180px] rounded-[13px] border px-3 py-2 text-left shadow-card lg:min-w-0",
                 p.id === selectedId ? "border-brand bg-brand-muted" : "border-line bg-card",
@@ -164,11 +194,24 @@ export function MiniMap({
       pins={pins}
       selectedId={selectedId}
       onSelect={onSelect}
+      onOpen={onOpen}
       userLocation={userLocation}
       onUseLocation={onUseLocation}
       full={full}
       setFull={setFull}
       onError={() => setGoogleFailed(true)}
+    />
+  ) : useDgis ? (
+    <DgisMapBody
+      pins={pins}
+      selectedId={selectedId}
+      onSelect={onSelect}
+      onOpen={onOpen}
+      userLocation={userLocation}
+      onUseLocation={onUseLocation}
+      full={full}
+      setFull={setFull}
+      onError={() => setDgisFailed(true)}
     />
   ) : (
     fallbackBody
@@ -185,10 +228,11 @@ export function MiniMap({
   return <div className="relative mt-1 h-[260px]">{body}</div>;
 }
 
-function GoogleMapBody({
+function DgisMapBody({
   pins,
   selectedId,
   onSelect,
+  onOpen,
   userLocation,
   onUseLocation,
   full,
@@ -198,6 +242,170 @@ function GoogleMapBody({
   pins: MapPin[];
   selectedId?: string | null;
   onSelect?: (id: string) => void;
+  onOpen?: (id: string) => void;
+  userLocation?: UserLocation;
+  onUseLocation?: () => void;
+  full: boolean;
+  setFull: (next: boolean | ((current: boolean) => boolean)) => void;
+  onError: () => void;
+}) {
+  const t = useT();
+  const mapEl = useRef<HTMLDivElement>(null);
+  const map = useRef<DgisMap | null>(null);
+  const markers = useRef<DgisMarker[]>([]);
+  const userMarker = useRef<DgisMarker | null>(null);
+  // Keep the latest click handlers without re-creating markers when the parent re-renders.
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+  const onOpenRef = useRef(onOpen);
+  onOpenRef.current = onOpen;
+  const selected = pins.find((p) => p.id === selectedId) ?? pins[0] ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    loadMapgl()
+      .then((mapgl) => {
+        if (cancelled || !mapEl.current || map.current) return;
+        if (!mapgl?.Map) throw new Error("2GIS MapGL did not initialize");
+        const center = userLocation ?? pinCenter(pins) ?? BISHKEK;
+        map.current = new mapgl.Map(mapEl.current, {
+          key: DGIS_KEY,
+          // MapGL takes [lng, lat], the opposite of Google's {lat, lng}.
+          center: [center.lng, center.lat],
+          zoom: pins.length > 1 ? 13 : 15,
+          // We render our own controls, so hide MapGL's built-in ones.
+          zoomControl: false,
+        });
+      })
+      .catch(onError);
+    return () => {
+      cancelled = true;
+      markers.current.forEach((m) => m.destroy());
+      markers.current = [];
+      userMarker.current?.destroy();
+      userMarker.current = null;
+      map.current?.destroy();
+      map.current = null;
+    };
+    // Mount once; marker/center updates happen in the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const currentMap = map.current;
+    const mapgl = (window as any).mapgl;
+    if (!currentMap || !mapgl?.Marker) return;
+
+    markers.current.forEach((m) => m.destroy());
+    markers.current = [];
+
+    pins.forEach((pin) => {
+      if (typeof pin.lat !== "number" || typeof pin.lng !== "number") return;
+      const active = pin.id === selectedId || (!selectedId && !!pin.closest);
+      const marker = new mapgl.Marker(currentMap, {
+        coordinates: [pin.lng, pin.lat],
+        icon: pinIcon(pin.initial, pin.accent || "#C25E3C", active),
+        size: active ? [42, 42] : [36, 36],
+        anchor: active ? [21, 21] : [18, 18],
+        zIndex: active ? 20 : 10,
+      });
+      marker.on("click", () =>
+        onOpenRef.current ? onOpenRef.current(pin.id) : onSelectRef.current?.(pin.id),
+      );
+      markers.current.push(marker);
+    });
+
+    userMarker.current?.destroy();
+    userMarker.current = null;
+    if (userLocation) {
+      userMarker.current = new mapgl.Marker(currentMap, {
+        coordinates: [userLocation.lng, userLocation.lat],
+        icon: USER_ICON,
+        size: [22, 22],
+        anchor: [11, 11],
+        zIndex: 30,
+      });
+    }
+
+    fitDgisMap(currentMap, pins, userLocation);
+  }, [pins, selectedId, userLocation]);
+
+  function zoomBy(delta: number) {
+    if (!map.current) return;
+    map.current.setZoom(Math.max(3, Math.min(20, (map.current.getZoom() ?? 13) + delta)));
+  }
+
+  function fit() {
+    if (map.current) fitDgisMap(map.current, pins, userLocation);
+  }
+
+  return (
+    <div className="relative h-full overflow-hidden rounded-[22px] border border-line bg-[#EEE6D6]">
+      <div ref={mapEl} className="absolute inset-0" />
+
+      <div className="absolute left-3 top-3 z-20 flex gap-1.5">
+        <MapButton label="+" onClick={() => zoomBy(1)} />
+        <MapButton label="-" onClick={() => zoomBy(-1)} />
+        <MapButton label="Fit" onClick={fit} />
+      </div>
+      <div className="absolute right-3 top-3 z-20 flex gap-1.5">
+        {onUseLocation && <MapButton label={t("nearby.you")} onClick={() => onUseLocation()} />}
+        <MapButton label={full ? "Close" : "Full"} onClick={() => setFull((v) => !v)} />
+      </div>
+
+      {selected && (
+        <button
+          type="button"
+          onClick={() => (onOpen ? onOpen(selected.id) : onSelect?.(selected.id))}
+          className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-3 rounded-[14px] border border-line bg-card/95 p-3 text-left shadow-card backdrop-blur transition active:scale-[.99]"
+        >
+          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-brand-muted font-display font-bold text-brand">
+            {selected.initial}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-bold text-ink">{selected.name}</div>
+            <div className="text-xs font-semibold text-subtle">{selected.dist || t("nearby.title")}</div>
+          </div>
+          <span className="flex-none text-subtle" aria-hidden>›</span>
+        </button>
+      )}
+
+      {full && pins.length > 0 && (
+        <div className="absolute bottom-20 left-3 right-3 z-20 flex gap-2 overflow-x-auto pb-1 lg:left-auto lg:top-16 lg:w-64 lg:flex-col lg:overflow-y-auto">
+          {pins.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => (onOpen ? onOpen(p.id) : onSelect?.(p.id))}
+              className={cn(
+                "min-w-[180px] rounded-[13px] border px-3 py-2 text-left shadow-card lg:min-w-0",
+                p.id === selectedId ? "border-brand bg-brand-muted" : "border-line bg-card",
+              )}
+            >
+              <div className="truncate text-sm font-bold text-ink">{p.name}</div>
+              <div className="text-xs text-subtle">{p.dist || p.initial}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GoogleMapBody({
+  pins,
+  selectedId,
+  onSelect,
+  onOpen,
+  userLocation,
+  onUseLocation,
+  full,
+  setFull,
+  onError,
+}: {
+  pins: MapPin[];
+  selectedId?: string | null;
+  onSelect?: (id: string) => void;
+  onOpen?: (id: string) => void;
   userLocation?: UserLocation;
   onUseLocation?: () => void;
   full: boolean;
@@ -208,7 +416,8 @@ function GoogleMapBody({
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useRef<GoogleMap | null>(null);
   const markers = useRef<GoogleMarker[]>([]);
-  const userMarker = useRef<GoogleMarker | null>(null);
+  const userDot = useRef<any>(null);
+  const infoWindow = useRef<any>(null);
   const selected = pins.find((p) => p.id === selectedId) ?? pins[0] ?? null;
 
   useEffect(() => {
@@ -246,6 +455,10 @@ function GoogleMapBody({
 
     markers.current.forEach((m) => m.setMap(null));
     markers.current = [];
+    if (!infoWindow.current) {
+      // Single reused tooltip; disableAutoPan so hovering never jerks the map.
+      infoWindow.current = new google.maps.InfoWindow({ disableAutoPan: true });
+    }
 
     pins.forEach((pin) => {
       if (typeof pin.lat !== "number" || typeof pin.lng !== "number") return;
@@ -270,31 +483,26 @@ function GoogleMapBody({
         },
         zIndex: active ? 20 : 10,
       });
-      marker.addListener("click", () => onSelect?.(pin.id));
+      marker.addListener("click", () => (onOpen ? onOpen(pin.id) : onSelect?.(pin.id)));
+      // Hover → show a details tooltip; leave → close it.
+      marker.addListener("mouseover", () => {
+        infoWindow.current.setContent(pinInfoHtml(pin));
+        infoWindow.current.open(currentMap, marker);
+      });
+      marker.addListener("mouseout", () => infoWindow.current.close());
       markers.current.push(marker);
     });
 
-    if (userMarker.current) userMarker.current.setMap(null);
-    userMarker.current = null;
+    if (userDot.current) userDot.current.setMap(null);
+    userDot.current = null;
     if (userLocation) {
-      userMarker.current = new google.maps.Marker({
-        map: currentMap,
-        position: userLocation,
-        title: t("nearby.you"),
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 9,
-          fillColor: "#3F7355",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 4,
-        },
-        zIndex: 30,
-      });
+      // Live, animated orange "you are here" dot (custom overlay, not a static marker).
+      userDot.current = createUserDot(google, userLocation);
+      userDot.current.setMap(currentMap);
     }
 
     fitGoogleMap(currentMap, pins, userLocation);
-  }, [pins, selectedId, onSelect, userLocation, t]);
+  }, [pins, selectedId, onSelect, onOpen, userLocation, t]);
 
   function zoomBy(delta: number) {
     if (!map.current) return;
@@ -320,7 +528,11 @@ function GoogleMapBody({
       </div>
 
       {selected && (
-        <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-3 rounded-[14px] border border-line bg-card/95 p-3 shadow-card backdrop-blur">
+        <button
+          type="button"
+          onClick={() => (onOpen ? onOpen(selected.id) : onSelect?.(selected.id))}
+          className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-3 rounded-[14px] border border-line bg-card/95 p-3 text-left shadow-card backdrop-blur transition active:scale-[.99]"
+        >
           <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-brand-muted font-display font-bold text-brand">
             {selected.initial}
           </span>
@@ -328,7 +540,8 @@ function GoogleMapBody({
             <div className="truncate text-sm font-bold text-ink">{selected.name}</div>
             <div className="text-xs font-semibold text-subtle">{selected.dist || t("nearby.title")}</div>
           </div>
-        </div>
+          <span className="flex-none text-subtle" aria-hidden>›</span>
+        </button>
       )}
 
       {full && pins.length > 0 && (
@@ -336,7 +549,7 @@ function GoogleMapBody({
           {pins.map((p) => (
             <button
               key={p.id}
-              onClick={() => onSelect?.(p.id)}
+              onClick={() => (onOpen ? onOpen(p.id) : onSelect?.(p.id))}
               className={cn(
                 "min-w-[180px] rounded-[13px] border px-3 py-2 text-left shadow-card lg:min-w-0",
                 p.id === selectedId ? "border-brand bg-brand-muted" : "border-line bg-card",
@@ -424,6 +637,92 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function loadMapgl(): Promise<any> {
+  const existing = (window as any).mapgl;
+  if (existing?.Map) return Promise.resolve(existing);
+  if (mapglPromise) return mapglPromise;
+  mapglPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    // 2GIS MapGL JS API v1 loader; attaches the global `mapgl`.
+    script.src = "https://mapgl.2gis.com/api/js/v1";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve((window as any).mapgl);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return mapglPromise;
+}
+
+// A live, pulsing orange "you are here" dot. Implemented as a Google OverlayView (rather
+// than a static Marker) so we can run a CSS/WAAPI animation on a real DOM node — Marker
+// icons are rasterized and can't animate.
+function createUserDot(google: any, location: { lat: number; lng: number }): any {
+  class UserDot extends google.maps.OverlayView {
+    div: HTMLDivElement | null = null;
+    position = new google.maps.LatLng(location.lat, location.lng);
+    onAdd(): void {
+      const div = document.createElement("div");
+      Object.assign(div.style, { position: "absolute", transform: "translate(-50%, -50%)", pointerEvents: "none" });
+
+      const ring = document.createElement("span");
+      Object.assign(ring.style, {
+        position: "absolute", left: "0", top: "0", width: "18px", height: "18px",
+        marginLeft: "-9px", marginTop: "-9px", borderRadius: "9999px",
+        background: USER_DOT_COLOR, opacity: "0.45",
+      });
+      // Expanding pulse ring — the "live" feel. Web Animations API, no CSS injection needed.
+      ring.animate(
+        [{ transform: "scale(1)", opacity: 0.5 }, { transform: "scale(3)", opacity: 0 }],
+        { duration: 1600, iterations: Infinity, easing: "ease-out" },
+      );
+
+      const core = document.createElement("span");
+      Object.assign(core.style, {
+        position: "absolute", left: "0", top: "0", width: "16px", height: "16px",
+        marginLeft: "-8px", marginTop: "-8px", borderRadius: "9999px",
+        background: USER_DOT_COLOR, border: "3px solid #ffffff", boxShadow: "0 1px 5px rgba(0,0,0,.35)",
+      });
+      // Gentle breathing of the solid core for extra liveliness.
+      core.animate(
+        [{ transform: "scale(1)" }, { transform: "scale(1.18)" }, { transform: "scale(1)" }],
+        { duration: 1600, iterations: Infinity, easing: "ease-in-out" },
+      );
+
+      div.append(ring, core);
+      this.div = div;
+      this.getPanes()!.overlayLayer.appendChild(div);
+    }
+    draw(): void {
+      const point = this.getProjection()?.fromLatLngToDivPixel(this.position);
+      if (this.div && point) {
+        this.div.style.left = `${point.x}px`;
+        this.div.style.top = `${point.y}px`;
+      }
+    }
+    onRemove(): void {
+      this.div?.remove();
+      this.div = null;
+    }
+  }
+  return new UserDot();
+}
+
+// Hover-tooltip markup for a business pin: name, then category · distance, then reward.
+function pinInfoHtml(pin: MapPin): string {
+  const meta = [pin.category, pin.dist].filter(Boolean).map((s) => escapeXml(String(s))).join(" · ");
+  const reward = pin.reward
+    ? `<div style="font-size:11px;font-weight:700;color:#C25E3C;margin-top:3px">${escapeXml(pin.reward)}</div>`
+    : "";
+  return (
+    `<div style="font-family:'Bricolage Grotesque',sans-serif;min-width:128px;padding:1px 2px 2px">` +
+    `<div style="font-weight:800;font-size:13px;color:#2b241d">${escapeXml(pin.name)}</div>` +
+    (meta ? `<div style="font-size:11px;color:#857a6b;margin-top:1px">${meta}</div>` : "") +
+    reward +
+    `</div>`
+  );
+}
+
 function loadGoogleMaps(): Promise<any> {
   const existing = (window as any).google?.maps;
   if (existing) return Promise.resolve((window as any).google);
@@ -438,15 +737,6 @@ function loadGoogleMaps(): Promise<any> {
     document.head.appendChild(script);
   });
   return googleMapsPromise;
-}
-
-function pinCenter(pins: MapPin[]): { lat: number; lng: number } | null {
-  const geo = pins.filter((p) => typeof p.lat === "number" && typeof p.lng === "number");
-  if (geo.length === 0) return null;
-  return {
-    lat: geo.reduce((sum, p) => sum + (p.lat as number), 0) / geo.length,
-    lng: geo.reduce((sum, p) => sum + (p.lng as number), 0) / geo.length,
-  };
 }
 
 function fitGoogleMap(map: GoogleMap, pins: MapPin[], userLocation?: UserLocation) {
@@ -480,9 +770,82 @@ const WARM_MAP_STYLE = [
   { elementType: "labels.text.fill", stylers: [{ color: "#6f6254" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#fbf6ee" }] },
   { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#d6c6ae" }] },
+  // Hide Google's own POI markers/labels (shops, cafes, etc.) so only OUR business
+  // pins appear on the map. Keep park geometry for context, drop business POIs + transit.
+  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
   { featureType: "poi", elementType: "geometry", stylers: [{ color: "#e7dcc9" }] },
   { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#dce7d7" }] },
   { featureType: "road", elementType: "geometry", stylers: [{ color: "#fff8ee" }] },
   { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e2d4bf" }] },
   { featureType: "water", elementType: "geometry", stylers: [{ color: "#cbd9d6" }] },
 ];
+
+function pinCenter(pins: MapPin[]): { lat: number; lng: number } | null {
+  const geo = pins.filter((p) => typeof p.lat === "number" && typeof p.lng === "number");
+  if (geo.length === 0) return null;
+  return {
+    lat: geo.reduce((sum, p) => sum + (p.lat as number), 0) / geo.length,
+    lng: geo.reduce((sum, p) => sum + (p.lng as number), 0) / geo.length,
+  };
+}
+
+function fitDgisMap(map: DgisMap, pins: MapPin[], userLocation?: UserLocation) {
+  const coords: Array<[number, number]> = [];
+  if (userLocation) coords.push([userLocation.lng, userLocation.lat]);
+  pins.forEach((p) => {
+    if (typeof p.lat === "number" && typeof p.lng === "number") coords.push([p.lng, p.lat]);
+  });
+
+  if (coords.length === 0) {
+    map.setCenter([BISHKEK.lng, BISHKEK.lat]);
+    map.setZoom(13);
+    return;
+  }
+  if (coords.length === 1) {
+    map.setCenter(coords[0]!);
+    map.setZoom(15);
+    return;
+  }
+  const lngs = coords.map((c) => c[0]);
+  const lats = coords.map((c) => c[1]);
+  // MapGL fitBounds takes a {southWest, northEast} box in [lng, lat] order.
+  map.fitBounds(
+    { southWest: [Math.min(...lngs), Math.min(...lats)], northEast: [Math.max(...lngs), Math.max(...lats)] },
+    { padding: { top: 56, right: 56, bottom: 90, left: 56 } },
+  );
+}
+
+// Brand circular pin with up to two initials, baked into an inline SVG so it works as a
+// MapGL marker icon (which accepts an image URL / data URI). Active pins are larger and
+// filled with the business accent; inactive pins are white with a terracotta glyph.
+function pinIcon(initial: string, accent: string, active: boolean): string {
+  const bg = active ? accent : "#ffffff";
+  const fg = active ? "#ffffff" : "#C25E3C";
+  const size = active ? 42 : 36;
+  const r = (active ? 36 : 30) / 2;
+  const c = size / 2;
+  const text = escapeXml(initial.slice(0, 2));
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">` +
+    `<circle cx="${c}" cy="${c}" r="${r}" fill="${bg}" stroke="#ffffff" stroke-width="3"/>` +
+    `<text x="${c}" y="${c}" text-anchor="middle" dominant-baseline="central" ` +
+    `font-family="Bricolage Grotesque, sans-serif" font-weight="800" font-size="${active ? 15 : 13}" ` +
+    `fill="${fg}">${text}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+// Orange "you are here" dot for 2GIS (static; the animated overlay is Google-only).
+const USER_ICON = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">` +
+    `<circle cx="11" cy="11" r="9" fill="${USER_DOT_COLOR}" stroke="#ffffff" stroke-width="4"/></svg>`,
+)}`;
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

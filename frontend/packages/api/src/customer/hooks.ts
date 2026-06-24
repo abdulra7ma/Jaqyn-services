@@ -16,6 +16,7 @@ export const qk = {
   group: (token: string) => ["group", token] as const,
   myGroups: ["my-groups"] as const,
   nearby: (params?: NearbyParams) => ["nearby", params ?? {}] as const,
+  categories: ["categories"] as const,
   business: (id: string) => ["business", id] as const,
   qr: (token: string) => ["qr", token] as const,
   campaigns: (params?: CampaignListParams) => ["campaigns", params ?? {}] as const,
@@ -61,6 +62,14 @@ export const useMyGroups = () =>
 
 export const useNearby = (params?: NearbyParams) =>
   useQuery({ queryKey: qk.nearby(params), queryFn: () => customerApi.listNearby(params) });
+
+export const useCategories = () =>
+  useQuery({
+    queryKey: qk.categories,
+    queryFn: () => customerApi.listCategories(),
+    // Category enum rarely changes; keep it fresh for a session without refetching.
+    staleTime: 60 * 60 * 1000,
+  });
 
 export const useBusiness = (id: string) =>
   useQuery({ queryKey: qk.business(id), queryFn: () => customerApi.getBusiness(id), enabled: !!id });

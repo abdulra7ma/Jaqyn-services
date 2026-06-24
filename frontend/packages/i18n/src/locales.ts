@@ -271,6 +271,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "cmp.biz.vouch.cancelConfirm": "Отменить ваучер",
 
     "auth.login": "Вход",
+    "auth.signup": "Регистрация",
     "auth.phone": "Номер телефона",
     "auth.phonePlaceholder": "+996 700 123456",
     "auth.sendCode": "Получить код",
@@ -1051,6 +1052,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "cmp.biz.vouch.cancelConfirm": "Cancel voucher",
 
     "auth.login": "Sign in",
+    "auth.signup": "Sign up",
     "auth.phone": "Phone number",
     "auth.phonePlaceholder": "+996 700 123456",
     "auth.sendCode": "Send code",

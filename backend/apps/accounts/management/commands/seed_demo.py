@@ -95,6 +95,10 @@ class Command(BaseCommand):
         biz.category = "cafe"
         biz.area = "Chuy Avenue"
         biz.city = "Bishkek"
+        # Real Bishkek coordinates (Chuy Ave, near the centre) so the nearby map
+        # renders a marker; map needs lat/lng or businesses are placed on a fallback grid.
+        biz.latitude = Decimal("42.876200")
+        biz.longitude = Decimal("74.612400")
         biz.glyph = "☕"  # ☕
         biz.description = "Specialty coffee on Chuy Avenue, Bishkek."
         for attr, member in (("status", "APPROVED"), ("visibility_status", "PUBLISHED"),
@@ -225,7 +229,8 @@ class Command(BaseCommand):
         return {"program": program.title, "progress_rows": len(plan), "pending_vouchers": vouchers}
 
     # ----- extra demo businesses (campaigns-redesign) ---------------------
-    def _upsert_business(self, *, owner_phone, owner_name, name, glyph, area, description):
+    def _upsert_business(self, *, owner_phone, owner_name, name, glyph, area, description,
+                         latitude, longitude):
         """Idempotently upsert an APPROVED+PUBLISHED business under its own owner.
 
         Backs the redesigned customer campaigns page, which needs campaigns spread
@@ -250,6 +255,9 @@ class Command(BaseCommand):
         biz.category = "cafe"
         biz.area = area
         biz.city = "Bishkek"
+        # Real Bishkek coordinates so the nearby map plots each storefront.
+        biz.latitude = latitude
+        biz.longitude = longitude
         biz.glyph = glyph
         biz.description = description
         for attr, member in (("status", "APPROVED"), ("visibility_status", "PUBLISHED"),
@@ -272,11 +280,13 @@ class Command(BaseCommand):
         bublik = self._upsert_business(
             owner_phone="+996700112244", owner_name="Gulnara S.",
             name="Bublik Bistro", glyph="🥪", area="Erkindik Boulevard",
-            description="Fresh bagels and lunch sandwiches on Erkindik, Bishkek.")
+            description="Fresh bagels and lunch sandwiches on Erkindik, Bishkek.",
+            latitude=Decimal("42.873000"), longitude=Decimal("74.601000"))
         luna = self._upsert_business(
             owner_phone="+996700112255", owner_name="Cholpon B.",
             name="Cafe Luna", glyph="🍰", area="Ala-Too Square",
-            description="Desserts and weekend hangouts by Ala-Too Square, Bishkek.")
+            description="Desserts and weekend hangouts by Ala-Too Square, Bishkek.",
+            latitude=Decimal("42.876900"), longitude=Decimal("74.603600"))
 
         def mk(business, name, desc, ctype, rule_type, required, *, window=None, group_size=None,
                reward_title="", reward_desc="", max_rewards=200):

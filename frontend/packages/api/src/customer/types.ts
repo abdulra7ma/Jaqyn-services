@@ -52,6 +52,12 @@ export type BusinessCategory =
   | "bakery"
   | "other";
 
+/** A selectable business category as served by GET /api/businesses/categories/. */
+export type CategoryOption = {
+  value: BusinessCategory;
+  label: string;
+};
+
 export type Business = {
   id: string;
   name: string;
