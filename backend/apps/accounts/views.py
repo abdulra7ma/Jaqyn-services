@@ -33,6 +33,11 @@ def _onboarding_done(user):
     return bool(profile and profile.onboarding_completed)
 
 
+def _profile_done(user):
+    profile = getattr(user, "customer_profile", None)
+    return bool(profile and profile.profile_completed)
+
+
 def _auth_payload(user, access, refresh, **extra):
     return {
         "access": access,
@@ -40,6 +45,7 @@ def _auth_payload(user, access, refresh, **extra):
         "user": UserSerializer(user).data,
         "area": resolve_area(user),
         "onboarding_completed": _onboarding_done(user),
+        "profile_completed": _profile_done(user),
         **extra,
     }
 
@@ -208,6 +214,9 @@ class ProfileView(APIView):
             for field in ("birthday", "language", "marketing_opt_in", "onboarding_completed"):
                 if field in data:
                     setattr(profile, field, data[field])
+            # Supplying a non-empty name satisfies the required-info completion gate.
+            if data.get("name"):
+                profile.profile_completed = True
             profile.save()
 
         payload = {"user": UserSerializer(request.user).data}

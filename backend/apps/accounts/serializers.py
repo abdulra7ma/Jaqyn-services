@@ -24,7 +24,7 @@ class UserSerializer(serializers.ModelSerializer):
 class CustomerProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomerProfile
-        fields = ("birthday", "language", "marketing_opt_in", "onboarding_completed")
+        fields = ("birthday", "language", "marketing_opt_in", "onboarding_completed", "profile_completed")
 
 
 class RequestOTPSerializer(serializers.Serializer):
