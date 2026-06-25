@@ -223,7 +223,7 @@ export default function MyQrPage() {
 
                 {/* member line */}
                 <p className="mt-4 text-sm text-subtle">
-                  {t("qr.member")} · {maskPhone(me.data?.user.phone)}
+                  {t("qr.member")} · {maskPhone(me.data?.user.phone ?? undefined)}
                 </p>
 
                 {/* download + share */}

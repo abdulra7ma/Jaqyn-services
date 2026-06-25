@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customerApi } from "./api";
-import type { CampaignListParams, NearbyParams, ProfilePatch } from "./types";
+import type { CampaignListParams, NearbyParams, ProfilePatch, RequestEmailOtpPayload } from "./types";
 
 export const qk = {
   me: ["me"] as const,
@@ -130,14 +130,6 @@ export const useCampaignVoucher = (id: string, opts?: { refetchInterval?: number
     refetchInterval: opts?.refetchInterval,
   });
 
-export const useGroupSession = (id: string, opts?: { refetchInterval?: number }) =>
-  useQuery({
-    queryKey: qk.groupSession(id),
-    queryFn: () => customerApi.getGroupSession(id),
-    enabled: !!id,
-    refetchInterval: opts?.refetchInterval,
-  });
-
 // ---- campaign mutations ----
 export const useJoinCampaign = () => {
   const qc = useQueryClient();
@@ -200,6 +192,20 @@ export const usePasswordLogin = () => {
   return useMutation({
     mutationFn: ({ email, password }: { email: string; password: string }) =>
       customerApi.passwordLogin(email, password),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.me }),
+  });
+};
+
+export const useRequestEmailOtp = () =>
+  useMutation({
+    mutationFn: (payload: RequestEmailOtpPayload) => customerApi.requestEmailOtp(payload),
+  });
+
+export const useVerifyEmailOtp = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, code }: { email: string; code: string }) =>
+      customerApi.verifyEmailOtp(email, code),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.me }),
   });
 };

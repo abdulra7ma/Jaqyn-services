@@ -83,7 +83,7 @@ export default function VisitQrPage() {
                   <img src={data.png} alt={t("cmp.visitQr.title")} className="h-[228px] w-[228px]" />
                 </div>
                 <p className="mt-3 text-center text-[12.5px] text-subtle">
-                  {name} · {maskPhone(me.data?.user.phone)} · {t("cmp.visitQr.refresh")}
+                  {name} · {maskPhone(me.data?.user.phone ?? undefined)} · {t("cmp.visitQr.refresh")}
                 </p>
 
                 {/* eligible right now */}

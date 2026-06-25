@@ -27,6 +27,7 @@ import type {
   CampaignListParams,
   CampaignVoucher,
   CampaignWallet,
+  EmailOtpResult,
   GroupDeal,
   GroupOffer,
   GroupSession,
@@ -36,6 +37,7 @@ import type {
   Redemption,
   CustomerQr,
   NearbyParams,
+  RequestEmailOtpPayload,
   RequestOtpResult,
   RewardProgress,
   VerifyOtpResult,
@@ -47,6 +49,8 @@ export interface CustomerApi {
   requestOtp(phone: string): Promise<RequestOtpResult>;
   verifyOtp(phone: string, code: string): Promise<VerifyOtpResult>;
   passwordLogin(email: string, password: string): Promise<PasswordLoginResult>;
+  requestEmailOtp(payload: RequestEmailOtpPayload): Promise<RequestOtpResult>;
+  verifyEmailOtp(email: string, code: string): Promise<EmailOtpResult>;
   me(): Promise<Me>;
   myQr(): Promise<CustomerQr>;
   updateProfile(patch: ProfilePatch): Promise<Me>;
@@ -116,6 +120,18 @@ export const customerApi: CustomerApi = {
     const res = await api.post<PasswordLoginResult>(
       "/api/auth/login-password/",
       { email, password },
+      { auth: false },
+    );
+    tokenStore.set(res.access, res.refresh);
+    session.setUserId(res.user.id);
+    return res;
+  },
+  requestEmailOtp: (payload) =>
+    api.post<RequestOtpResult>("/api/auth/request-email-otp/", payload, { auth: false }),
+  verifyEmailOtp: async (email, code) => {
+    const res = await api.post<EmailOtpResult>(
+      "/api/auth/verify-email-otp/",
+      { email, code },
       { auth: false },
     );
     tokenStore.set(res.access, res.refresh);

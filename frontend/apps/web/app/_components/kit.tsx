@@ -60,7 +60,7 @@ export function UserAvatar({
   }
   return (
     <InitialTile
-      name={user.name || user.phone}
+      name={user.name ?? user.phone ?? ""}
       size={size}
       variant="gradient"
     />

@@ -9,11 +9,12 @@ export type Language = "ru" | "en" | "ky";
 
 export type User = {
   id: string;
-  phone: string;
+  phone: string | null;
   name: string | null;
   email: string | null;
   role: Role;
   is_phone_verified: boolean;
+  is_email_verified: boolean;
   avatar: string | null;
   avatar_emoji: string;
 };
@@ -428,6 +429,15 @@ export type GroupSession = {
   // QR payload shown to staff once the group is full (type GROUP_CHECKIN).
   checkin_token: string | null;
 };
+
+export type RequestEmailOtpPayload = {
+  email: string;
+  name: string;
+  password: string;
+  phone?: string;
+};
+
+export type EmailOtpResult = AuthResult;
 
 // ---- request payloads ----
 export type CustomerQr = { token: string; type: string; url: string; png: string };
