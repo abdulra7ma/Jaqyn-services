@@ -601,7 +601,7 @@ function ConfirmModal({ isPending, onClose, onSubmit }: { isPending: boolean; on
       >
         <h3 id="confirm-modal-title" className="font-display text-xl font-bold text-ink">Submit for verification?</h3>
         <p className="mt-2 text-sm leading-relaxed text-subtle">
-          We'll review your profile and email you once it's verified. You can keep editing until then.
+          We&apos;ll review your profile and email you once it&apos;s verified. You can keep editing until then.
         </p>
         <div className="mt-5 flex gap-3">
           <button onClick={onClose} className="flex-1 rounded-xl border-[1.5px] border-line bg-card py-3 text-sm font-semibold text-ink">
