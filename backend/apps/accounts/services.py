@@ -93,7 +93,9 @@ def issue_email_otp(
     OTP code in Redis keyed by email with OTP_TTL_SECONDS TTL. Rate-limited to
     OTP_RATE_LIMIT_PER_PHONE per hour per email and OTP_RATE_LIMIT_PER_IP per IP.
     Returns a request_id the client echoes back on verification.
+    Email is normalized to lowercase so cache keys and stored addresses are consistent.
     """
+    email = email.lower()
     if hit_limit(f"email-otp-email:{email}", settings.OTP_RATE_LIMIT_PER_PHONE, 3600):
         raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
     if ip_address and hit_limit(f"email-otp-ip:{ip_address}", settings.OTP_RATE_LIMIT_PER_IP, 3600):
@@ -127,7 +129,10 @@ def verify_email_otp(email: str, code: str) -> tuple[User, bool, str, str]:
     cache on success. Raises JaqynAPIException on expired/invalid/rate-limited.
     If a user with this email already exists, they are logged in without
     overwriting their existing profile data.
+    Email is normalized to lowercase so the cache lookup, DB query, and stored
+    address are all consistent regardless of how the caller supplied the address.
     """
+    email = email.lower()
     payload = cache.get(email_otp_key(email))
     if not payload:
         raise JaqynAPIException("OTP_EXPIRED", status_code=status.HTTP_400_BAD_REQUEST)

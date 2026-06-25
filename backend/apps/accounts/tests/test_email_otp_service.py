@@ -110,3 +110,14 @@ def test_verify_email_otp_existing_user_logs_in_without_overwrite():
     assert returned_user.id == user.id
     assert returned_user.is_email_verified is True
     assert returned_user.name == "Original"  # not overwritten
+
+
+@pytest.mark.django_db
+def test_verify_email_otp_normalizes_email_case():
+    _issue(email="Mixed@Example.com", name="Case", password="password123")
+    # OTP issued under normalized key
+    payload = cache.get("email_otp:mixed@example.com")
+    assert payload is not None
+    user, is_new, _, _ = verify_email_otp("MIXED@example.COM", payload["code"])
+    assert is_new is True
+    assert user.email == "mixed@example.com"
