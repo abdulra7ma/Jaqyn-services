@@ -24,6 +24,7 @@ export type CustomerProfile = {
   language: Language;
   marketing_opt_in: boolean;
   onboarding_completed: boolean;
+  profile_completed: boolean;
 };
 
 // App area a user lands in after login (backend resolves: owner > staff > customer).
@@ -467,6 +468,7 @@ export type AuthResult = {
   area: Area;
   is_new?: boolean;
   onboarding_completed?: boolean;
+  profile_completed?: boolean;
 };
 export type VerifyOtpResult = AuthResult;
 export type PasswordLoginResult = AuthResult;
