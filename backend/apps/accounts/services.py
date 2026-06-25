@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import CustomerProfile, User
-from apps.accounts.tasks import send_email_otp_task, send_otp
+from apps.accounts.tasks import send_email_otp_task, send_otp, send_password_reset_otp_task
 from core.exceptions import JaqynAPIException
 from core.logging import emit_event
 from core.ratelimit import clear_limit, hit_limit
@@ -173,6 +173,79 @@ def verify_email_otp(email: str, code: str) -> tuple[User, bool, str, str]:
     cache.delete(email_otp_attempt_key(email))
     refresh = RefreshToken.for_user(user)
     return user, is_new, str(refresh.access_token), str(refresh)
+
+
+def pwreset_otp_key(email: str) -> str:
+    return f"pwreset_otp:{email}"
+
+
+def pwreset_otp_attempt_key(email: str) -> str:
+    return f"pwreset_otp_attempts:{email}"
+
+
+def issue_password_reset_otp(email: str, ip_address: str | None) -> None:
+    """Issue a 6-digit password-reset code to an email address.
+
+    Rate-limited per email and per IP (OTP_RATE_LIMIT_PER_PHONE / _PER_IP, 3600s).
+    To avoid account enumeration this returns normally whether or not an account
+    exists: a code is only generated, cached, and emailed when a user with a
+    usable password is found for the (lowercased) email; otherwise it is a no-op.
+    """
+    email = email.lower()
+    if hit_limit(f"pwreset-email:{email}", settings.OTP_RATE_LIMIT_PER_PHONE, 3600):
+        raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
+    if ip_address and hit_limit(f"pwreset-ip:{ip_address}", settings.OTP_RATE_LIMIT_PER_IP, 3600):
+        raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
+
+    user = User.objects.filter(email__iexact=email, is_active=True).first()
+    if user is None or not user.has_usable_password():
+        # Silent no-op — never reveal whether the address has an account.
+        return
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    request_id = str(uuid.uuid4())
+    cache.set(
+        pwreset_otp_key(email),
+        {"code": code, "request_id": request_id},
+        settings.OTP_TTL_SECONDS,
+    )
+    cache.delete(pwreset_otp_attempt_key(email))
+    send_password_reset_otp_task.delay(email, code)
+
+
+def reset_password(email: str, code: str, new_password: str) -> tuple[User, str, str]:
+    """Verify a password-reset code and set a new password. Returns (user, access, refresh).
+
+    Reads the cached code for the (lowercased) email. Missing -> OTP_EXPIRED.
+    Counts attempts; >5 -> RATE_LIMITED. Wrong code -> INVALID_OTP. On success sets
+    the new password, clears the cached code + attempts, and returns fresh JWTs so
+    the caller is logged straight in.
+    """
+    email = email.lower()
+    payload = cache.get(pwreset_otp_key(email))
+    if not payload:
+        raise JaqynAPIException("OTP_EXPIRED", status_code=status.HTTP_400_BAD_REQUEST)
+
+    attempts = cache.get(pwreset_otp_attempt_key(email), 0) + 1
+    cache.set(pwreset_otp_attempt_key(email), attempts, settings.OTP_TTL_SECONDS)
+    if attempts > 5:
+        raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
+
+    if payload["code"] != code:
+        raise JaqynAPIException("INVALID_OTP", status_code=status.HTTP_400_BAD_REQUEST)
+
+    user = User.objects.filter(email__iexact=email, is_active=True).first()
+    if user is None:
+        # Defensive: a code only exists for a real account, but guard anyway.
+        raise JaqynAPIException("INVALID_OTP", status_code=status.HTTP_400_BAD_REQUEST)
+
+    user.set_password(new_password)
+    user.save(update_fields=["password", "updated_at"])
+
+    cache.delete(pwreset_otp_key(email))
+    cache.delete(pwreset_otp_attempt_key(email))
+    refresh = RefreshToken.for_user(user)
+    return user, str(refresh.access_token), str(refresh)
 
 
 def resolve_area(user):
