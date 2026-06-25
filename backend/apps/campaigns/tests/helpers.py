@@ -70,6 +70,7 @@ def make_campaign(
     required_count: int = 1,
     completion_limit: str = Campaign.CompletionLimit.ONCE,
     auto_join: bool = True,
+    allow_multiple: bool = False,
     max_rewards: int | None = None,
     max_participants: int | None = None,
     minimum_gap: timedelta | None = None,
@@ -97,6 +98,7 @@ def make_campaign(
         active_end_time=time(23, 59),
         completion_limit_per_customer=completion_limit,
         auto_join_enabled=auto_join,
+        allow_multiple_campaign_counting=allow_multiple,
         max_rewards=max_rewards,
         max_participants=max_participants,
     )
