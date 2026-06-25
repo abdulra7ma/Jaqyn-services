@@ -1,6 +1,6 @@
 "use client";
 
-import { useRequestPasswordReset, useResetPassword } from "@jaqyn/api";
+import { postAuthRoute, useRequestPasswordReset, useResetPassword } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Button, Input } from "@jaqyn/ui";
 import Link from "next/link";
@@ -57,9 +57,12 @@ export default function ForgotPasswordPage() {
 
   const handleResetSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Reset auto-logs-in and returns the full auth payload — route by role/gate,
+    // so a business/staff user lands on their console and an incomplete customer
+    // still hits the completion gate, rather than always landing on "/".
     resetPassword.mutate(
       { email, code, newPassword },
-      { onSuccess: () => router.replace("/") },
+      { onSuccess: (res) => router.replace(postAuthRoute(res, "/")) },
     );
   };
 
