@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch
 from django.core.cache import cache
+from rest_framework.test import APIClient
 
 from apps.accounts.models import CustomerProfile, User
 from apps.accounts.services import issue_email_otp, issue_otp, otp_key, verify_email_otp, verify_otp
@@ -34,9 +35,6 @@ def test_email_signup_new_user_profile_completed():
     user, is_new, _, _ = verify_email_otp("e@example.com", code)
     assert is_new is True
     assert user.customer_profile.profile_completed is True
-
-
-from rest_framework.test import APIClient
 
 
 @pytest.mark.django_db
