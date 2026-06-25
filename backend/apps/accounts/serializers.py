@@ -63,3 +63,13 @@ class RequestEmailOTPSerializer(serializers.Serializer):
 class VerifyEmailOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
     code = serializers.CharField(min_length=6, max_length=6)
+
+
+class RequestPasswordResetSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField(min_length=6, max_length=6)
+    new_password = serializers.CharField(min_length=8, max_length=128)

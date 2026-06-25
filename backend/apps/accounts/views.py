@@ -9,11 +9,22 @@ from apps.accounts.serializers import (
     ProfileUpdateSerializer,
     RequestEmailOTPSerializer,
     RequestOTPSerializer,
+    RequestPasswordResetSerializer,
+    ResetPasswordSerializer,
     UserSerializer,
     VerifyEmailOTPSerializer,
     VerifyOTPSerializer,
 )
-from apps.accounts.services import authenticate_password, issue_email_otp, issue_otp, resolve_area, verify_email_otp, verify_otp
+from apps.accounts.services import (
+    authenticate_password,
+    issue_email_otp,
+    issue_otp,
+    issue_password_reset_otp,
+    reset_password,
+    resolve_area,
+    verify_email_otp,
+    verify_otp,
+)
 from core.response import success_response
 
 
@@ -102,6 +113,31 @@ class PasswordLoginView(APIView):
         serializer.is_valid(raise_exception=True)
         user, access, refresh = authenticate_password(
             serializer.validated_data["email"], serializer.validated_data["password"]
+        )
+        return success_response(_auth_payload(user, access, refresh))
+
+
+class RequestPasswordResetView(APIView):
+    permission_classes = [AllowAny]  # Public — anyone can request a reset code
+
+    def post(self, request):
+        serializer = RequestPasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        issue_password_reset_otp(serializer.validated_data["email"], request_ip(request))
+        # Always the same response — never reveal whether the account exists.
+        return success_response({"message": "If the account exists, a reset code was sent."})
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]  # Public — completes reset with the emailed code
+
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user, access, refresh = reset_password(
+            serializer.validated_data["email"],
+            serializer.validated_data["code"],
+            serializer.validated_data["new_password"],
         )
         return success_response(_auth_payload(user, access, refresh))
 
