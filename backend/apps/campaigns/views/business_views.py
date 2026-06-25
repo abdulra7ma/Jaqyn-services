@@ -12,10 +12,12 @@ service, not in the view.
 
 from __future__ import annotations
 
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.campaigns.models import CampaignParticipant, CampaignRewardVoucher
 from apps.campaigns.serializers import (
     CampaignImageUploadSerializer,
     CampaignMetricsSerializer,
@@ -35,8 +37,34 @@ from apps.campaigns.services import (
 from apps.loyalty.services import get_staff_for_user
 from core.images import CAMPAIGN_MAX_DIM, compress_image
 from core.pagination import StandardResultsSetPagination
-from core.permissions import IsBusinessOwner, IsStaff
+from core.permissions import IsBusinessOwner, IsBusinessOwnerOrStaff, IsStaff
 from core.response import success_response
+
+
+def _annotate_list_queryset(qs):
+    """Add per-row aggregate annotations to a campaign list queryset.
+
+    Attaches ``_participants`` (distinct participant count), ``_completed``
+    (participants in COMPLETED or REDEEMED status), and ``_redeemed`` (vouchers
+    in REDEEMED status) to every row using subquery-free conditional COUNT so
+    the full list serialises in a fixed number of queries regardless of page
+    size. Called only on the business list path so the annotations are absent
+    (and the serializer defaults to 0) on all other list paths.
+    """
+    completed_statuses = [CampaignParticipant.Status.COMPLETED, CampaignParticipant.Status.REDEEMED]
+    return qs.annotate(
+        _participants=Count("participants", distinct=True),
+        _completed=Count(
+            "participants",
+            filter=Q(participants__status__in=completed_statuses),
+            distinct=True,
+        ),
+        _redeemed=Count(
+            "vouchers",
+            filter=Q(vouchers__status=CampaignRewardVoucher.Status.REDEEMED),
+            distinct=True,
+        ),
+    )
 
 
 class _OwnerMixin(APIView):
@@ -65,12 +93,36 @@ class CampaignListCreateView(_OwnerMixin, APIView):
         return super().get_throttles()
 
     def get(self, request):
-        campaigns = CampaignService.list_for_business(self._business(request))
+        business = self._business(request)
+        # Annotate with per-row aggregate counts for the business list table.
+        # The summary KPIs are computed from the same annotated queryset so the
+        # whole response is covered in a fixed number of queries (no N+1).
+        campaigns = _annotate_list_queryset(
+            CampaignService.list_for_business(business)
+        )
+        # Summary KPI block — field names match what adaptCampaignList (adapters.ts:
+        # 103-108) reads from raw.summary. Computed with aggregate queries over
+        # the annotated queryset so no extra round-trips are issued.
+        from apps.campaigns.models import Campaign as _Campaign
+
+        summary = {
+            "active_campaigns": campaigns.filter(status=_Campaign.Status.ACTIVE).count(),
+            "total_participants": sum(getattr(c, "_participants", 0) or 0 for c in campaigns),
+            "rewards_issued": campaigns.filter(
+                vouchers__status=CampaignRewardVoucher.Status.ACTIVE
+            ).distinct().count(),
+            "rewards_redeemed": sum(getattr(c, "_redeemed", 0) or 0 for c in campaigns),
+        }
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(campaigns, request, view=self)
-        return paginator.get_paginated_response(
+        paginated = paginator.get_paginated_response(
             CampaignSerializer(page, many=True).data
         )
+        # Nest the summary block INSIDE the data envelope (the paginator already
+        # wraps as {success, data:{count,results,...}, message}) so the frontend —
+        # which unwraps to json.data — reads raw.summary.* alongside the rows.
+        paginated.data["data"]["summary"] = summary
+        return paginated
 
     def post(self, request):
         serializer = CampaignWriteSerializer(data=request.data)
@@ -298,16 +350,21 @@ class CampaignSocialPostView(_OwnerMixin, APIView):
 
 
 class CampaignVoucherCancelView(APIView):
-    """Manager-only voucher cancellation (plan §1.3 — manager-gated).
+    """Voucher cancellation accessible by the business owner OR a manager staff member.
 
-    Permission is ``IsStaff``: the caller must be a staff user, and the service
-    further enforces the MANAGER role (``StaffMember.role``) — a non-manager
-    staff member is rejected by the service with ``PERMISSION_DENIED``. Lives on
-    the business surface because it is a back-office action, but the actor is a
-    manager StaffMember, not the owner role.
+    The cancel button renders on the owner-facing campaign page
+    (``[id]/page.tsx``), so the original ``IsStaff``-only gate caused a 403 for
+    the owner. Permission is broadened to ``IsBusinessOwnerOrStaff`` so both
+    actors can reach the view. The service still enforces the MANAGER role when
+    the caller is a staff member — a non-manager cashier is rejected there with
+    ``PERMISSION_DENIED``. When the caller is the business owner, a synthetic
+    manager ``StaffMember`` is resolved via ``get_or_create_manager_for_owner``
+    so the service's ownership check (``voucher.business_id == manager.business_id``)
+    can still run cleanly. A voucher may only be cancelled by the business that
+    issued it.
     """
 
-    permission_classes = [IsStaff]
+    permission_classes = [IsBusinessOwnerOrStaff]
     serializer_class = CancelVoucherSerializer
     throttle_scope = "campaign_write"
 
@@ -319,7 +376,29 @@ class CampaignVoucherCancelView(APIView):
     def post(self, request, voucher_id):
         serializer = CancelVoucherSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        manager = get_staff_for_user(request.user)
+        from apps.campaigns.services import CampaignRewardService as _CRS
+        from apps.staff.models import StaffMember
+
+        if request.user.role == "business_owner":
+            # Owner path: resolve (or lazily create) a MANAGER StaffMember row
+            # for the owner's user so the service's role + ownership checks pass.
+            business = request.user.owned_business
+            manager, _ = StaffMember.objects.get_or_create(
+                business=business,
+                user=request.user,
+                defaults={
+                    "name": getattr(request.user, "name", None) or "Owner",
+                    "role": StaffMember.Role.MANAGER,
+                },
+            )
+            # Ensure the row carries the MANAGER role even if it already existed
+            # as a lower role (owner elevated their own staff row).
+            if manager.role != StaffMember.Role.MANAGER:
+                manager.role = StaffMember.Role.MANAGER
+                manager.save(update_fields=["role"])
+        else:
+            manager = get_staff_for_user(request.user)
+
         voucher = CampaignRewardService.cancel_voucher(
             voucher_id, manager, serializer.validated_data["reason"]
         )

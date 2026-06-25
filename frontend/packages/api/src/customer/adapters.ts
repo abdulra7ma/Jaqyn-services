@@ -201,6 +201,38 @@ function adaptCampaignProgress(raw: Raw | null | undefined): CampaignProgress | 
   };
 }
 
+// Formats an ISO date string (YYYY-MM-DDTHH:MM:SS…) to a short date label
+// (YYYY-MM-DD). Used when the backend emits raw ISO values rather than
+// pre-formatted display labels.
+function formatDateLabel(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return String(iso).slice(0, 10);
+}
+
+// Computes "days remaining" from an ISO end_at timestamp. Returns 0 when the
+// campaign has already ended or end_at is absent, matching the endsLabel
+// "Ends today" threshold in _components/campaigns.tsx:57.
+function computeDaysLeft(endAt: string | null | undefined): number {
+  if (!endAt) return 0;
+  const ms = Date.parse(endAt) - Date.now();
+  if (Number.isNaN(ms) || ms <= 0) return 0;
+  return Math.ceil(ms / (24 * 60 * 60 * 1000));
+}
+
+// Derives a human-readable "HH:MM – HH:MM" string from separate start/end time
+// fields (HH:MM:SS or HH:MM). Returns an empty string when neither field is set.
+function deriveActiveHours(
+  startTime: string | null | undefined,
+  endTime: string | null | undefined,
+): string {
+  const s = (startTime ?? "").slice(0, 5);
+  const e = (endTime ?? "").slice(0, 5);
+  if (!s && !e) return "";
+  if (!e) return s;
+  if (!s) return e;
+  return `${s} – ${e}`;
+}
+
 export function adaptCampaign(raw: Raw): Campaign {
   const biz = typeof raw.business === "object" ? raw.business : null;
   const rule = raw.rule ?? {};
@@ -214,18 +246,28 @@ export function adaptCampaign(raw: Raw): Campaign {
       logo_url: raw.business_logo_url ?? biz?.logo_url ?? null,
       area: raw.business_area ?? biz?.area ?? "",
     },
-    glyph: raw.glyph ?? "",
+    // No backend `glyph` field — fall through to empty string so GlyphTile
+    // degrades to the logo/initial fallback without reading undefined.
+    glyph: "",
     name: raw.name,
     description: raw.description ?? "",
     blurb: raw.blurb ?? raw.description ?? "",
     campaign_type: normalizeCampaignType(raw.campaign_type ?? raw.type),
     status: raw.status,
-    start_label: raw.start_label ?? raw.start ?? "",
-    end_label: raw.end_label ?? raw.end ?? "",
-    days_left: raw.days_left ?? 0,
+    // Backend emits start_at/end_at (ISO); compute display labels client-side.
+    // The legacy *_label fields do not exist on the serializer.
+    start_label: formatDateLabel(raw.start_at) ?? raw.start ?? "",
+    end_label: formatDateLabel(raw.end_at) ?? raw.end ?? "",
+    // Derive from end_at; the backend does not emit a days_left field.
+    days_left: computeDaysLeft(raw.end_at),
     active_days: raw.active_days ?? raw.days ?? "",
-    active_hours: raw.active_hours ?? raw.hours ?? "",
-    repeat_policy: raw.repeat_policy ?? raw.repeat ?? "once",
+    // Backend emits separate active_start_time / active_end_time fields
+    // (HH:MM:SS); derive a combined display string. No single active_hours field.
+    active_hours: deriveActiveHours(raw.active_start_time, raw.active_end_time),
+    // Backend field is completion_limit_per_customer, not repeat_policy.
+    // Fall back through both names so mock objects using the UI name still work.
+    repeat_policy:
+      raw.repeat_policy ?? raw.completion_limit_per_customer ?? raw.repeat ?? "once",
     max_participants: raw.max_participants ?? null,
     rule: {
       // Backend keys: minimum_time_between_actions (ISO duration string),
@@ -285,7 +327,9 @@ export function adaptCampaignVoucher(raw: Raw): CampaignVoucher {
     id: raw.id,
     code: raw.code ?? raw.voucher_code,
     status: raw.status,
-    glyph: raw.glyph ?? "",
+    // No backend `glyph` field — fall through to empty string so GlyphTile
+    // degrades to the logo/initial fallback without reading undefined.
+    glyph: "",
     business: {
       id: biz?.id ?? raw.business ?? "",
       name: raw.business_name ?? biz?.name ?? raw.bizName ?? "",

@@ -48,6 +48,8 @@ export interface Dict {
     placeholders: { business: string; owner: string; phone: string; email: string; area: string; instagram: string };
     categories: string[]; // 8, indexed to categoryValues
     submit: string; submitting: string; errorText: string; validationErrorText: string;
+    // Consent line: pre + [privacy link] + mid + [terms link] + post. error shown if unchecked.
+    consent: { pre: string; privacy: string; mid: string; terms: string; post: string; error: string };
   };
   finalCta: { heading: string; para: string; register: string; explore: string };
   footer: {
@@ -233,6 +235,14 @@ export const en: Dict = {
     submitting: 'Sending…',
     errorText: 'Something went wrong. Please try again.',
     validationErrorText: 'Please fill in all required fields and enter a valid email and phone number.',
+    consent: {
+      pre: 'I agree to the ',
+      privacy: 'Privacy Policy',
+      mid: ' and ',
+      terms: 'Terms',
+      post: '.',
+      error: 'Please accept the Privacy Policy and Terms to continue.',
+    },
   },
   finalCta: {
     heading: 'Ready to bring people together around local rewards?',
@@ -429,6 +439,14 @@ export const ru: Dict = {
     submitting: 'Отправка…',
     errorText: 'Что-то пошло не так. Пожалуйста, попробуйте снова.',
     validationErrorText: 'Пожалуйста, заполните все обязательные поля и введите корректный email и номер телефона.',
+    consent: {
+      pre: 'Я принимаю ',
+      privacy: 'Политику конфиденциальности',
+      mid: ' и ',
+      terms: 'Условия',
+      post: '.',
+      error: 'Пожалуйста, примите Политику конфиденциальности и Условия, чтобы продолжить.',
+    },
   },
   finalCta: {
     heading: 'Готовы объединять людей вокруг локальных наград?',
@@ -625,6 +643,14 @@ export const ky: Dict = {
     submitting: 'Жөнөтүлүүдө…',
     errorText: 'Бир нерсе туура болгон жок. Кайра аракет кылыңыз.',
     validationErrorText: 'Бардык милдеттүү талааларды толтуруп, туура email жана телефон номерин киргизиңиз.',
+    consent: {
+      pre: 'Мен ',
+      privacy: 'Купуялык саясатын',
+      mid: ' жана ',
+      terms: 'Шарттарды',
+      post: ' кабыл алам.',
+      error: 'Улантуу үчүн Купуялык саясатын жана Шарттарды кабыл алыңыз.',
+    },
   },
   finalCta: {
     heading: 'Адамдарды жергиликтүү сыйлыктар тегерегинде бириктирүүгө даярсызбы?',

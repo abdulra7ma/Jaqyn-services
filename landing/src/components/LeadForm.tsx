@@ -12,14 +12,17 @@ export interface FormFields {
 
 export type FormState = 'idle' | 'submitting' | 'success' | 'error';
 
-// null = no validation error; 'fields' = missing/short field; 'email' = bad format
-export type ValidationError = null | 'fields' | 'email';
+// null = no validation error; 'fields' = missing/short field; 'email' = bad format;
+// 'consent' = privacy/terms checkbox not ticked
+export type ValidationError = null | 'fields' | 'email' | 'consent';
 
 interface Props {
   form: FormFields;
+  consent: boolean;
   formState: FormState;
   validationError: ValidationError;
   onChange: (key: keyof FormFields, value: string) => void;
+  onConsentChange: (value: boolean) => void;
   onSubmit: () => void;
   onReset: () => void;
 }
@@ -38,7 +41,7 @@ const inputStyle = {
 
 const labelStyle = { fontSize: 12, fontWeight: 700, color: 'var(--soft)' } as const;
 
-export default function LeadForm({ form, formState, validationError, onChange, onSubmit, onReset }: Props) {
+export default function LeadForm({ form, consent, formState, validationError, onChange, onConsentChange, onSubmit, onReset }: Props) {
   const { content: c } = useI18n();
   const f = c.t.form;
   const submitting = formState === 'submitting';
@@ -54,6 +57,7 @@ export default function LeadForm({ form, formState, validationError, onChange, o
   const nameInvalid = hasValidationError && form.name.trim() === '';
   const ownerInvalid = hasValidationError && form.owner.trim() === '';
   const areaInvalid = hasValidationError && form.area.trim() === '';
+  const consentInvalid = validationError === 'consent';
 
   return (
     <section id="register" style={{ padding: '54px 26px', maxWidth: 1180, margin: '0 auto' }}>
@@ -322,6 +326,32 @@ export default function LeadForm({ form, formState, validationError, onChange, o
                     style={inputStyle}
                   />
                 </div>
+                {/* Consent — required before any personal data is submitted (KG personal-data law).
+                    The sentence is a plain span (not a <label>) so the inline Privacy/Terms links
+                    navigate without also toggling the checkbox; the input carries its own aria-label.
+                    Links open in a new tab so the form state is preserved. */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, lineHeight: 1.5, color: 'var(--soft)' }}>
+                  <input
+                    id="jq-field-consent"
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => onConsentChange(e.target.checked)}
+                    aria-invalid={consentInvalid || undefined}
+                    aria-label={`${f.consent.pre}${f.consent.privacy}${f.consent.mid}${f.consent.terms}${f.consent.post}`}
+                    style={{ width: 18, height: 18, marginTop: 1, flex: 'none', accentColor: 'var(--accent)', cursor: 'pointer' }}
+                  />
+                  <span>
+                    {f.consent.pre}
+                    <a href="/privacy.html" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                      {f.consent.privacy}
+                    </a>
+                    {f.consent.mid}
+                    <a href="/terms.html" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                      {f.consent.terms}
+                    </a>
+                    {f.consent.post}
+                  </span>
+                </div>
                 {/* M10: always-rendered alert region so AT announces messages without a remount.
                     Shows validation copy (specific) or server-error copy (generic). */}
                 <div
@@ -337,11 +367,13 @@ export default function LeadForm({ form, formState, validationError, onChange, o
                     minHeight: 0,
                   }}
                 >
-                  {hasValidationError
-                    ? f.validationErrorText
-                    : serverError
-                      ? f.errorText
-                      : null}
+                  {validationError === 'consent'
+                    ? f.consent.error
+                    : hasValidationError
+                      ? f.validationErrorText
+                      : serverError
+                        ? f.errorText
+                        : null}
                 </div>
                 <button
                   type="submit"

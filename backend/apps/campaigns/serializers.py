@@ -101,6 +101,12 @@ class CampaignSerializer(serializers.ModelSerializer):
     ``progress_context`` (:class:`CustomerProgressContext`) the view prefetches —
     when no context is supplied (business/staff list paths) it is ``None``. All
     fields are read-only — writes go through :class:`CampaignWriteSerializer`.
+
+    Per-row aggregate fields used by the business list UI (``participants``,
+    ``completed``, ``redeemed``, ``ends_label``) are populated from
+    ``annotate_counts`` (called by the business list view) when present as
+    queryset annotations. They default to 0/empty when the annotation is absent
+    (e.g. customer/staff list paths that do not carry the annotation).
     """
 
     business_name = serializers.CharField(source="business.name", read_only=True)
@@ -116,6 +122,14 @@ class CampaignSerializer(serializers.ModelSerializer):
     # default ImageField absolute url, so the image resolves through the
     # frontend's same-origin proxy. ``None`` when no image is set.
     image = serializers.SerializerMethodField()
+    # Per-row aggregate counts for the business list view. Values come from
+    # queryset annotations added by the business list view; they fall back to 0
+    # when the annotation is absent so non-business list paths are unaffected.
+    # Field names match what adaptCampaignList (adapters.ts:114-117) reads.
+    participants = serializers.SerializerMethodField()
+    completed = serializers.SerializerMethodField()
+    redeemed = serializers.SerializerMethodField()
+    ends_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Campaign
@@ -145,6 +159,10 @@ class CampaignSerializer(serializers.ModelSerializer):
             "required_count",
             "reward_title",
             "my_progress",
+            "participants",
+            "completed",
+            "redeemed",
+            "ends_label",
             "created_at",
             "updated_at",
         )
@@ -165,6 +183,29 @@ class CampaignSerializer(serializers.ModelSerializer):
 
     def get_image(self, obj: Campaign) -> str | None:
         return obj.image.url if obj.image else None
+
+    def get_participants(self, obj: Campaign) -> int:
+        """Total unique participants from the queryset annotation, or 0.
+
+        The annotation ``_participants`` is added by the business list view via
+        ``annotate_list_queryset``; absent it (non-business paths) the field
+        falls back to 0 so customer/staff list paths are unaffected.
+        """
+        return getattr(obj, "_participants", 0) or 0
+
+    def get_completed(self, obj: Campaign) -> int:
+        """Participants who have completed at least one cycle (annotated), or 0."""
+        return getattr(obj, "_completed", 0) or 0
+
+    def get_redeemed(self, obj: Campaign) -> int:
+        """Vouchers redeemed against this campaign (annotated), or 0."""
+        return getattr(obj, "_redeemed", 0) or 0
+
+    def get_ends_label(self, obj: Campaign) -> str:
+        """Human-readable end date label, or empty string when no end date is set."""
+        if obj.end_at is None:
+            return ""
+        return obj.end_at.strftime("%b %-d, %Y")
 
     def get_my_progress(self, obj: Campaign) -> ReturnDict | None:
         """The requesting customer's progress for this campaign, or ``None``.
@@ -319,10 +360,20 @@ class CampaignDiscoverQuerySerializer(serializers.Serializer):
 
 
 class CampaignParticipantSerializer(serializers.ModelSerializer):
-    """A participant row for the business-side participants list (read-only)."""
+    """A participant row for the business-side participants list (read-only).
+
+    ``last_visit_label`` is a human-readable string of the participant's last
+    recorded action timestamp (``last_progress_at``), or an empty string when no
+    progress has been recorded yet. ``reward_label`` is the campaign reward title
+    when the participant has completed (i.e. a reward was earned), otherwise an
+    empty string. Both fields match the keys read by ``adaptParticipant``
+    (adapters.ts:130-131).
+    """
 
     customer_name = serializers.CharField(source="customer.name", read_only=True)
     required_count = serializers.SerializerMethodField()
+    last_visit_label = serializers.SerializerMethodField()
+    reward_label = serializers.SerializerMethodField()
 
     class Meta:
         model = CampaignParticipant
@@ -337,12 +388,34 @@ class CampaignParticipantSerializer(serializers.ModelSerializer):
             "joined_at",
             "completed_at",
             "last_progress_at",
+            "last_visit_label",
+            "reward_label",
         )
         read_only_fields = fields
 
     def get_required_count(self, obj: CampaignParticipant) -> int:
         rule = getattr(obj.campaign, "rule", None)
         return rule.required_count if rule is not None else 1
+
+    def get_last_visit_label(self, obj: CampaignParticipant) -> str:
+        """Human-readable label for the participant's last action time, or empty."""
+        ts = obj.last_progress_at
+        if ts is None:
+            return ""
+        return ts.strftime("%b %-d, %Y")
+
+    def get_reward_label(self, obj: CampaignParticipant) -> str:
+        """Campaign reward title when the participant has completed; else empty.
+
+        Only COMPLETED/REDEEMED statuses have earned the reward. For in-progress
+        participants the column is left blank so the UI can show a dash via the
+        adapter default.
+        """
+        completed_statuses = {CampaignParticipant.Status.COMPLETED, CampaignParticipant.Status.REDEEMED}
+        if obj.status not in completed_statuses:
+            return ""
+        reward = getattr(obj.campaign, "reward", None)
+        return reward.title if reward is not None else ""
 
 
 class CampaignRewardVoucherSerializer(serializers.ModelSerializer):
@@ -351,7 +424,9 @@ class CampaignRewardVoucherSerializer(serializers.ModelSerializer):
     ``qr_url`` and ``qr_token`` are the redemption QR the customer presents to
     staff; ``qr_url`` is built against the requesting origin so a scan opens the
     right host. ``reward_title``/``campaign_name``/``business_name`` flatten the
-    related rows for the card UI.
+    related rows for the card UI. ``redeemed_by`` is the name of the staff member
+    who redeemed the voucher, or an empty string when not yet redeemed — matches
+    the ``redeemed_by`` key read by ``adaptVoucherRow`` (adapters.ts:143).
     """
 
     qr_token = serializers.CharField(source="qr_token.token", read_only=True, default=None)
@@ -360,6 +435,7 @@ class CampaignRewardVoucherSerializer(serializers.ModelSerializer):
     reward_description = serializers.CharField(source="reward.description", read_only=True)
     campaign_name = serializers.CharField(source="campaign.name", read_only=True)
     business_name = serializers.CharField(source="business.name", read_only=True)
+    redeemed_by = serializers.SerializerMethodField()
 
     class Meta:
         model = CampaignRewardVoucher
@@ -378,6 +454,7 @@ class CampaignRewardVoucherSerializer(serializers.ModelSerializer):
             "issued_at",
             "expires_at",
             "redeemed_at",
+            "redeemed_by",
             "cancel_reason",
             "created_at",
         )
@@ -388,6 +465,13 @@ class CampaignRewardVoucherSerializer(serializers.ModelSerializer):
             return None
         request = self.context.get("request")
         return f"{frontend_base_url(request)}/q/{obj.qr_token.token}"
+
+    def get_redeemed_by(self, obj: CampaignRewardVoucher) -> str:
+        """Name of the staff member who redeemed this voucher, or empty string."""
+        staff = getattr(obj, "redeemed_by_staff", None)
+        if staff is None:
+            return ""
+        return getattr(staff, "name", "") or ""
 
 
 class GroupSessionSerializer(serializers.ModelSerializer):
@@ -484,13 +568,6 @@ class ScanCustomerSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=128)
 
 
-class ConfirmVisitSerializer(serializers.Serializer):
-    """Staff confirm-visit input — the chosen campaign and the customer's QR token."""
-
-    campaign_id = serializers.UUIDField()
-    token = serializers.CharField(max_length=128)
-
-
 class UnifiedConfirmVisitSerializer(serializers.Serializer):
     """Unified staff scan input — the customer's QR token + optional campaign.
 
@@ -519,12 +596,6 @@ class ConfirmGroupSerializer(serializers.Serializer):
     """Staff confirm-group input — the group session to confirm (§11)."""
 
     group_session_id = serializers.UUIDField()
-
-
-class GroupJoinSerializer(serializers.Serializer):
-    """Customer group-join input — the GROUP_INVITE token the leader shared (§11)."""
-
-    invite_token = serializers.CharField(max_length=128)
 
 
 # --- Read serializers for service dataclasses (staff scan results) -----------

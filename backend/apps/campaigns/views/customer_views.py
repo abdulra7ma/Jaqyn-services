@@ -17,7 +17,6 @@ from apps.campaigns.serializers import (
     CampaignProgressSerializer,
     CampaignRewardVoucherSerializer,
     CampaignSerializer,
-    GroupJoinSerializer,
     GroupSessionSerializer,
 )
 from apps.campaigns.services import (
@@ -164,30 +163,6 @@ class GroupSessionStartView(APIView):
     def post(self, request, campaign_id):
         campaign = CampaignService.get_discoverable(campaign_id)
         session = CampaignGroupService.start_group_session(campaign, request.user)
-        return success_response(
-            GroupSessionSerializer(session).data, status=201
-        )
-
-
-class GroupSessionJoinView(APIView):
-    permission_classes = [IsCustomer]
-    serializer_class = GroupJoinSerializer
-    throttle_scope = "campaign_join"
-
-    def get_throttles(self):
-        from rest_framework.throttling import ScopedRateThrottle
-
-        return [ScopedRateThrottle()]
-
-    def post(self, request):
-        serializer = GroupJoinSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        member = CampaignGroupService.join_group_session(
-            serializer.validated_data["invite_token"], request.user
-        )
-        session = CampaignGroupService.get_session_for_customer(
-            member.group_session_id, request.user
-        )
         return success_response(
             GroupSessionSerializer(session).data, status=201
         )

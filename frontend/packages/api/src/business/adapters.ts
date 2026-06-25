@@ -47,7 +47,6 @@ function adaptAnalytics(raw: Raw | null | undefined): CampaignAnalytics {
     redeemed: a.redeemed ?? 0,
     redemption_rate: a.redemption_rate ?? 0,
     estimated_cost: String(a.estimated_cost ?? a.est_cost ?? "0"),
-    cost_each: String(a.cost_each ?? a.costEach ?? "0"),
   };
 }
 
@@ -65,7 +64,8 @@ export function adaptBusinessCampaign(raw: Raw): BusinessCampaign {
     end_label: raw.end_label ?? raw.end ?? "",
     active_days: raw.active_days ?? raw.days ?? "",
     active_hours: raw.active_hours ?? raw.hours ?? "",
-    repeat_policy: raw.repeat_policy ?? raw.repeat ?? "once",
+    // Backend emits completion_limit_per_customer; repeat_policy is the wizard field name.
+    repeat_policy: raw.repeat_policy ?? raw.completion_limit_per_customer ?? raw.repeat ?? "once",
     max_participants: raw.max_participants ?? null,
     staff_approval_required: raw.staff_approval_required ?? true,
     rule: {
@@ -148,16 +148,13 @@ export function adaptVoucherRow(raw: Raw): CampaignVoucherRow {
 // `reward` objects, with the campaign_type / rule_type / completion_limit field
 // names the serializer expects.
 //
-// KNOWN GAP — the wizard authors several fields as free text that the strict
-// backend types cannot accept as-is, so they are intentionally omitted here
-// (sending them would 400 the request):
-//   • start_at / end_at  — free text, backend wants ISO datetimes.
-//   • active_days        — free text ("Mon–Fri"), backend wants a JSON int list.
-//   • active_hours       — free text, backend wants active_start/end_time.
-//   • min_time_between   — free text ("4 hours"), backend wants an ISO duration.
-//   • group_checkin_window — free text ("15 min"), backend wants minutes (int).
-// A human must decide whether to make these wizard inputs structured (date/time
-// pickers, weekday multiselect) or to parse them; see the integration manifest.
+// The schedule/constraint fields (start_at, end_at, active_days,
+// active_start_time, active_end_time, and the rule's minimum_time_between_actions
+// / window_before_time / group_checkin_window_minutes) ARE sent: the wizard's
+// free-text inputs are parsed into these structured shapes in toPayload
+// (business/_components/campaigns.tsx) before reaching this mapper, so a campaign
+// keeps its schedule and constraints. Unparseable input is omitted (CampaignPayload
+// leaves it undefined) rather than sent as garbage.
 export function toCampaignWritePayload(payload: Partial<CampaignPayload>): Raw {
   const type = (payload.type ?? "visit") as BusinessCampaignType;
   const body: Raw = {};
@@ -171,13 +168,25 @@ export function toCampaignWritePayload(payload: Partial<CampaignPayload>): Raw {
     body.completion_limit_per_customer = payload.repeat_policy;
   }
 
+  // Campaign-level schedule (CampaignWriteSerializer accepts these directly).
+  if (payload.start_at !== undefined) body.start_at = payload.start_at;
+  if (payload.end_at !== undefined) body.end_at = payload.end_at;
+  if (payload.active_days !== undefined) body.active_days = payload.active_days;
+  if (payload.active_start_time !== undefined) body.active_start_time = payload.active_start_time;
+  if (payload.active_end_time !== undefined) body.active_end_time = payload.active_end_time;
+
   // Nested rule — only the fields the chosen type uses, keyed as the serializer expects.
   const rule: Raw = { rule_type: ruleTypeFor(type) };
   if (type === "group") {
     if (payload.required_group_size != null) rule.required_group_size = payload.required_group_size;
+    if (payload.group_checkin_window_minutes != null)
+      rule.group_checkin_window_minutes = payload.group_checkin_window_minutes;
   } else {
     if (payload.required_count != null) rule.required_count = payload.required_count;
     if (payload.max_count_per_day != null) rule.max_count_per_day = payload.max_count_per_day;
+    if (payload.minimum_time_between_actions != null)
+      rule.minimum_time_between_actions = payload.minimum_time_between_actions;
+    if (payload.window_before_time != null) rule.window_before_time = payload.window_before_time;
   }
   body.rule = rule;
 

@@ -27,6 +27,7 @@ function Landing() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [faq, setFaq] = useState(-1);
   const [form, setForm] = useState<FormFields>(EMPTY_FORM);
+  const [consent, setConsent] = useState(false);
   const [formState, setFormState] = useState<FormState>('idle');
   const [validationError, setValidationError] = useState<ValidationError>(null);
 
@@ -45,6 +46,11 @@ function Landing() {
     }
     if (!EMAIL_RE.test(form.email)) {
       setValidationError('email');
+      return;
+    }
+    // Explicit consent is required before any personal data is submitted (KG personal-data law).
+    if (!consent) {
+      setValidationError('consent');
       return;
     }
 
@@ -77,14 +83,17 @@ function Landing() {
       <Faq openIndex={faq} onToggle={(i) => setFaq((cur) => (cur === i ? -1 : i))} />
       <LeadForm
         form={form}
+        consent={consent}
         formState={formState}
         validationError={validationError}
         onChange={(key, value) => setForm((f) => ({ ...f, [key]: value }))}
+        onConsentChange={setConsent}
         onSubmit={handleSubmit}
         onReset={() => {
           setFormState('idle');
           setValidationError(null);
           setForm(EMPTY_FORM);
+          setConsent(false);
         }}
       />
       <FinalCta />

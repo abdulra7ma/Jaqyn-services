@@ -83,13 +83,22 @@ def test_campaign_list_happy_path_and_query_count(django_assert_num_queries):
     client = owner_client(business)
     # The count is fixed regardless of how many campaigns exist — the service
     # select_related's rule/reward so the page does not grow a query per row
-    # (that is the N+1 gate). Auth (user), owned_business, count, and the page
-    # query make up the constant total.
-    with django_assert_num_queries(7):
+    # (that is the N+1 gate). Auth (user), owned_business, count, the page
+    # query, and the single KPI-summary aggregate make up the constant total.
+    with django_assert_num_queries(8):
         response = client.get("/api/business/campaigns/")
     assert response.status_code == 200
     assert response.data["data"]["count"] == 3
     assert len(response.data["data"]["results"]) == 3
+    # KPI summary block must be nested inside data (the frontend unwraps to
+    # json.data and reads raw.summary.*) — not hoisted to the top level.
+    summary = response.data["data"]["summary"]
+    assert set(summary) == {
+        "active_campaigns",
+        "total_participants",
+        "rewards_issued",
+        "rewards_redeemed",
+    }
 
 
 def test_campaign_create_happy_path():
@@ -411,6 +420,25 @@ def test_discover_happy_path_and_query_count(django_assert_num_queries):
     assert response.data["data"]["count"] == 3
 
 
+def test_completed_one_time_campaign_disappears_from_discover():
+    """A ONCE campaign the customer finished is hidden; a REPEATABLE one stays."""
+    business = make_business()
+    customer = make_customer()
+    once = make_campaign(business, completion_limit=Campaign.CompletionLimit.ONCE)
+    repeatable = make_campaign(business, completion_limit=Campaign.CompletionLimit.REPEATABLE)
+    for camp in (once, repeatable):
+        CampaignParticipant.objects.create(
+            campaign=camp,
+            customer=customer,
+            status=CampaignParticipant.Status.COMPLETED,
+        )
+    response = customer_client(customer).get("/api/customer/campaigns/")
+    assert response.status_code == 200
+    ids = {str(c["id"]) for c in response.data["data"]["results"]}
+    assert str(once.id) not in ids  # one-time + completed → hidden (now in wallet)
+    assert str(repeatable.id) in ids  # repeatable → still discoverable
+
+
 def test_customer_detail_includes_my_progress():
     business = make_business()
     campaign = make_campaign(business)
@@ -508,10 +536,19 @@ def test_list_my_progress_populated_when_joined():
 
 
 def test_list_my_progress_voucher_id_after_completion():
-    """A completed campaign's list row surfaces the customer's ACTIVE voucher id."""
+    """A completed REPEATABLE campaign's list row surfaces the ACTIVE voucher id.
+
+    The campaign must be REPEATABLE: a completed ONE-TIME campaign is now hidden
+    from discovery (it has paid out and lives in the wallet) — see
+    test_completed_one_time_campaign_disappears_from_discover. A repeatable one
+    stays discoverable so the customer can earn it again, and its row carries the
+    voucher_id from the cycle they just finished.
+    """
     business = make_business()
     staff = make_staff(business)
-    campaign = make_campaign(business, required_count=1)
+    campaign = make_campaign(
+        business, required_count=1, completion_limit=Campaign.CompletionLimit.REPEATABLE
+    )
     customer = make_customer()
     result = CampaignProgressService.record_campaign_action(
         campaign, customer, staff=staff
@@ -717,24 +754,6 @@ def test_scan_customer_lists_eligible_campaigns():
     assert len(data["campaigns"]) == 1
     assert data["campaigns"][0]["campaign"]["id"] == str(campaign.id)
     assert data["campaigns"][0]["required_count"] == 3
-
-
-def test_confirm_visit_counts_and_completes():
-    business = make_business()
-    staff = make_staff(business)
-    campaign = make_campaign(business, required_count=1)
-    customer = make_customer()
-    token = get_or_create_customer_profile_token(customer).token
-    response = staff_client(staff).post(
-        "/api/staff/campaigns/confirm-visit/",
-        {"campaign_id": str(campaign.id), "token": token},
-        format="json",
-    )
-    assert response.status_code == 200
-    data = response.data["data"]
-    assert data["completed"] is True
-    assert data["voucher"] is not None
-    assert data["progress_count"] == 1
 
 
 def test_scan_and_redeem_voucher():

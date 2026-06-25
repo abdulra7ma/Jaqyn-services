@@ -9,6 +9,7 @@ import {
   useBusinessCampaign,
   useBusinessMe,
   useCampaignAction,
+  useCampaignAnalytics,
   useCampaignParticipants,
   useCampaignVouchers,
   useCancelCampaignVoucher,
@@ -71,6 +72,10 @@ function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
   if (c.status === "paused") controls.push({ action: "resume", labelKey: "cmp.biz.ctrl.resume" });
   if (c.status === "active" || c.status === "paused" || c.status === "scheduled")
     controls.push({ action: "end", labelKey: "cmp.biz.ctrl.end" });
+  // Cancel is available before a campaign goes live (backend CampaignCancelView
+  // accepts draft/scheduled); it voids the campaign rather than ending a run.
+  if (c.status === "draft" || c.status === "scheduled")
+    controls.push({ action: "cancel", labelKey: "cmp.biz.ctrl.cancel" });
 
   const tabs: Tab[] = ["overview", "participants", "vouchers"];
   const busy = action.isPending || duplicate.isPending;
@@ -209,7 +214,11 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function OverviewTab({ campaign: c }: { campaign: BusinessCampaign }) {
   const t = useT();
-  const a = c.analytics;
+  // The campaign detail payload does not embed analytics, so c.analytics is all
+  // zeros. Fetch the real metrics from the dedicated analytics endpoint; fall
+  // back to the (zero) embedded block only while the request is in flight.
+  const analytics = useCampaignAnalytics(c.id);
+  const a = analytics.data ?? c.analytics;
   return (
     <>
       <div className="mt-[22px] grid grid-cols-2 gap-3.5 lg:grid-cols-4">

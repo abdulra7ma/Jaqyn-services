@@ -1,10 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru" data-lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Privacy Policy · Jaqyn</title>
+    <title>Политика конфиденциальности · Jaqyn</title>
     <meta name="robots" content="noindex" />
+    <script>
+      // Pick language before paint: ?lang= override, else the landing's stored choice, else ru.
+      (function () {
+        var v = ['ru', 'ky', 'en'];
+        var p = new URLSearchParams(location.search).get('lang');
+        var s;
+        try { s = localStorage.getItem('jaqyn.lang'); } catch (e) {}
+        var l = v.indexOf(p) >= 0 ? p : (v.indexOf(s) >= 0 ? s : 'ru');
+        var T = { ru: 'Политика конфиденциальности · Jaqyn', ky: 'Купуялык саясаты · Jaqyn', en: 'Privacy Policy · Jaqyn' };
+        var d = document.documentElement;
+        d.setAttribute('data-lang', l);
+        d.setAttribute('lang', l);
+        try { document.title = T[l]; } catch (e) {}
+      })();
+    </script>
     <style>
       :root { --ink: #2e241d; --soft: #6b5a4a; --accent: #c25e3c; --cream: #fbf7f1; --line: #ece3d8; }
       * { box-sizing: border-box; }
@@ -18,75 +33,213 @@
       .brand b { font: 700 21px/1 'Bricolage Grotesque', sans-serif; }
       .logo { width: 34px; height: 34px; border-radius: 11px; background: var(--accent); color: #fff;
         display: flex; align-items: center; justify-content: center; font: 800 18px/1 'Bricolage Grotesque', sans-serif; }
-      h1 { font: 800 clamp(28px,5vw,40px)/1.1 'Bricolage Grotesque', sans-serif; letter-spacing: -.02em; margin: 28px 0 6px; }
+      h1 { font: 800 clamp(28px,5vw,40px)/1.1 'Bricolage Grotesque', sans-serif; letter-spacing: -.02em; margin: 8px 0 6px; }
       h2 { font: 700 20px/1.2 'Bricolage Grotesque', sans-serif; margin: 34px 0 8px; }
       .updated { color: var(--soft); font-size: 14px; }
-      .note { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; font-size: 14px; color: var(--soft); margin: 22px 0; }
       ul { padding-left: 20px; }
       footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 14px; color: var(--soft); }
+      /* language switcher + per-language blocks */
+      .langs { display: flex; gap: 6px; margin: 22px 0 6px; }
+      .langbtn { appearance: none; border: 1px solid var(--line); background: #fff; color: var(--soft);
+        border-radius: 9px; padding: 6px 12px; cursor: pointer;
+        font: 700 13px/1 'Hanken Grotesk', system-ui, sans-serif; }
+      [data-lang-block] { display: none; }
+      html[data-lang="ru"] [data-lang-block="ru"],
+      html[data-lang="ky"] [data-lang-block="ky"],
+      html[data-lang="en"] [data-lang-block="en"] { display: block; }
+      html[data-lang="ru"] [data-lang-btn="ru"],
+      html[data-lang="ky"] [data-lang-btn="ky"],
+      html[data-lang="en"] [data-lang-btn="en"] { background: var(--accent); color: #fff; border-color: var(--accent); }
     </style>
   </head>
   <body>
     <div class="wrap">
       <a class="brand" href="/"><span class="logo">J</span><b>Jaqyn</b></a>
-      <h1>Privacy Policy</h1>
-      <p class="updated">Last updated: 25 June 2026</p>
 
-      <div class="note">
-        Draft template for the Bishkek pilot. Review and adapt with legal counsel before public
-        launch — in particular jurisdiction, the operating entity's legal name, and the data
-        retention periods below.
+      <div class="langs" role="group" aria-label="Language">
+        <button type="button" class="langbtn" data-lang-btn="ru">RU</button>
+        <button type="button" class="langbtn" data-lang-btn="ky">KG</button>
+        <button type="button" class="langbtn" data-lang-btn="en">EN</button>
       </div>
 
-      <p>
-        This Privacy Policy explains how Jaqyn ("Jaqyn", "we", "us") collects, uses, and protects
-        information when you use our loyalty and rewards platform — the customer web app, the
-        business dashboard, and this website (together, the "Service"). The Service operates in
-        Bishkek, Kyrgyz Republic.
-      </p>
+      <!-- ===== Русский ===== -->
+      <div data-lang-block="ru">
+        <h1>Политика конфиденциальности</h1>
+        <p class="updated">Последнее обновление: 25 июня 2026</p>
 
-      <h2>1. Information we collect</h2>
-      <ul>
-        <li><strong>Account data:</strong> phone number, name, and (for businesses) business name, category, and area.</li>
-        <li><strong>Activity data:</strong> visits, scans, reward and campaign progress, vouchers earned and redeemed.</li>
-        <li><strong>Business lead data:</strong> details submitted through the "Register your business" form.</li>
-        <li><strong>Technical data:</strong> device and log information needed to operate and secure the Service.</li>
-      </ul>
+        <p>
+          Настоящая Политика конфиденциальности описывает, как Jaqyn («Jaqyn», «мы», «нас») собирает,
+          использует и защищает информацию при использовании нашей платформы лояльности и наград —
+          клиентского веб-приложения, панели бизнеса и этого сайта (вместе — «Сервис»). Сервис работает
+          в Бишкеке, Кыргызская Республика.
+        </p>
 
-      <h2>2. How we use information</h2>
-      <ul>
-        <li>To run loyalty programs, campaigns, and group offers, and to verify visits and rewards.</li>
-        <li>To provide businesses with aggregated, privacy-masked activity and reports.</li>
-        <li>To contact pilot applicants and operate, secure, and improve the Service.</li>
-      </ul>
+        <h2>1. Какие данные мы собираем</h2>
+        <ul>
+          <li><strong>Данные аккаунта:</strong> номер телефона, имя, а также (для бизнеса) название, категория и район заведения.</li>
+          <li><strong>Данные активности:</strong> визиты, сканирования, прогресс наград и кампаний, полученные и использованные ваучеры.</li>
+          <li><strong>Данные заявки бизнеса:</strong> сведения, отправленные через форму «Регистрация бизнеса».</li>
+          <li><strong>Технические данные:</strong> информация об устройстве и журналы, необходимые для работы и безопасности Сервиса.</li>
+        </ul>
 
-      <h2>3. Sharing</h2>
-      <p>
-        We do not sell personal data. A business sees only privacy-masked customer information
-        (such as a first initial and a partial phone number) for customers who interact with that
-        business. We share data with service providers strictly to operate the Service, and where
-        required by law.
-      </p>
+        <h2>2. Как мы используем данные</h2>
+        <ul>
+          <li>Для проведения программ лояльности, кампаний и групповых предложений, а также для подтверждения визитов и наград.</li>
+          <li>Для предоставления бизнесу обобщённой, обезличенной активности и отчётов.</li>
+          <li>Для связи с участниками пилота и для работы, защиты и улучшения Сервиса.</li>
+        </ul>
 
-      <h2>4. Payments</h2>
-      <p>
-        Jaqyn is not a payment app. We do not process or store payment-card data. Payments happen
-        separately through your chosen method (cash, card, MBANK, MegaPay, O!, etc.).
-      </p>
+        <h2>3. Передача данных</h2>
+        <p>
+          Мы не продаём персональные данные. Бизнес видит только обезличенную информацию о клиентах
+          (например, первую букву имени и часть номера телефона) тех клиентов, которые взаимодействуют
+          с этим бизнесом. Мы передаём данные поставщикам услуг строго для работы Сервиса и в случаях,
+          предусмотренных законом.
+        </p>
 
-      <h2>5. Retention &amp; your rights</h2>
-      <p>
-        We keep personal data only as long as needed to provide the Service and meet legal
-        obligations. You may request access to, correction of, or deletion of your data by
-        contacting us.
-      </p>
+        <h2>4. Платежи</h2>
+        <p>
+          Jaqyn не является платёжным приложением. Мы не обрабатываем и не храним данные платёжных карт.
+          Платежи проходят отдельно выбранным вами способом (наличные, карта, MBANK, MegaPay, O! и др.).
+        </p>
 
-      <h2>6. Contact</h2>
-      <p>Questions about this policy: <a href="mailto:hello@jaqyn.kg">hello@jaqyn.kg</a>.</p>
+        <h2>5. Хранение и ваши права</h2>
+        <p>
+          Мы храним персональные данные только в течение срока, необходимого для предоставления Сервиса
+          и выполнения требований закона. Вы можете запросить доступ к своим данным, их исправление или
+          удаление, связавшись с нами.
+        </p>
 
-      <footer>
-        © 2026 Jaqyn · Bishkek, Kyrgyzstan · <a href="/terms.html">Terms of Service</a> · <a href="/">Home</a>
-      </footer>
+        <h2>6. Контакты</h2>
+        <p>Вопросы по этой политике: <a href="mailto:hello@jaqyn.kg">hello@jaqyn.kg</a>.</p>
+
+        <footer>© 2026 Jaqyn · Бишкек, Кыргызстан · <a href="/terms.html">Условия использования</a> · <a href="/">Главная</a></footer>
+      </div>
+
+      <!-- ===== Кыргызча ===== -->
+      <div data-lang-block="ky">
+        <h1>Купуялык саясаты</h1>
+        <p class="updated">Акыркы жаңылоо: 2026-жылдын 25-июну</p>
+
+        <p>
+          Бул Купуялык саясаты Jaqyn («Jaqyn», «биз») лоялдуулук жана сыйлык платформасын — кардарлык
+          веб-тиркемени, бизнес панелди жана ушул сайтты (чогуу — «Сервис») колдонгондо маалыматты
+          кантип чогултарын, колдонорун жана коргоорун түшүндүрөт. Сервис Кыргыз Республикасынын Бишкек
+          шаарында иштейт.
+        </p>
+
+        <h2>1. Кайсы маалыматтарды чогултабыз</h2>
+        <ul>
+          <li><strong>Аккаунт маалыматы:</strong> телефон номери, аты, ошондой эле (бизнес үчүн) жайдын аталышы, категориясы жана району.</li>
+          <li><strong>Активдүүлүк маалыматы:</strong> баруулар, скандоолор, сыйлык жана кампания прогресси, алынган жана колдонулган ваучерлер.</li>
+          <li><strong>Бизнес арыз маалыматы:</strong> «Бизнести каттоо» формасы аркылуу жөнөтүлгөн маалыматтар.</li>
+          <li><strong>Техникалык маалымат:</strong> Сервистин иштеши жана коопсуздугу үчүн керектүү түзмөк жана журнал маалыматы.</li>
+        </ul>
+
+        <h2>2. Маалыматты кантип колдонобуз</h2>
+        <ul>
+          <li>Лоялдуулук программаларын, кампанияларды жана топтук сунуштарды жүргүзүү, баруулар менен сыйлыктарды текшерүү үчүн.</li>
+          <li>Бизнеске жалпыланган, жашырылган активдүүлүк жана отчётторду берүү үчүн.</li>
+          <li>Пилот катышуучулары менен байланышуу жана Сервисти иштетүү, коргоо, жакшыртуу үчүн.</li>
+        </ul>
+
+        <h2>3. Маалыматты берүү</h2>
+        <p>
+          Биз персоналдык маалыматты сатпайбыз. Бизнес ал бизнес менен иштешкен кардарлардын жашырылган
+          маалыматын гана (мисалы, аттын биринчи тамгасын жана телефондун бир бөлүгүн) көрөт. Биз
+          маалыматты Сервисти иштетүү үчүн гана кызмат көрсөтүүчүлөргө жана мыйзамда каралган учурларда
+          беребиз.
+        </p>
+
+        <h2>4. Төлөмдөр</h2>
+        <p>
+          Jaqyn төлөм тиркемеси эмес. Биз төлөм карталарынын маалыматын иштетпейбиз жана сактабайбыз.
+          Төлөмдөр сиз тандаган ыкма менен өзүнчө жүргүзүлөт (нак акча, карта, MBANK, MegaPay, O! ж.б.).
+        </p>
+
+        <h2>5. Сактоо жана сиздин укуктарыңыз</h2>
+        <p>
+          Биз персоналдык маалыматты Сервисти көрсөтүү жана мыйзам талаптарын аткаруу үчүн зарыл болгон
+          мөөнөттө гана сактайбыз. Сиз биз менен байланышып, маалыматыңызга жетүүнү, аны оңдоону же
+          өчүрүүнү талап кыла аласыз.
+        </p>
+
+        <h2>6. Байланыш</h2>
+        <p>Бул саясат боюнча суроолор: <a href="mailto:hello@jaqyn.kg">hello@jaqyn.kg</a>.</p>
+
+        <footer>© 2026 Jaqyn · Бишкек, Кыргызстан · <a href="/terms.html">Колдонуу шарттары</a> · <a href="/">Башкы бет</a></footer>
+      </div>
+
+      <!-- ===== English ===== -->
+      <div data-lang-block="en">
+        <h1>Privacy Policy</h1>
+        <p class="updated">Last updated: 25 June 2026</p>
+
+        <p>
+          This Privacy Policy explains how Jaqyn ("Jaqyn", "we", "us") collects, uses, and protects
+          information when you use our loyalty and rewards platform — the customer web app, the
+          business dashboard, and this website (together, the "Service"). The Service operates in
+          Bishkek, Kyrgyz Republic.
+        </p>
+
+        <h2>1. Information we collect</h2>
+        <ul>
+          <li><strong>Account data:</strong> phone number, name, and (for businesses) business name, category, and area.</li>
+          <li><strong>Activity data:</strong> visits, scans, reward and campaign progress, vouchers earned and redeemed.</li>
+          <li><strong>Business lead data:</strong> details submitted through the "Register your business" form.</li>
+          <li><strong>Technical data:</strong> device and log information needed to operate and secure the Service.</li>
+        </ul>
+
+        <h2>2. How we use information</h2>
+        <ul>
+          <li>To run loyalty programs, campaigns, and group offers, and to verify visits and rewards.</li>
+          <li>To provide businesses with aggregated, privacy-masked activity and reports.</li>
+          <li>To contact pilot applicants and operate, secure, and improve the Service.</li>
+        </ul>
+
+        <h2>3. Sharing</h2>
+        <p>
+          We do not sell personal data. A business sees only privacy-masked customer information
+          (such as a first initial and a partial phone number) for customers who interact with that
+          business. We share data with service providers strictly to operate the Service, and where
+          required by law.
+        </p>
+
+        <h2>4. Payments</h2>
+        <p>
+          Jaqyn is not a payment app. We do not process or store payment-card data. Payments happen
+          separately through your chosen method (cash, card, MBANK, MegaPay, O!, etc.).
+        </p>
+
+        <h2>5. Retention &amp; your rights</h2>
+        <p>
+          We keep personal data only as long as needed to provide the Service and meet legal
+          obligations. You may request access to, correction of, or deletion of your data by
+          contacting us.
+        </p>
+
+        <h2>6. Contact</h2>
+        <p>Questions about this policy: <a href="mailto:hello@jaqyn.kg">hello@jaqyn.kg</a>.</p>
+
+        <footer>© 2026 Jaqyn · Bishkek, Kyrgyzstan · <a href="/terms.html">Terms of Service</a> · <a href="/">Home</a></footer>
+      </div>
     </div>
+
+    <script>
+      (function () {
+        var T = { ru: 'Политика конфиденциальности · Jaqyn', ky: 'Купуялык саясаты · Jaqyn', en: 'Privacy Policy · Jaqyn' };
+        var btns = document.querySelectorAll('[data-lang-btn]');
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].addEventListener('click', function () {
+            var l = this.getAttribute('data-lang-btn');
+            var d = document.documentElement;
+            d.setAttribute('data-lang', l);
+            d.setAttribute('lang', l);
+            try { localStorage.setItem('jaqyn.lang', l); } catch (e) {}
+            document.title = T[l];
+          });
+        }
+      })();
+    </script>
   </body>
 </html>

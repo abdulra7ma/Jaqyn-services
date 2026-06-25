@@ -16,7 +16,6 @@ import type {
   CampaignVoucherScanResult,
   CampaignVoucherScanState,
   ConfirmGroupResult,
-  ConfirmVisitResult,
   RecentActivity,
   RedeemCampaignVoucherResult,
   ScanCustomerResult,
@@ -68,8 +67,6 @@ export const staffApi = {
     api
       .post<any>("/api/staff/campaigns/scan-customer/", { token })
       .then(adaptScanCustomerResult),
-  confirmVisit: (body: { token: string; campaign_id: string }): Promise<ConfirmVisitResult> =>
-    api.post<any>("/api/staff/campaigns/confirm-visit/", body).then(adaptConfirmVisitResult),
   // One confirm advances BOTH the regular loyalty card and the prioritized
   // eligible campaign. Omit campaign_id to let the backend auto-pick. The backend
   // returns 200 even when one (or neither) leg advanced; only an invalid token

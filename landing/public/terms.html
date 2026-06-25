@@ -1,10 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru" data-lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Terms of Service · Jaqyn</title>
+    <title>Условия использования · Jaqyn</title>
     <meta name="robots" content="noindex" />
+    <script>
+      // Pick language before paint: ?lang= override, else the landing's stored choice, else ru.
+      (function () {
+        var v = ['ru', 'ky', 'en'];
+        var p = new URLSearchParams(location.search).get('lang');
+        var s;
+        try { s = localStorage.getItem('jaqyn.lang'); } catch (e) {}
+        var l = v.indexOf(p) >= 0 ? p : (v.indexOf(s) >= 0 ? s : 'ru');
+        var T = { ru: 'Условия использования · Jaqyn', ky: 'Колдонуу шарттары · Jaqyn', en: 'Terms of Service · Jaqyn' };
+        var d = document.documentElement;
+        d.setAttribute('data-lang', l);
+        d.setAttribute('lang', l);
+        try { document.title = T[l]; } catch (e) {}
+      })();
+    </script>
     <style>
       :root { --ink: #2e241d; --soft: #6b5a4a; --accent: #c25e3c; --cream: #fbf7f1; --line: #ece3d8; }
       * { box-sizing: border-box; }
@@ -18,76 +33,218 @@
       .brand b { font: 700 21px/1 'Bricolage Grotesque', sans-serif; }
       .logo { width: 34px; height: 34px; border-radius: 11px; background: var(--accent); color: #fff;
         display: flex; align-items: center; justify-content: center; font: 800 18px/1 'Bricolage Grotesque', sans-serif; }
-      h1 { font: 800 clamp(28px,5vw,40px)/1.1 'Bricolage Grotesque', sans-serif; letter-spacing: -.02em; margin: 28px 0 6px; }
+      h1 { font: 800 clamp(28px,5vw,40px)/1.1 'Bricolage Grotesque', sans-serif; letter-spacing: -.02em; margin: 8px 0 6px; }
       h2 { font: 700 20px/1.2 'Bricolage Grotesque', sans-serif; margin: 34px 0 8px; }
       .updated { color: var(--soft); font-size: 14px; }
-      .note { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; font-size: 14px; color: var(--soft); margin: 22px 0; }
       ul { padding-left: 20px; }
       footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 14px; color: var(--soft); }
+      /* language switcher + per-language blocks */
+      .langs { display: flex; gap: 6px; margin: 22px 0 6px; }
+      .langbtn { appearance: none; border: 1px solid var(--line); background: #fff; color: var(--soft);
+        border-radius: 9px; padding: 6px 12px; cursor: pointer;
+        font: 700 13px/1 'Hanken Grotesk', system-ui, sans-serif; }
+      [data-lang-block] { display: none; }
+      html[data-lang="ru"] [data-lang-block="ru"],
+      html[data-lang="ky"] [data-lang-block="ky"],
+      html[data-lang="en"] [data-lang-block="en"] { display: block; }
+      html[data-lang="ru"] [data-lang-btn="ru"],
+      html[data-lang="ky"] [data-lang-btn="ky"],
+      html[data-lang="en"] [data-lang-btn="en"] { background: var(--accent); color: #fff; border-color: var(--accent); }
     </style>
   </head>
   <body>
     <div class="wrap">
       <a class="brand" href="/"><span class="logo">J</span><b>Jaqyn</b></a>
-      <h1>Terms of Service</h1>
-      <p class="updated">Last updated: 25 June 2026</p>
 
-      <div class="note">
-        Draft template for the Bishkek pilot. Review and adapt with legal counsel before public
-        launch — in particular the operating entity, governing law, and liability sections.
+      <div class="langs" role="group" aria-label="Language">
+        <button type="button" class="langbtn" data-lang-btn="ru">RU</button>
+        <button type="button" class="langbtn" data-lang-btn="ky">KG</button>
+        <button type="button" class="langbtn" data-lang-btn="en">EN</button>
       </div>
 
-      <p>
-        These Terms govern your use of Jaqyn — the customer web app, the business dashboard, and
-        this website (together, the "Service"). By using the Service you agree to these Terms. The
-        Service is operated from Bishkek, Kyrgyz Republic.
-      </p>
+      <!-- ===== Русский ===== -->
+      <div data-lang-block="ru">
+        <h1>Условия использования</h1>
+        <p class="updated">Последнее обновление: 25 июня 2026</p>
 
-      <h2>1. The Service</h2>
-      <p>
-        Jaqyn lets local businesses run loyalty programs, campaigns, and group offers, and lets
-        customers earn and redeem rewards by visiting participating businesses. Rewards are
-        merchant-specific unless a campaign states otherwise.
-      </p>
+        <p>
+          Настоящие Условия регулируют использование Jaqyn — клиентского веб-приложения, панели бизнеса
+          и этого сайта (вместе — «Сервис»). Используя Сервис, вы соглашаетесь с этими Условиями. Сервис
+          управляется из Бишкека, Кыргызская Республика.
+        </p>
 
-      <h2>2. Accounts</h2>
-      <p>
-        You are responsible for activity under your account and for keeping your login details
-        secure. Businesses are responsible for their staff accounts and for honoring the offers
-        they publish.
-      </p>
+        <h2>1. Сервис</h2>
+        <p>
+          Jaqyn позволяет местным заведениям проводить программы лояльности, кампании и групповые
+          предложения, а клиентам — получать и использовать награды, посещая заведения-участники.
+          Награды привязаны к конкретному заведению, если кампания не предусматривает иное.
+        </p>
 
-      <h2>3. Rewards &amp; vouchers</h2>
-      <ul>
-        <li>Rewards, stamps, and vouchers have no cash value and are not transferable between businesses.</li>
-        <li>Vouchers may carry expiry dates and limits set by the issuing business.</li>
-        <li>The issuing business is responsible for fulfilling its rewards and offers.</li>
-      </ul>
+        <h2>2. Аккаунты</h2>
+        <p>
+          Вы несёте ответственность за действия в вашем аккаунте и за сохранность данных для входа.
+          Бизнес отвечает за аккаунты своего персонала и за выполнение опубликованных предложений.
+        </p>
 
-      <h2>4. Payments</h2>
-      <p>
-        Jaqyn is not a payment service and does not process payments. Customers pay businesses
-        directly by their chosen method.
-      </p>
+        <h2>3. Награды и ваучеры</h2>
+        <ul>
+          <li>Награды, штампы и ваучеры не имеют денежной ценности и не переносятся между заведениями.</li>
+          <li>Ваучеры могут иметь сроки действия и ограничения, установленные выдавшим заведением.</li>
+          <li>Выдавшее заведение отвечает за выполнение своих наград и предложений.</li>
+        </ul>
 
-      <h2>5. Acceptable use</h2>
-      <p>
-        Do not misuse the Service, attempt to defraud reward mechanics, interfere with its
-        operation, or use it unlawfully. We may suspend accounts that violate these Terms.
-      </p>
+        <h2>4. Платежи</h2>
+        <p>
+          Jaqyn не является платёжным сервисом и не обрабатывает платежи. Клиенты платят заведениям
+          напрямую выбранным способом.
+        </p>
 
-      <h2>6. Disclaimers &amp; changes</h2>
-      <p>
-        The Service is provided "as is" during the pilot. We may update the Service or these Terms;
-        material changes will be reflected by the "Last updated" date above.
-      </p>
+        <h2>5. Допустимое использование</h2>
+        <p>
+          Не злоупотребляйте Сервисом, не пытайтесь обмануть механику наград, не мешайте его работе и
+          не используйте его незаконно. Мы можем приостановить аккаунты, нарушающие эти Условия.
+        </p>
 
-      <h2>7. Contact</h2>
-      <p>Questions about these Terms: <a href="mailto:hello@jaqyn.kg">hello@jaqyn.kg</a>.</p>
+        <h2>6. Отказ от ответственности и изменения</h2>
+        <p>
+          Сервис предоставляется «как есть» в период пилота. Мы можем обновлять Сервис или эти Условия;
+          существенные изменения отражаются датой «Последнее обновление» выше.
+        </p>
 
-      <footer>
-        © 2026 Jaqyn · Bishkek, Kyrgyzstan · <a href="/privacy.html">Privacy Policy</a> · <a href="/">Home</a>
-      </footer>
+        <h2>7. Контакты</h2>
+        <p>Вопросы по этим Условиям: <a href="mailto:hello@jaqyn.kg">hello@jaqyn.kg</a>.</p>
+
+        <footer>© 2026 Jaqyn · Бишкек, Кыргызстан · <a href="/privacy.html">Политика конфиденциальности</a> · <a href="/">Главная</a></footer>
+      </div>
+
+      <!-- ===== Кыргызча ===== -->
+      <div data-lang-block="ky">
+        <h1>Колдонуу шарттары</h1>
+        <p class="updated">Акыркы жаңылоо: 2026-жылдын 25-июну</p>
+
+        <p>
+          Бул Шарттар Jaqyn — кардарлык веб-тиркемени, бизнес панелди жана ушул сайтты (чогуу —
+          «Сервис») колдонууну жөнгө салат. Сервисти колдонуу менен сиз бул Шарттарга макул болосуз.
+          Сервис Кыргыз Республикасынын Бишкек шаарынан башкарылат.
+        </p>
+
+        <h2>1. Сервис</h2>
+        <p>
+          Jaqyn жергиликтүү жайларга лоялдуулук программаларын, кампанияларды жана топтук сунуштарды
+          жүргүзүүгө, кардарларга катышкан жайларга барып сыйлык табууга жана колдонууга мүмкүнчүлүк
+          берет. Кампания башкача айтпаса, сыйлыктар белгилүү бир жайга таандык.
+        </p>
+
+        <h2>2. Аккаунттар</h2>
+        <p>
+          Аккаунтуңуздагы аракеттер жана кирүү маалыматыңыздын коопсуздугу үчүн өзүңүз жоопкерсиз.
+          Бизнес өз кызматкерлеринин аккаунттары жана жарыялаган сунуштарын аткаруу үчүн жоопкер.
+        </p>
+
+        <h2>3. Сыйлыктар жана ваучерлер</h2>
+        <ul>
+          <li>Сыйлыктар, штамптар жана ваучерлер акчалай наркка ээ эмес жана жайлардын ортосунда өткөрүлбөйт.</li>
+          <li>Ваучерлердин жарактуулук мөөнөтү жана берген жай койгон чектөөлөрү болушу мүмкүн.</li>
+          <li>Берген жай өз сыйлыктарын жана сунуштарын аткарууга жооптуу.</li>
+        </ul>
+
+        <h2>4. Төлөмдөр</h2>
+        <p>
+          Jaqyn төлөм сервиси эмес жана төлөмдөрдү иштетпейт. Кардарлар жайларга тандаган ыкмасы менен
+          түз төлөшөт.
+        </p>
+
+        <h2>5. Туура колдонуу</h2>
+        <p>
+          Сервисти кыянаттык менен колдонбоңуз, сыйлык механикасын алдаганга аракет кылбаңыз, анын
+          ишине тоскоол болбоңуз жана аны мыйзамсыз колдонбоңуз. Бул Шарттарды бузган аккаунттарды биз
+          токтото алабыз.
+        </p>
+
+        <h2>6. Жоопкерчиликтен баш тартуу жана өзгөртүүлөр</h2>
+        <p>
+          Сервис пилот мезгилинде «кандай болсо ошондой» берилет. Биз Сервисти же бул Шарттарды
+          жаңыртышыбыз мүмкүн; олуттуу өзгөрүүлөр жогорудагы «Акыркы жаңылоо» датасында чагылдырылат.
+        </p>
+
+        <h2>7. Байланыш</h2>
+        <p>Бул Шарттар боюнча суроолор: <a href="mailto:hello@jaqyn.kg">hello@jaqyn.kg</a>.</p>
+
+        <footer>© 2026 Jaqyn · Бишкек, Кыргызстан · <a href="/privacy.html">Купуялык саясаты</a> · <a href="/">Башкы бет</a></footer>
+      </div>
+
+      <!-- ===== English ===== -->
+      <div data-lang-block="en">
+        <h1>Terms of Service</h1>
+        <p class="updated">Last updated: 25 June 2026</p>
+
+        <p>
+          These Terms govern your use of Jaqyn — the customer web app, the business dashboard, and
+          this website (together, the "Service"). By using the Service you agree to these Terms. The
+          Service is operated from Bishkek, Kyrgyz Republic.
+        </p>
+
+        <h2>1. The Service</h2>
+        <p>
+          Jaqyn lets local businesses run loyalty programs, campaigns, and group offers, and lets
+          customers earn and redeem rewards by visiting participating businesses. Rewards are
+          merchant-specific unless a campaign states otherwise.
+        </p>
+
+        <h2>2. Accounts</h2>
+        <p>
+          You are responsible for activity under your account and for keeping your login details
+          secure. Businesses are responsible for their staff accounts and for honoring the offers
+          they publish.
+        </p>
+
+        <h2>3. Rewards &amp; vouchers</h2>
+        <ul>
+          <li>Rewards, stamps, and vouchers have no cash value and are not transferable between businesses.</li>
+          <li>Vouchers may carry expiry dates and limits set by the issuing business.</li>
+          <li>The issuing business is responsible for fulfilling its rewards and offers.</li>
+        </ul>
+
+        <h2>4. Payments</h2>
+        <p>
+          Jaqyn is not a payment service and does not process payments. Customers pay businesses
+          directly by their chosen method.
+        </p>
+
+        <h2>5. Acceptable use</h2>
+        <p>
+          Do not misuse the Service, attempt to defraud reward mechanics, interfere with its
+          operation, or use it unlawfully. We may suspend accounts that violate these Terms.
+        </p>
+
+        <h2>6. Disclaimers &amp; changes</h2>
+        <p>
+          The Service is provided "as is" during the pilot. We may update the Service or these Terms;
+          material changes will be reflected by the "Last updated" date above.
+        </p>
+
+        <h2>7. Contact</h2>
+        <p>Questions about these Terms: <a href="mailto:hello@jaqyn.kg">hello@jaqyn.kg</a>.</p>
+
+        <footer>© 2026 Jaqyn · Bishkek, Kyrgyzstan · <a href="/privacy.html">Privacy Policy</a> · <a href="/">Home</a></footer>
+      </div>
     </div>
+
+    <script>
+      (function () {
+        var T = { ru: 'Условия использования · Jaqyn', ky: 'Колдонуу шарттары · Jaqyn', en: 'Terms of Service · Jaqyn' };
+        var btns = document.querySelectorAll('[data-lang-btn]');
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].addEventListener('click', function () {
+            var l = this.getAttribute('data-lang-btn');
+            var d = document.documentElement;
+            d.setAttribute('data-lang', l);
+            d.setAttribute('lang', l);
+            try { localStorage.setItem('jaqyn.lang', l); } catch (e) {}
+            document.title = T[l];
+          });
+        }
+      })();
+    </script>
   </body>
 </html>

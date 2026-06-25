@@ -325,19 +325,6 @@ class CampaignService:
         )
 
     @staticmethod
-    def get_active_campaigns_for_business(business: Business):
-        """Return ACTIVE campaigns for a business, newest first (queryset).
-
-        Selects the rule and reward to keep the list serializer free of N+1
-        queries.
-        """
-        return (
-            Campaign.objects.filter(business=business, status=Campaign.Status.ACTIVE)
-            .select_related("rule", "reward")
-            .order_by("-created_at")
-        )
-
-    @staticmethod
     def list_for_business(business: Business):
         """Return all of a business's campaigns, newest first (queryset)."""
         return (
@@ -442,6 +429,19 @@ class CampaignService:
             .select_related("rule", "reward", "business")
             .order_by("-created_at")
         )
+        # A one-time (ONCE) campaign the customer has already completed or
+        # redeemed has paid out — drop it from discovery (it now lives in the
+        # wallet). REPEATABLE campaigns stay visible so they can be earned again.
+        # exclude() builds a NOT-EXISTS subquery, so this is one bounded query and
+        # does not interfere with the joined_only filter join below.
+        qs = qs.exclude(
+            completion_limit_per_customer=Campaign.CompletionLimit.ONCE,
+            participants__customer=customer,
+            participants__status__in=[
+                CampaignParticipant.Status.COMPLETED,
+                CampaignParticipant.Status.REDEEMED,
+            ],
+        )
         if campaign_type in Campaign.CampaignType.values:
             qs = qs.filter(campaign_type=campaign_type)
         if joined_only:
@@ -489,15 +489,6 @@ class CampaignService:
             active_voucher_ids.setdefault(str(campaign_id), str(voucher_id))
         return CustomerProgressContext(
             participants=participants, active_voucher_ids=active_voucher_ids
-        )
-
-    @staticmethod
-    def my_participations(customer):
-        """Return a customer's participant rows across campaigns (queryset)."""
-        return (
-            CampaignParticipant.objects.filter(customer=customer)
-            .select_related("campaign", "campaign__rule", "campaign__reward")
-            .order_by("-updated_at")
         )
 
     @staticmethod

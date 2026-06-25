@@ -387,7 +387,6 @@ export type CampaignAnalytics = {
   redeemed: number;
   redemption_rate: number;
   estimated_cost: string;
-  cost_each: string;
 };
 
 export type BusinessCampaignReward = {
@@ -449,21 +448,30 @@ export type CampaignVoucherRow = {
 
 // Create/update payload — mirrors the 5-step wizard. Service is the authority;
 // the wizard validates client-side (zod-style) only for UX (plan §2.4).
+// Field names and types match CampaignWriteSerializer / CampaignRuleSerializer so
+// toCampaignWritePayload() can pass them through without transformation.
 export type CampaignPayload = {
   type: BusinessCampaignType;
   name: string;
   description?: string;
+  // Schedule. start_at / end_at are ISO date strings (YYYY-MM-DD accepted by the
+  // backend DateTimeField). active_days is a JSON int list (0 = Mon … 6 = Sun).
+  // active_start_time / active_end_time are HH:MM strings (backend TimeField).
+  start_at?: string;
+  end_at?: string;
+  active_days?: number[];
+  active_start_time?: string;
+  active_end_time?: string;
   // Rules (subset relevant to the chosen type).
   required_count?: number | null;
   max_count_per_day?: number | null;
-  min_time_between?: string | null;
+  // minimum_time_between_actions: ISO 8601 duration string (e.g. "PT4H") accepted
+  // by the backend DurationField. Null clears the constraint.
+  minimum_time_between_actions?: string | null;
   window_before_time?: string | null;
   required_group_size?: number | null;
-  group_checkin_window?: string | null;
-  start_at?: string;
-  end_at?: string;
-  active_days?: string;
-  active_hours?: string;
+  // group_checkin_window_minutes: integer minutes for the group check-in window.
+  group_checkin_window_minutes?: number | null;
   // Reward.
   reward_type?: string;
   reward_title?: string;
@@ -473,7 +481,6 @@ export type CampaignPayload = {
   // Limits.
   max_participants?: number | null;
   repeat_policy?: "once" | "repeatable";
-  staff_approval_required?: boolean;
 };
 
 // Lifecycle transitions exposed as POST actions (plan §1.3).

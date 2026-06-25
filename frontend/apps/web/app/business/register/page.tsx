@@ -6,6 +6,7 @@ import { Button, Card, Input } from "@jaqyn/ui";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BusinessShell } from "../_components/BusinessShell";
+import { ConsentNote } from "../../_components/ConsentNote";
 import { useErrMessage } from "../../_lib/useErrMessage";
 import { useRequireAuth } from "../../_lib/auth";
 
@@ -64,6 +65,7 @@ export default function BusinessRegisterPage() {
           <Button type="submit" disabled={register.isPending}>
             {register.isPending ? t("common.loading") : t("biz.registerCta")}
           </Button>
+          <ConsentNote className="text-center text-[12.5px] leading-relaxed text-subtle" />
         </form>
       </Card>
     </BusinessShell>

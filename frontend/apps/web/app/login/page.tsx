@@ -7,6 +7,7 @@ import { Button, Input } from "@jaqyn/ui";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { ConsentNote } from "../_components/ConsentNote";
 import { useErrMessage } from "../_lib/useErrMessage";
 
 /** Where a user lands after login — owner/staff to their console, else the return URL. */
@@ -223,6 +224,7 @@ function LoginFlow() {
             {t("auth.signup")}
           </Link>
         </p>
+        <ConsentNote />
       </div>
     </div>
   );

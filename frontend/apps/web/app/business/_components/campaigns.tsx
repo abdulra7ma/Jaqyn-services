@@ -157,6 +157,46 @@ const num = (v: string): number | null => {
  * zod); past here the payload is trusted. Rule fields irrelevant to the chosen type
  * are omitted so the backend doesn't receive stray values.
  */
+// The wizard collects schedule/constraint values as free text; these helpers
+// parse them best-effort into the structured shapes the backend accepts
+// (CampaignWriteSerializer). Unparseable input yields undefined/null so we never
+// POST garbage — the field is simply omitted rather than dropped silently.
+const DAY_IDX: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
+function parseDays(s: string): number[] | undefined {
+  const t = s.trim().toLowerCase().replace(/[–—]/g, "-");
+  if (!t) return undefined;
+  const idx = (d: string): number | undefined => DAY_IDX[d.trim().slice(0, 3)];
+  if (t.includes("-")) {
+    const [a, b] = t.split("-").map((x) => idx(x));
+    if (a == null || b == null) return undefined;
+    const out: number[] = [];
+    for (let i = a; i <= b; i++) out.push(i);
+    return out.length ? out : undefined;
+  }
+  const days = t
+    .split(",")
+    .map((x) => idx(x))
+    .filter((n): n is number => n != null);
+  return days.length ? days : undefined;
+}
+function parseHours(s: string): { start?: string; end?: string } {
+  const m = s
+    .trim()
+    .replace(/[–—]/g, "-")
+    .match(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/);
+  return m ? { start: m[1], end: m[2] } : {};
+}
+// "4 hours" / "30 min" → ISO 8601 duration ("PT4H" / "PT30M"); empty → null.
+function parseDuration(s: string): string | null {
+  const m = s.trim().toLowerCase().match(/(\d+)\s*(h|m)/);
+  if (!m) return null;
+  return m[2] === "h" ? `PT${m[1]}H` : `PT${m[1]}M`;
+}
+function parseMinutes(s: string): number | null {
+  const m = s.trim().match(/(\d+)/);
+  return m && m[1] ? parseInt(m[1], 10) : null;
+}
+
 export function toPayload(form: WizardForm): CampaignPayload {
   const base: CampaignPayload = {
     type: form.type,
@@ -164,8 +204,7 @@ export function toPayload(form: WizardForm): CampaignPayload {
     description: form.description.trim() || undefined,
     start_at: form.start.trim() || undefined,
     end_at: form.end.trim() || undefined,
-    active_days: form.days.trim() || undefined,
-    active_hours: form.hours.trim() || undefined,
+    active_days: parseDays(form.days),
     reward_type: form.rewardType,
     reward_title: form.rewardTitle.trim(),
     reward_description: form.rewardDescription.trim() || undefined,
@@ -173,15 +212,17 @@ export function toPayload(form: WizardForm): CampaignPayload {
     max_rewards: num(form.maxRewards),
     max_participants: num(form.maxParticipants),
     repeat_policy: form.repeatPolicy,
-    staff_approval_required: form.staffApproval,
   };
+  const hours = parseHours(form.hours);
+  if (hours.start) base.active_start_time = hours.start;
+  if (hours.end) base.active_end_time = hours.end;
   if (form.type === "group") {
     base.required_group_size = num(form.groupSize);
-    base.group_checkin_window = form.checkin.trim() || null;
+    base.group_checkin_window_minutes = parseMinutes(form.checkin);
   } else {
     base.required_count = num(form.visits);
     base.max_count_per_day = num(form.perDay);
-    base.min_time_between = form.minGap.trim() || null;
+    base.minimum_time_between_actions = parseDuration(form.minGap);
     if (form.type === "timewindow") base.window_before_time = form.windowBefore.trim() || null;
   }
   return base;

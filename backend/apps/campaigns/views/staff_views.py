@@ -15,7 +15,6 @@ from rest_framework.views import APIView
 from apps.campaigns.serializers import (
     CampaignRewardVoucherSerializer,
     ConfirmGroupSerializer,
-    ConfirmVisitSerializer,
     CustomerScanResultSerializer,
     GroupConfirmResultSerializer,
     ProgressResultSerializer,
@@ -52,24 +51,6 @@ class ScanCustomerView(_StaffScanView):
         )
         return success_response(
             CustomerScanResultSerializer(result).data
-        )
-
-
-class ConfirmVisitView(_StaffScanView):
-    serializer_class = ConfirmVisitSerializer
-
-    def post(self, request):
-        serializer = ConfirmVisitSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        staff = get_staff_for_user(request.user)
-        result = StaffScannerService.confirm_visit_for_token(
-            staff,
-            serializer.validated_data["campaign_id"],
-            serializer.validated_data["token"],
-            request=request,
-        )
-        return success_response(
-            ProgressResultSerializer(result, context={"request": request}).data
         )
 
 

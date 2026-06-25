@@ -35,7 +35,9 @@ const VOUCHER_TONE: Record<CampaignVoucherStatus, "ok" | "neutral" | "danger"> =
   active: "ok",
   redeemed: "neutral",
   expired: "danger",
-  cancelled: "danger",
+  // Cancelled is staff/admin-initiated (not the same severity as a past-due
+  // expiry); neutral keeps it visually distinct from the expired danger tone.
+  cancelled: "neutral",
 };
 
 /** Human "challenge" line per campaign type (design `cd.mission`). */
@@ -52,7 +54,7 @@ export function missionLine(t: Translate, c: Campaign): string {
 }
 
 /** "Ends in" copy from days_left + status (design `endsLabel`). */
-export function endsLabel(t: Translate, c: Pick<Campaign, "days_left" | "status">): string {
+function endsLabel(t: Translate, c: Pick<Campaign, "days_left" | "status">): string {
   if (c.status === "ended" || c.status === "cancelled") return t("cmp.card.ended");
   if (c.days_left <= 0) return t("cmp.card.endsToday");
   return t("cmp.card.endsIn").replace("{days}", String(c.days_left));
@@ -306,9 +308,14 @@ export function VoucherRow({ voucher }: { voucher: CampaignVoucher }) {
   );
 }
 
-// Voucher statuses map onto the existing rewards.status.* labels.
-function statusKey(s: CampaignVoucherStatus): "redeemed" | "expired" {
-  return s === "redeemed" ? "redeemed" : "expired";
+// Voucher statuses map onto label keys. `cancelled` gets its own key so the
+// compact row shows "Cancelled" rather than collapsing it into "Expired".
+// The `cmp.voucher.cancelledTitle` key already exists; reuse its sibling
+// namespace via `rewards.status.*` which carries all voucher lifecycle labels.
+function statusKey(s: CampaignVoucherStatus): "redeemed" | "expired" | "cancelled" {
+  if (s === "redeemed") return "redeemed";
+  if (s === "cancelled") return "cancelled";
+  return "expired";
 }
 
 /** Reward QR block for the voucher view (gradient reward card + QR + code). */

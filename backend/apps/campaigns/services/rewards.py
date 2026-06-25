@@ -383,10 +383,15 @@ class CampaignRewardService:
 
     @staticmethod
     def vouchers_for_campaign(campaign: Campaign):
-        """Return a campaign's vouchers newest-first for the business list (queryset)."""
+        """Return a campaign's vouchers newest-first for the business list (queryset).
+
+        ``redeemed_by_staff`` is select-related so
+        ``CampaignRewardVoucherSerializer.get_redeemed_by`` can resolve the
+        staff member name without an extra query per row.
+        """
         return (
             CampaignRewardVoucher.objects.filter(campaign=campaign)
-            .select_related("customer", "reward", "business", "qr_token")
+            .select_related("customer", "reward", "business", "qr_token", "redeemed_by_staff")
             .order_by("-issued_at", "-created_at")
         )
 

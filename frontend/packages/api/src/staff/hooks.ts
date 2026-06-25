@@ -68,14 +68,6 @@ export const useStaffCollect = () => {
 export const useScanCustomerForCampaigns = () =>
   useMutation({ mutationFn: (token: string) => staffApi.scanCustomerForCampaigns(token) });
 
-export const useConfirmVisit = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: { token: string; campaign_id: string }) => staffApi.confirmVisit(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: sqk.activity }),
-  });
-};
-
 // One confirm advances both the loyalty card and the prioritized campaign.
 export const useConfirmVisitUnified = () => {
   const qc = useQueryClient();

@@ -225,42 +225,6 @@ class StaffScannerService:
         return result
 
     @staticmethod
-    def confirm_visit_for_token(
-        staff: StaffMember,
-        campaign_id,
-        raw_token: str,
-        request=None,
-        now: datetime | None = None,
-    ) -> ProgressResult:
-        """Resolve a customer QR token then count a visit for them (plan §1.3).
-
-        The confirm-visit endpoint receives the *campaign* the staff picked plus
-        the *customer's personal QR token* (not a pre-resolved customer object).
-        This resolves the ``CUSTOMER_PROFILE`` token to its customer
-        (``INVALID_QR_TOKEN`` if it is the wrong type or has no customer), guards
-        the business is active, then delegates to :meth:`confirm_visit` (which
-        runs the fraud check, locks, re-checks eligibility, increments, and
-        completes if due). Returns the resulting :class:`ProgressResult`.
-        """
-        now = now or timezone.now()
-        qr_token = resolve_qr_token(raw_token, request, action="campaign_confirm_visit")
-        if (
-            qr_token.type != QRCodeToken.Type.CUSTOMER_PROFILE
-            or qr_token.customer is None
-        ):
-            raise JaqynAPIException(
-                "INVALID_QR_TOKEN", status_code=status.HTTP_400_BAD_REQUEST
-            )
-        ensure_business_active(staff.business)
-        return StaffScannerService.confirm_visit(
-            staff=staff,
-            campaign_id=campaign_id,
-            customer=qr_token.customer,
-            request=request,
-            now=now,
-        )
-
-    @staticmethod
     def confirm_visit_unified(
         staff: StaffMember,
         raw_token: str,
@@ -365,17 +329,6 @@ class StaffScannerService:
         return CampaignRewardService.validate_reward_voucher(
             staff, code=code, token=token, request=request
         )
-
-    @staticmethod
-    def manual_code_lookup(
-        staff: StaffMember, code: str, request=None
-    ) -> CampaignRewardVoucher:
-        """Look up a voucher by its typed-in code for validation (§19).
-
-        Convenience wrapper over :meth:`scan_reward_qr` for the manual-entry path
-        when the QR cannot be scanned. Returns the validated voucher.
-        """
-        return StaffScannerService.scan_reward_qr(staff, code=code, request=request)
 
     @staticmethod
     def confirm_group_visit(
