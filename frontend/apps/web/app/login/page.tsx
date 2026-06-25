@@ -217,6 +217,12 @@ function LoginFlow() {
         </div>
 
         <p className="mt-5 text-center text-[12.5px] text-subtle">Google &amp; other social sign-in are coming soon.</p>
+        <p className="mt-2 text-center text-[12.5px] text-subtle">
+          {t("auth.noAccount")}{" "}
+          <Link href="/signup" className="font-semibold text-brand hover:underline">
+            {t("auth.signup")}
+          </Link>
+        </p>
       </div>
     </div>
   );
