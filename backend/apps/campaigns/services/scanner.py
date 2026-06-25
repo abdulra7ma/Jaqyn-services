@@ -179,7 +179,7 @@ class StaffScannerService:
     @staticmethod
     def confirm_visit(
         staff: StaffMember,
-        campaign_id,
+        campaign_id: UUID,
         customer,
         request=None,
         now: datetime | None = None,
@@ -247,7 +247,7 @@ class StaffScannerService:
     def confirm_visit_unified(
         staff: StaffMember,
         raw_token: str,
-        campaign_id=None,
+        campaign_id: UUID | None = None,
         request=None,
         now: datetime | None = None,
     ) -> "UnifiedScanResult":
@@ -313,6 +313,7 @@ class StaffScannerService:
         )
         eligible = [r for r in results if r.eligible]
 
+        target_ids: list[UUID]
         if campaign_id is not None:
             # Explicit single-target contract: advance only the tapped campaign.
             target_ids = [campaign_id]
@@ -330,11 +331,11 @@ class StaffScannerService:
                     or r.reason_code == IneligibilityReason.MIN_GAP.value
                 )
             ]
-            default_results = [
+            nonstacking_results = [
                 r for r in eligible if not r.campaign.allow_multiple_campaign_counting
             ]
             chosen_default = CampaignProgressService.resolve_priority_campaign(
-                default_results, now=now
+                nonstacking_results, now=now
             )
             target_ids = list(stacking_ids)
             if chosen_default is not None:
