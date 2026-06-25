@@ -125,10 +125,11 @@ def verify_email_otp(email: str, code: str) -> tuple[User, bool, str, str]:
 
     On success: creates the user from the cached registration payload if they
     don't exist yet; marks is_email_verified=True; creates CustomerProfile for
-    new customers; emits customer_signed_up for new users. Clears OTP from
-    cache on success. Raises JaqynAPIException on expired/invalid/rate-limited.
-    If a user with this email already exists, they are logged in without
-    overwriting their existing profile data.
+    new customers and sets profile_completed=True (email signups supply name
+    upfront so the gate is satisfied at creation); emits customer_signed_up for
+    new users. Clears OTP from cache on success. Raises JaqynAPIException on
+    expired/invalid/rate-limited. If a user with this email already exists, they
+    are logged in without overwriting their existing profile data.
     Email is normalized to lowercase so the cache lookup, DB query, and stored
     address are all consistent regardless of how the caller supplied the address.
     """
@@ -164,7 +165,13 @@ def verify_email_otp(email: str, code: str) -> tuple[User, bool, str, str]:
         user.save(update_fields=["is_email_verified", "updated_at"])
 
     if user.role == User.Role.CUSTOMER:
-        CustomerProfile.objects.get_or_create(user=user)
+        profile, _ = CustomerProfile.objects.get_or_create(user=user)
+        # Email signups arrive with name + email already, so the completion gate
+        # is satisfied at creation. Only flip it for new users — never re-open it
+        # for a returning user who may have intentionally left it as-is.
+        if is_new and not profile.profile_completed:
+            profile.profile_completed = True
+            profile.save(update_fields=["profile_completed", "updated_at"])
 
     if is_new:
         emit_event("customer_signed_up", user_id=str(user.id), email=email)

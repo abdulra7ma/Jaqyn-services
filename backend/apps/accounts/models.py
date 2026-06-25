@@ -60,6 +60,10 @@ class CustomerProfile(TimeStampedModel):
     marketing_opt_in = models.BooleanField(default=False)
     # First-run product tour seen. Persisted so the tour survives relogin/reinstall.
     onboarding_completed = models.BooleanField(default=False)
+    # Required signup info (name) supplied. Persisted so the completion gate
+    # survives relogin/reinstall, like onboarding_completed. Email signups set
+    # this True at creation; new phone signups start False and must fill the form.
+    profile_completed = models.BooleanField(default=False)
 
     def __str__(self) -> str:
         return f"Profile {self.user}"
