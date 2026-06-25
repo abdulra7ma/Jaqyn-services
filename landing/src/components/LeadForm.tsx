@@ -4,16 +4,21 @@ export interface FormFields {
   name: string;
   owner: string;
   phone: string;
+  email: string;
   cat: string;
   area: string;
   ig: string;
 }
 
-export type FormState = 'idle' | 'submitting' | 'success';
+export type FormState = 'idle' | 'submitting' | 'success' | 'error';
+
+// null = no validation error; 'fields' = missing/short field; 'email' = bad format
+export type ValidationError = null | 'fields' | 'email';
 
 interface Props {
   form: FormFields;
   formState: FormState;
+  validationError: ValidationError;
   onChange: (key: keyof FormFields, value: string) => void;
   onSubmit: () => void;
   onReset: () => void;
@@ -33,12 +38,22 @@ const inputStyle = {
 
 const labelStyle = { fontSize: 12, fontWeight: 700, color: 'var(--soft)' } as const;
 
-export default function LeadForm({ form, formState, onChange, onSubmit, onReset }: Props) {
+export default function LeadForm({ form, formState, validationError, onChange, onSubmit, onReset }: Props) {
   const { content: c } = useI18n();
   const f = c.t.form;
   const submitting = formState === 'submitting';
   const success = formState === 'success';
+  const serverError = formState === 'error';
+  const hasValidationError = validationError !== null;
   const submitLabel = submitting ? f.submitting : f.submit;
+
+  // Which fields are invalid (for aria-invalid marking)
+  const phoneDigits = form.phone.replace(/^\+?996/, '').replace(/\D/g, '');
+  const phoneInvalid = hasValidationError && (form.phone.trim() === '' || phoneDigits.length < 9);
+  const emailInvalid = hasValidationError && (form.email.trim() === '' || validationError === 'email');
+  const nameInvalid = hasValidationError && form.name.trim() === '';
+  const ownerInvalid = hasValidationError && form.owner.trim() === '';
+  const areaInvalid = hasValidationError && form.area.trim() === '';
 
   return (
     <section id="register" style={{ padding: '54px 26px', maxWidth: 1180, margin: '0 auto' }}>
@@ -182,65 +197,94 @@ export default function LeadForm({ form, formState, onChange, onSubmit, onReset 
               <div style={{ font: "700 19px 'Bricolage Grotesque', sans-serif", color: 'var(--ink)', letterSpacing: '-.01em' }}>
                 {f.requestTitle}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginTop: 18 }}>
+              {/* H11: wrap fields + submit in <form> so the submit button type="submit" works
+                  and the form is semantically correct for AT. e.preventDefault stops page reload. */}
+              <form
+                onSubmit={(e) => { e.preventDefault(); onSubmit(); }}
+                noValidate
+                style={{ display: 'flex', flexDirection: 'column', gap: 13, marginTop: 18 }}
+              >
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={labelStyle}>{f.labels.business}</label>
+                    <label htmlFor="jq-field-business" style={labelStyle}>{f.labels.business}</label>
                     <input
+                      id="jq-field-business"
                       className="jq-input"
                       value={form.name}
                       onChange={(e) => onChange('name', e.target.value)}
                       placeholder={f.placeholders.business}
+                      aria-invalid={nameInvalid || undefined}
                       style={inputStyle}
                     />
                   </div>
                   <div>
-                    <label style={labelStyle}>{f.labels.owner}</label>
+                    <label htmlFor="jq-field-owner" style={labelStyle}>{f.labels.owner}</label>
                     <input
+                      id="jq-field-owner"
                       className="jq-input"
                       value={form.owner}
                       onChange={(e) => onChange('owner', e.target.value)}
                       placeholder={f.placeholders.owner}
+                      aria-invalid={ownerInvalid || undefined}
                       style={inputStyle}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label style={labelStyle}>{f.labels.phone}</label>
-                  <div
-                    className="jq-phonewrap"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 9,
-                      border: '1.5px solid var(--line)',
-                      borderRadius: 13,
-                      padding: '0 13px',
-                      marginTop: 6,
-                    }}
-                  >
-                    <span style={{ fontWeight: 700, fontSize: 14.5 }}>+996</span>
-                    <input
-                      value={form.phone}
-                      onChange={(e) => onChange('phone', e.target.value)}
-                      inputMode="numeric"
-                      placeholder={f.placeholders.phone}
-                      style={{
-                        flex: 1,
-                        border: 'none',
-                        outline: 'none',
-                        padding: '13px 0',
-                        font: "600 14.5px 'Hanken Grotesk', sans-serif",
-                        color: 'var(--ink)',
-                        background: 'transparent',
-                      }}
                     />
                   </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={labelStyle}>{f.labels.category}</label>
+                    <label htmlFor="jq-field-phone" style={labelStyle}>{f.labels.phone}</label>
+                    <div
+                      className="jq-phonewrap"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 9,
+                        border: '1.5px solid var(--line)',
+                        borderRadius: 13,
+                        padding: '0 13px',
+                        marginTop: 6,
+                      }}
+                    >
+                      <span style={{ fontWeight: 700, fontSize: 14.5 }}>+996</span>
+                      <input
+                        id="jq-field-phone"
+                        value={form.phone}
+                        onChange={(e) => onChange('phone', e.target.value)}
+                        inputMode="numeric"
+                        placeholder={f.placeholders.phone}
+                        aria-label="Phone number (+996)"
+                        aria-invalid={phoneInvalid || undefined}
+                        style={{
+                          flex: 1,
+                          border: 'none',
+                          outline: 'none',
+                          padding: '13px 0',
+                          font: "600 14.5px 'Hanken Grotesk', sans-serif",
+                          color: 'var(--ink)',
+                          background: 'transparent',
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="jq-field-email" style={labelStyle}>{f.labels.email}</label>
+                    <input
+                      id="jq-field-email"
+                      className="jq-input"
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => onChange('email', e.target.value)}
+                      placeholder={f.placeholders.email}
+                      aria-invalid={emailInvalid || undefined}
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label htmlFor="jq-field-category" style={labelStyle}>{f.labels.category}</label>
                     <select
+                      id="jq-field-category"
                       value={form.cat}
                       onChange={(e) => onChange('cat', e.target.value)}
                       style={{ ...inputStyle, cursor: 'pointer' }}
@@ -253,21 +297,24 @@ export default function LeadForm({ form, formState, onChange, onSubmit, onReset 
                     </select>
                   </div>
                   <div>
-                    <label style={labelStyle}>{f.labels.area}</label>
+                    <label htmlFor="jq-field-area" style={labelStyle}>{f.labels.area}</label>
                     <input
+                      id="jq-field-area"
                       className="jq-input"
                       value={form.area}
                       onChange={(e) => onChange('area', e.target.value)}
                       placeholder={f.placeholders.area}
+                      aria-invalid={areaInvalid || undefined}
                       style={inputStyle}
                     />
                   </div>
                 </div>
                 <div>
-                  <label style={labelStyle}>
+                  <label htmlFor="jq-field-instagram" style={labelStyle}>
                     {f.labels.instagram} <span style={{ fontWeight: 500, opacity: 0.7 }}>{f.labels.optional}</span>
                   </label>
                   <input
+                    id="jq-field-instagram"
                     className="jq-input"
                     value={form.ig}
                     onChange={(e) => onChange('ig', e.target.value)}
@@ -275,8 +322,29 @@ export default function LeadForm({ form, formState, onChange, onSubmit, onReset 
                     style={inputStyle}
                   />
                 </div>
+                {/* M10: always-rendered alert region so AT announces messages without a remount.
+                    Shows validation copy (specific) or server-error copy (generic). */}
+                <div
+                  role="alert"
+                  aria-live="assertive"
+                  style={{
+                    padding: hasValidationError || serverError ? '10px 14px' : undefined,
+                    borderRadius: hasValidationError || serverError ? 10 : undefined,
+                    background: hasValidationError || serverError ? 'rgba(194,60,60,.1)' : undefined,
+                    color: '#a02020',
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    minHeight: 0,
+                  }}
+                >
+                  {hasValidationError
+                    ? f.validationErrorText
+                    : serverError
+                      ? f.errorText
+                      : null}
+                </div>
                 <button
-                  onClick={onSubmit}
+                  type="submit"
                   className="jq-lift"
                   style={{
                     width: '100%',
@@ -311,7 +379,7 @@ export default function LeadForm({ form, formState, onChange, onSubmit, onReset 
                   )}
                   {submitLabel}
                 </button>
-              </div>
+              </form>
             </>
           )}
         </div>

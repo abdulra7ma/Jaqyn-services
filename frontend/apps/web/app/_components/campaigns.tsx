@@ -11,6 +11,7 @@ import type {
 import { useT } from "@jaqyn/i18n";
 import { Badge, cn } from "@jaqyn/ui";
 import Link from "next/link";
+import { useState } from "react";
 import QRCode from "react-qr-code";
 
 // Shared campaign vocabulary, lifted from "Jaqyn Campaign Rewards.dc.html"
@@ -109,8 +110,9 @@ export function GlyphTile({
   size?: number;
   image?: string | null;
 }) {
+  const [imgError, setImgError] = useState(false);
   const radius = Math.round(size * 0.3);
-  if (image) {
+  if (image && !imgError) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -121,6 +123,7 @@ export function GlyphTile({
         className="flex-none object-cover"
         style={{ width: size, height: size, borderRadius: radius }}
         aria-hidden
+        onError={() => setImgError(true)}
       />
     );
   }

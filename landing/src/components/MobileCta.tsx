@@ -1,4 +1,5 @@
 import { useI18n } from '../i18n/I18nContext';
+import { APP_ROUTES } from '../config';
 
 export default function MobileCta() {
   const { content: c } = useI18n();
@@ -16,7 +17,7 @@ export default function MobileCta() {
       }}
     >
       <a
-        href="#deals"
+        href={APP_ROUTES.explore}
         style={{
           flex: 1,
           textAlign: 'center',

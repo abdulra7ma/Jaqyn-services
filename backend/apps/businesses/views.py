@@ -7,17 +7,26 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from apps.businesses.models import Business
+from apps.businesses.models import Business, CatalogItem
 from apps.businesses.serializers import (
     BusinessCategorySerializer,
+    BusinessImageSerializer,
     BusinessImageUploadSerializer,
+    BusinessLeadSerializer,
     BusinessSerializer,
+    CatalogItemSerializer,
+    GalleryUploadSerializer,
     PublicBusinessSerializer,
 )
 from apps.businesses.services import (
+    BusinessLeadData,
+    add_gallery_image,
     register_business,
+    register_business_lead,
+    remove_gallery_image,
     set_business_cover,
     set_business_logo,
+    set_catalog_item_image,
 )
 from apps.reporting.services import business_metrics
 from core.exceptions import JaqynAPIException
@@ -36,7 +45,7 @@ class PublicBusinessListView(APIView):
                 status=Business.Status.APPROVED,
                 visibility_status=Business.VisibilityStatus.PUBLISHED,
             )
-            .prefetch_related("catalog_items", "reward_programs", "group_offers")
+            .prefetch_related("catalog_items", "reward_programs", "group_offers", "gallery_images")
             .order_by("name")
         )
 
@@ -92,7 +101,9 @@ class PublicBusinessDetailView(APIView):
 
     def get(self, request, business_id):
         business = get_object_or_404(
-            Business.objects.prefetch_related("catalog_items", "reward_programs", "group_offers"),
+            Business.objects.prefetch_related(
+                "catalog_items", "reward_programs", "group_offers", "gallery_images"
+            ),
             id=business_id,
             status=Business.Status.APPROVED,
             visibility_status=Business.VisibilityStatus.PUBLISHED,
@@ -101,6 +112,41 @@ class PublicBusinessDetailView(APIView):
         if origin and business.latitude is not None and business.longitude is not None:
             business.distance_km = _distance_km(origin[0], origin[1], float(business.latitude), float(business.longitude))
         return success_response(PublicBusinessSerializer(business, context={"request": request}).data)
+
+
+class BusinessLeadCreateView(APIView):
+    """POST /api/businesses/register-lead/ — accept a public landing-page lead.
+
+    Public: the landing page is unauthenticated. Throttled via ScopedRateThrottle
+    so the open endpoint cannot be hammered into spam (10 submissions/min per IP).
+    Creates a PENDING, owner-less Business carrying the prospective owner's
+    name + email for admin review. Returns the new business id (UUID).
+    """
+
+    # Public endpoint: the visitor hasn't created an account yet.
+    # Throttled (see DEFAULT_THROTTLE_RATES "business_lead") to prevent spam.
+    permission_classes = [AllowAny]
+    throttle_scope = "business_lead"
+    serializer_class = BusinessLeadSerializer
+
+    def get_throttles(self):
+        return [ScopedRateThrottle()]
+
+    def post(self, request):
+        serializer = BusinessLeadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+        lead_data = BusinessLeadData(
+            name=d["name"],
+            owner_name=d["owner_name"],
+            email=d["email"],
+            phone=d["phone"],
+            category=d.get("category", ""),
+            area=d.get("area", ""),
+            instagram_url=d.get("instagram_url", ""),
+        )
+        business = register_business_lead(lead_data)
+        return success_response({"id": str(business.id)}, status=201)
 
 
 class BusinessRegisterView(APIView):
@@ -204,6 +250,90 @@ class BusinessDashboardView(APIView):
                 **metrics,
             },
         })
+
+
+class CatalogItemImageUploadView(APIView):
+    """POST /api/business/catalog-items/<id>/image/ — attach a compressed photo to a catalog item.
+
+    Owner-only (``IsBusinessOwner``). The item must belong to the authenticated owner's
+    business; a foreign item_id yields 404. Validates the file via ``GalleryUploadSerializer``
+    (same shape as other image uploads), compresses to PRODUCT_MAX_DIM, then returns the
+    updated CatalogItem (carrying ``image_url``) in the success envelope.
+    """
+
+    permission_classes = [IsBusinessOwner]
+    parser_classes = [MultiPartParser, FormParser]
+    throttle_scope = "business_image"
+
+    def get_throttles(self):
+        return [ScopedRateThrottle()]
+
+    def post(self, request, item_id):
+        try:
+            business = request.user.owned_business
+        except Business.DoesNotExist:
+            raise JaqynAPIException("VALIDATION_ERROR", "Business not found", status_code=404)
+
+        item = get_object_or_404(CatalogItem, id=item_id, business=business)
+        serializer = GalleryUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        updated = set_catalog_item_image(item, serializer.validated_data["image"])
+        return success_response(CatalogItemSerializer(updated).data)
+
+
+class GalleryListCreateView(APIView):
+    """GET/POST /api/business/gallery/ — list or add business gallery images.
+
+    Owner-only (``IsBusinessOwner``).
+    GET returns ``{ results: GalleryImage[] }`` in sort_order order.
+    POST accepts a multipart ``image`` file, enforces the 8-image cap (raises
+    ``GALLERY_LIMIT_REACHED`` 409 when full), compresses to GALLERY_MAX_DIM, and
+    returns the created GalleryImage.
+    """
+
+    permission_classes = [IsBusinessOwner]
+    parser_classes = [MultiPartParser, FormParser]
+    throttle_scope = "business_image"
+
+    def get_throttles(self):
+        return [ScopedRateThrottle()]
+
+    def _business(self, request) -> Business:
+        try:
+            return request.user.owned_business
+        except Business.DoesNotExist:
+            raise JaqynAPIException("VALIDATION_ERROR", "Business not found", status_code=404)
+
+    def get(self, request):
+        business = self._business(request)
+        images = business.gallery_images.all()
+        return success_response({"results": BusinessImageSerializer(images, many=True).data})
+
+    def post(self, request):
+        business = self._business(request)
+        serializer = GalleryUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        gallery_image = add_gallery_image(business, serializer.validated_data["image"])
+        return success_response(BusinessImageSerializer(gallery_image).data, status=201)
+
+
+class GalleryDetailView(APIView):
+    """DELETE /api/business/gallery/<id>/ — remove a gallery image.
+
+    Owner-only (``IsBusinessOwner``). Only images that belong to the authenticated
+    owner's business may be deleted (foreign ids yield 404).
+    """
+
+    permission_classes = [IsBusinessOwner]
+
+    def delete(self, request, image_id):
+        try:
+            business = request.user.owned_business
+        except Business.DoesNotExist:
+            raise JaqynAPIException("VALIDATION_ERROR", "Business not found", status_code=404)
+
+        remove_gallery_image(business, str(image_id))
+        return success_response(message="Gallery image removed")
 
 
 def _parse_float(value):

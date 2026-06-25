@@ -7,16 +7,13 @@
 import { useBusinessMe, useDashboard, useBusinessRewards } from "@jaqyn/api";
 import Link from "next/link";
 import { OwnerShell } from "../_components/OwnerShell";
-import { useAuth } from "../../_lib/auth";
 
 const CARD = "rounded-[18px] border border-line bg-card p-5";
 const DAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
 export default function BusinessDashboardPage() {
-  const { isAuthenticated, ready } = useAuth();
-  const enabled = ready && isAuthenticated;
-  const me = useBusinessMe(enabled);
-  const dash = useDashboard(enabled);
+  const me = useBusinessMe();
+  const dash = useDashboard();
   const rewards = useBusinessRewards();
 
   const m = dash.data?.metrics;
@@ -30,14 +27,7 @@ export default function BusinessDashboardPage() {
 
   return (
     <OwnerShell title="Dashboard">
-      {!ready ? null : !isAuthenticated ? (
-        <div className={`${CARD} max-w-md`}>
-          <p className="text-sm text-subtle">Sign in to view your business dashboard.</p>
-          <Link href="/login?return=/business/dashboard" className="mt-3 inline-block rounded-pill bg-brand px-5 py-2.5 text-sm font-bold text-brand-fg">
-            Sign in
-          </Link>
-        </div>
-      ) : me.isError ? (
+      {me.isError ? (
         <div className={`${CARD} max-w-md`}>
           <p className="text-sm text-ink">No business yet — activate your owner invite to get started.</p>
         </div>

@@ -33,6 +33,8 @@ AVATAR_MAX_DIM = 256  # avatar chips / profile photos — small, never shown lar
 LOGO_MAX_DIM = 512  # business logo tiles — square brand mark
 COVER_MAX_DIM = 1600  # business cover / hero — full-bleed banner
 CAMPAIGN_MAX_DIM = 1600  # campaign social-share card — shared at story/post size
+PRODUCT_MAX_DIM = 800  # catalog item cards — medium cards in grid/list layouts
+GALLERY_MAX_DIM = 1600  # business gallery — shown full-width on the customer detail page
 
 # Default WEBP quality. 82 is the conventional "visually lossless for photos"
 # setting — high enough to avoid artefacts, low enough to keep files small.

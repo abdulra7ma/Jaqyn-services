@@ -17,7 +17,6 @@ import type {
   ReportStaffRow,
 } from "@jaqyn/api";
 import { OwnerShell } from "../_components/OwnerShell";
-import { useAuth } from "../../_lib/auth";
 
 const CARD = "rounded-[18px] border border-line bg-card";
 const PANEL = `${CARD} p-5 sm:p-[22px]`;
@@ -38,7 +37,6 @@ const PERIODS: { key: ReportPeriod; label: string }[] = [
 ];
 
 export default function BusinessReportsPage() {
-  const { isAuthenticated, ready } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
   const [period, setPeriod] = useState<ReportPeriod>("month");
   const [range, setRange] = useState<{ date_from: string; date_to: string }>({ date_from: "", date_to: "" });
@@ -49,12 +47,7 @@ export default function BusinessReportsPage() {
 
   return (
     <OwnerShell title="Reports">
-      {!ready ? null : !isAuthenticated ? (
-        <div className={`${PANEL} max-w-md`}>
-          <p className="text-sm text-subtle">Sign in to view your reports.</p>
-        </div>
-      ) : (
-        <div className="mx-auto max-w-[980px] animate-[jqIn_.3s_ease]">
+      <div className="mx-auto max-w-[980px] animate-[jqIn_.3s_ease]">
           {/* tabs + period selector */}
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Report sections">
@@ -113,7 +106,6 @@ export default function BusinessReportsPage() {
             <Staff report={report} />
           )}
         </div>
-      )}
     </OwnerShell>
   );
 }

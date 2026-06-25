@@ -5,22 +5,15 @@
 
 import { useMerchantQr } from "@jaqyn/api";
 import { OwnerShell } from "../_components/OwnerShell";
-import { useAuth } from "../../_lib/auth";
 
 const CARD = "rounded-[18px] border border-line bg-card p-5";
 
 export default function BusinessQrPage() {
-  const { isAuthenticated, ready } = useAuth();
-  const qr = useMerchantQr(ready && isAuthenticated);
+  const qr = useMerchantQr();
 
   return (
     <OwnerShell title="QR Code">
-      {!ready ? null : !isAuthenticated ? (
-        <div className={`${CARD} max-w-md`}>
-          <p className="text-sm text-subtle">Sign in to view your counter QR code.</p>
-        </div>
-      ) : (
-        <div className="mx-auto flex max-w-[760px] animate-[jqIn_.3s_ease] flex-col gap-5 lg:flex-row lg:items-start">
+      <div className="mx-auto flex max-w-[760px] animate-[jqIn_.3s_ease] flex-col gap-5 lg:flex-row lg:items-start">
           <div className="rounded-[22px] border border-line bg-card p-[30px] text-center shadow-card lg:w-[340px]">
             {qr.isLoading ? (
               <div className="flex h-60 items-center justify-center text-subtle">Loading QR…</div>
@@ -64,7 +57,6 @@ export default function BusinessQrPage() {
             </div>
           </div>
         </div>
-      )}
     </OwnerShell>
   );
 }

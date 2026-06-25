@@ -19,6 +19,16 @@ const nextConfig = {
       { source: "/media/:path*", destination: `${apiTarget}/media/:path*` },
     ];
   },
+  async headers() {
+    return [
+      {
+        // M11: prevent the invite token (present in the URL on first load) from
+        // leaking to third-party origins via the Referer header.
+        source: "/business/activate",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

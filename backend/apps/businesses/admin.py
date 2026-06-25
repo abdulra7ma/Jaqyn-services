@@ -24,9 +24,12 @@ def disable_businesses(modeladmin, request, queryset):
 
 @admin.register(Business)
 class BusinessAdmin(admin.ModelAdmin):
-    list_display = ("name", "owner", "category", "area", "status", "onboarding_status", "verification_status", "created_at")
+    list_display = (
+        "name", "owner", "pending_owner_name", "pending_owner_email",
+        "category", "area", "status", "onboarding_status", "verification_status", "created_at",
+    )
     list_filter = ("status", "onboarding_status", "verification_status", "category", "area")
-    search_fields = ("name", "owner__phone", "phone", "address")
+    search_fields = ("name", "owner__phone", "phone", "address", "pending_owner_name", "pending_owner_email")
     actions = [approve_businesses, reject_businesses, disable_businesses]
 
 

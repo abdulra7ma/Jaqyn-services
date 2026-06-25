@@ -7,7 +7,6 @@ import { useBusinessRewards, useUpdateReward, type RewardProgramFull } from "@ja
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { OwnerShell } from "../../_components/OwnerShell";
-import { useAuth } from "../../../_lib/auth";
 
 const FIELD =
   "w-full rounded-xl border-[1.5px] border-line bg-card px-3 py-3 text-sm font-semibold text-ink outline-none transition focus:border-brand";
@@ -33,7 +32,6 @@ type Form = {
 };
 
 function EditInner() {
-  const { isAuthenticated, ready } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const id = params.get("id") ?? "";
@@ -107,13 +105,6 @@ function EditInner() {
     );
   }
 
-  if (ready && !isAuthenticated) {
-    return (
-      <OwnerShell title="Edit Loyalty Rules">
-        <div className="max-w-md rounded-[18px] border border-line bg-card p-5 text-sm text-subtle">Sign in to edit rules.</div>
-      </OwnerShell>
-    );
-  }
   if (rewards.isLoading) {
     return (
       <OwnerShell title="Edit Loyalty Rules">

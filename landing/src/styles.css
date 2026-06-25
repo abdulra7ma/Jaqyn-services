@@ -82,4 +82,7 @@ body { margin: 0; background: #FBF6EE; }
   .jq-dash { grid-template-columns: 1fr 1fr !important; }
   .jq-footer { grid-template-columns: 1fr !important; }
   .jq-qr-arrow { display: none !important; }
+  /* M12: reduce card padding on narrow screens; !important needed because
+     .jq-split has inline padding:48 which would otherwise override this rule. */
+  .jq-split { padding: 22px !important; }
 }

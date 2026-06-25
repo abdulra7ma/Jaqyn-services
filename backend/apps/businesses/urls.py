@@ -16,6 +16,9 @@ from apps.businesses.views import (
     BusinessLogoUploadView,
     BusinessMeView,
     BusinessRegisterView,
+    CatalogItemImageUploadView,
+    GalleryDetailView,
+    GalleryListCreateView,
 )
 from apps.qr.views import BusinessQRView, RegenerateApprovalCodeView
 
@@ -34,6 +37,9 @@ urlpatterns = [
     path("onboarding/submit/", OnboardingSubmitView.as_view(), name="business-onboarding-submit"),
     path("catalog-items/", CatalogItemListCreateView.as_view(), name="business-catalog-items"),
     path("catalog-items/<uuid:item_id>/", CatalogItemDetailView.as_view(), name="business-catalog-item"),
+    path("catalog-items/<uuid:item_id>/image/", CatalogItemImageUploadView.as_view(), name="business-catalog-item-image"),
+    path("gallery/", GalleryListCreateView.as_view(), name="business-gallery"),
+    path("gallery/<uuid:image_id>/", GalleryDetailView.as_view(), name="business-gallery-detail"),
     path("staff-invites/", StaffInviteListCreateView.as_view(), name="business-staff-invites"),
     path("staff-invites/<uuid:invite_id>/", StaffInviteDetailView.as_view(), name="business-staff-invite"),
 ]

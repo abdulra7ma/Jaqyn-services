@@ -25,7 +25,6 @@ import { OwnerShell } from "../_components/OwnerShell";
 import { InitialTile } from "../../_components/kit";
 import { QueryBoundary } from "../../_components/QueryBoundary";
 import { useErrMessage } from "../../_lib/useErrMessage";
-import { useAuth } from "../../_lib/auth";
 
 // Status → Badge tone (design colors: active=sage/ok, invited=amber/warn,
 // suspended=clay/danger).
@@ -58,17 +57,14 @@ function fmtWhen(iso: string | null, withTime = false): string {
 }
 
 export default function ManageStaffPage() {
-  const { isAuthenticated, ready } = useAuth();
-  const enabled = ready && isAuthenticated;
   const t = useT();
-  const team = useTeam(enabled);
+  const team = useTeam();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
   return (
     <OwnerShell title={t("biz.staff.title")}>
-      {!enabled ? null : (
-        <div className="max-w-[980px] animate-[jqIn_.3s_ease]">
+      <div className="max-w-[980px] animate-[jqIn_.3s_ease]">
           <div className="flex flex-wrap items-center justify-between gap-3.5">
             <p className="text-[13.5px] text-subtle">{t("biz.staff.subtitle")}</p>
             <button
@@ -99,7 +95,6 @@ export default function ManageStaffPage() {
           )}
           {inviteOpen && <InviteModal onClose={() => setInviteOpen(false)} />}
         </div>
-      )}
     </OwnerShell>
   );
 }

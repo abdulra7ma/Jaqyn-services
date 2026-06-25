@@ -74,6 +74,7 @@ export function adaptBusiness(raw: Raw): Business {
     rewards: (raw.rewards ?? []).map(adaptProgram),
     group_offers: raw.group_offers ?? [],
     catalog_sections: raw.catalog_sections ?? [],
+    gallery: raw.gallery ?? [],
   };
 }
 

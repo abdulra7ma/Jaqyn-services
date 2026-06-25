@@ -1,4 +1,5 @@
 import { useI18n } from '../i18n/I18nContext';
+import { APP_ROUTES } from '../config';
 
 export default function FinalCta() {
   const { content } = useI18n();
@@ -89,7 +90,7 @@ export default function FinalCta() {
             {cta.register}
           </a>
           <a
-            href="#deals"
+            href={APP_ROUTES.explore}
             className="jq-cta-trans"
             style={{
               padding: '17px 28px',

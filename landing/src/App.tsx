@@ -12,25 +12,50 @@ import ExampleCampaign from './components/ExampleCampaign';
 import DashboardPreview from './components/DashboardPreview';
 import Trust from './components/Trust';
 import Faq from './components/Faq';
-import LeadForm, { type FormFields, type FormState } from './components/LeadForm';
+import LeadForm, { type FormFields, type FormState, type ValidationError } from './components/LeadForm';
 import FinalCta from './components/FinalCta';
 import Footer from './components/Footer';
 import MobileCta from './components/MobileCta';
+import { submitLead } from './api';
 
-const EMPTY_FORM: FormFields = { name: '', owner: '', phone: '', cat: 'Cafe', area: '', ig: '' };
+const EMPTY_FORM: FormFields = { name: '', owner: '', phone: '', email: '', cat: 'Cafe', area: '', ig: '' };
+
+// Basic email format check — full RFC validation happens server-side.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function Landing() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [faq, setFaq] = useState(-1);
   const [form, setForm] = useState<FormFields>(EMPTY_FORM);
   const [formState, setFormState] = useState<FormState>('idle');
+  const [validationError, setValidationError] = useState<ValidationError>(null);
 
   useLandingEffects();
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (formState === 'submitting') return;
+
+    // Client-side required-field + email-format + phone-length validation.
+    // Strip any leading +996 / country code from phone before digit-count check,
+    // mirroring what submitLead does before sending to the API.
+    const phoneDigits = form.phone.replace(/^\+?996/, '').replace(/\D/g, '');
+    if (!form.name.trim() || !form.owner.trim() || !form.phone.trim() || !form.email.trim() || !form.area.trim() || phoneDigits.length < 9) {
+      setValidationError('fields');
+      return;
+    }
+    if (!EMAIL_RE.test(form.email)) {
+      setValidationError('email');
+      return;
+    }
+
+    setValidationError(null);
     setFormState('submitting');
-    setTimeout(() => setFormState('success'), 1000);
+    try {
+      await submitLead(form);
+      setFormState('success');
+    } catch {
+      setFormState('error');
+    }
   };
 
   return (
@@ -53,10 +78,12 @@ function Landing() {
       <LeadForm
         form={form}
         formState={formState}
+        validationError={validationError}
         onChange={(key, value) => setForm((f) => ({ ...f, [key]: value }))}
         onSubmit={handleSubmit}
         onReset={() => {
           setFormState('idle');
+          setValidationError(null);
           setForm(EMPTY_FORM);
         }}
       />

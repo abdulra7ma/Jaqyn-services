@@ -88,6 +88,16 @@ export type CatalogItem = {
   duration: string;
   sort_order: number;
   is_active: boolean;
+  // Uploaded via POST /api/business/catalog-items/{id}/image/; null when unset.
+  image_url: string | null;
+};
+
+// A single photo in the business gallery (cap 8, managed via /api/business/gallery/).
+export type GalleryImage = {
+  id: string;
+  image_url: string;
+  caption: string;
+  sort_order: number;
 };
 
 export type CatalogItemPayload = {

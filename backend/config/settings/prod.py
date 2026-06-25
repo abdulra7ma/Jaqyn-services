@@ -1,6 +1,16 @@
+from django.core.exceptions import ImproperlyConfigured
+
 from .base import *  # noqa: F403
 
 DEBUG = False
+
+# H2: DEV_LOGIN_OTP must never be set in production — it bypasses real OTP auth.
+if DEV_LOGIN_OTP:  # noqa: F405  (imported via base.py wildcard)
+    raise ImproperlyConfigured("DEV_LOGIN_OTP must be empty in production")
+
+# H3: Console email backend silently drops all mail — require a real SMTP backend.
+if EMAIL_BACKEND.endswith("console.EmailBackend"):  # noqa: F405
+    raise ImproperlyConfigured("EMAIL_BACKEND must be a real SMTP backend in production")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True

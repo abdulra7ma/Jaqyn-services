@@ -37,10 +37,10 @@ export default function Footer() {
             {c.t.footer.tagline}
           </p>
           <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-            <a href="#top" className="jq-social" style={socialStyle}>
+            <a href="https://instagram.com/jaqyn.kg" target="_blank" rel="noreferrer" className="jq-social" aria-label="Instagram" style={socialStyle}>
               IG
             </a>
-            <a href="#top" className="jq-social" style={socialStyle}>
+            <a href="https://t.me/jaqyn_kg" target="_blank" rel="noreferrer" className="jq-social" aria-label="Telegram" style={socialStyle}>
               TG
             </a>
           </div>
@@ -84,10 +84,10 @@ export default function Footer() {
       >
         <span>{c.t.footer.legal}</span>
         <span style={{ display: 'flex', gap: 18 }}>
-          <a href="#top" className="jq-legal" style={{ color: 'rgba(255,255,255,.45)', textDecoration: 'none' }}>
+          <a href="/privacy.html" className="jq-legal" style={{ color: 'rgba(255,255,255,.45)', textDecoration: 'none' }}>
             {c.t.footer.privacy}
           </a>
-          <a href="#top" className="jq-legal" style={{ color: 'rgba(255,255,255,.45)', textDecoration: 'none' }}>
+          <a href="/terms.html" className="jq-legal" style={{ color: 'rgba(255,255,255,.45)', textDecoration: 'none' }}>
             {c.t.footer.terms}
           </a>
         </span>

@@ -1,4 +1,5 @@
 import { useI18n } from '../i18n/I18nContext';
+import { APP_ROUTES } from '../config';
 
 export default function Hero() {
   const { content: c } = useI18n();
@@ -88,7 +89,7 @@ export default function Hero() {
           </p>
           <div data-reveal data-delay="180" style={{ display: 'flex', flexWrap: 'wrap', gap: 13, marginTop: 34 }}>
             <a
-              href="#deals"
+              href={APP_ROUTES.explore}
               className="jq-lift2"
               style={{
                 display: 'inline-flex',

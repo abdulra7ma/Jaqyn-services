@@ -27,6 +27,15 @@
       "port": 3200,
       "autoPort": false,
       "env": { "NEXT_PUBLIC_USE_MOCKS": "true" }
+    },
+    {
+      "name": "landing",
+      "cwd": "landing",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5173", "--strictPort"],
+      "port": 5173,
+      "autoPort": false,
+      "env": { "VITE_API_URL": "http://localhost:8000" }
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { useI18n } from '../i18n/I18nContext';
+import { APP_ROUTES } from '../config';
 import LanguageSwitcher from './LanguageSwitcher';
 
 interface Props {
@@ -82,7 +83,23 @@ export default function Header({ menuOpen, onToggleMenu, onCloseMenu }: Props) {
               <LanguageSwitcher />
             </span>
             <a
-              href="#deals"
+              href={APP_ROUTES.customerLogin}
+              className="jq-desk-cta jq-navlink"
+              style={{
+                display: 'none',
+                alignItems: 'center',
+                padding: '11px 13px',
+                borderRadius: 10,
+                font: "600 14.5px 'Hanken Grotesk', sans-serif",
+                color: 'var(--soft)',
+                textDecoration: 'none',
+                transition: 'color .2s',
+              }}
+            >
+              {c.t.header.login}
+            </a>
+            <a
+              href={APP_ROUTES.explore}
               className="jq-desk-cta jq-desk-cta--ghost"
               style={{
                 display: 'none',
@@ -199,7 +216,21 @@ export default function Header({ menuOpen, onToggleMenu, onCloseMenu }: Props) {
             >
               <LanguageSwitcher variant="menu" />
               <a
-                href="#deals"
+                href={APP_ROUTES.customerLogin}
+                onClick={onCloseMenu}
+                style={{
+                  textAlign: 'center',
+                  padding: 14,
+                  borderRadius: 13,
+                  font: "700 15px 'Hanken Grotesk', sans-serif",
+                  color: 'var(--soft)',
+                  textDecoration: 'none',
+                }}
+              >
+                {c.t.header.login}
+              </a>
+              <a
+                href={APP_ROUTES.explore}
                 onClick={onCloseMenu}
                 style={{
                   textAlign: 'center',

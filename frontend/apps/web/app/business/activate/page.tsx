@@ -3,7 +3,7 @@
 // Owner account activation from the invite email link (/business/activate?token=…).
 // Validates the token, sets a password, stores the JWTs, and continues into onboarding.
 
-import { businessApi, tokenStore, useActivateInvite, type InviteValidation } from "@jaqyn/api";
+import { ApiClientError, businessApi, tokenStore, useActivateInvite, type InviteValidation } from "@jaqyn/api";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
@@ -14,11 +14,16 @@ const LABEL = "text-xs font-bold text-subtle";
 function ActivateInner() {
   const params = useSearchParams();
   const router = useRouter();
-  const token = params.get("token") ?? "";
+  // Capture the token ONCE at mount. M11 strips it from the URL after validation;
+  // reading it live would then re-run the effect with an empty token and wrongly
+  // show "no token in link". Captured-in-state keeps validation stable.
+  const [token] = useState(() => params.get("token") ?? "");
   const activate = useActivateInvite();
 
   const [invite, setInvite] = useState<InviteValidation | null>(null);
   const [invalid, setInvalid] = useState<string | null>(null);
+  // M5: track in-flight validation so we don't flash a blank-email form
+  const [validating, setValidating] = useState(true);
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -29,16 +34,49 @@ function ActivateInner() {
     let active = true;
     if (!token) {
       setInvalid("No activation token in the link.");
+      setValidating(false);
       return;
     }
     businessApi
       .validateInvite(token)
-      .then((d) => active && setInvite(d))
-      .catch((e) => active && setInvalid(e?.message ?? "This invitation link is invalid or expired."));
+      .then((d) => {
+        if (!active) return;
+        setInvite(d);
+        // M11: token is captured in state; strip it from the URL so it isn't
+        // leaked in Referer headers or browser history.
+        router.replace("/business/activate", { scroll: false });
+      })
+      .catch((e: unknown) => {
+        if (!active) return;
+        // L1: distinguish invite error codes for actionable messages
+        if (e instanceof ApiClientError) {
+          if (e.code === "INVITE_USED") {
+            setInvalid(
+              "USED:This invite was already used — please log in instead.",
+            );
+          } else if (e.code === "INVITE_EXPIRED") {
+            setInvalid("EXPIRED:This invite has expired — ask the Jaqyn team to resend.");
+          } else {
+            setInvalid(
+              "GENERIC:" +
+                (e.message ?? "This invitation link is invalid or expired."),
+            );
+          }
+        } else {
+          setInvalid(
+            "GENERIC:" +
+              ((e as { message?: string })?.message ??
+                "This invitation link is invalid or expired."),
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setValidating(false);
+      });
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [token, router]);
 
   function submit() {
     setError(null);
@@ -58,16 +96,42 @@ function ActivateInner() {
     );
   }
 
+  // M5: show loading skeleton while validating and we don't yet know it's invalid
+  if (validating && !invalid) {
+    return (
+      <Shell>
+        <div className="rounded-[20px] border border-line bg-card p-6 shadow-card animate-pulse">
+          <div className="h-5 w-1/2 rounded bg-line" />
+          <div className="mt-4 h-10 w-full rounded-xl bg-line" />
+          <div className="mt-3.5 h-10 w-full rounded-xl bg-line" />
+          <div className="mt-5 h-[50px] w-full rounded-[14px] bg-line" />
+        </div>
+      </Shell>
+    );
+  }
+
   if (invalid) {
+    // L1: parse the prefixed code written by the catch block above
+    const colonIdx = invalid.indexOf(":");
+    const code = colonIdx !== -1 ? invalid.slice(0, colonIdx) : "GENERIC";
+    const msg = colonIdx !== -1 ? invalid.slice(colonIdx + 1) : invalid;
+
     return (
       <Shell>
         <div className="rounded-[20px] border border-line bg-card p-6 text-center shadow-card">
           <div className="text-3xl">⏳</div>
           <div className="mt-3 font-display text-lg font-bold text-ink">Activation link unavailable</div>
-          <p className="mt-2 text-sm text-subtle">{invalid}</p>
-          <p className="mt-4 text-[12.5px] text-subtle">
-            Ask the Jaqyn team to resend your invite, or contact <b className="text-ink">hello@jaqyn.kg</b>.
-          </p>
+          <p className="mt-2 text-sm text-subtle">{msg}</p>
+          {code === "USED" && (
+            <p className="mt-3 text-[12.5px] text-subtle">
+              <a href="/business" className="font-semibold text-brand underline">Go to business login</a>
+            </p>
+          )}
+          {code !== "USED" && (
+            <p className="mt-4 text-[12.5px] text-subtle">
+              Ask the Jaqyn team to resend your invite, or contact <b className="text-ink">hello@jaqyn.kg</b>.
+            </p>
+          )}
         </div>
       </Shell>
     );
@@ -85,63 +149,82 @@ function ActivateInner() {
         </div>
       </div>
 
-      <div className="mt-6 rounded-[20px] border border-line bg-card p-6 shadow-card">
-        <label className="block">
-          <span className={LABEL}>Email</span>
-          <input value={invite?.email ?? ""} readOnly className={`${FIELD} mt-1.5 bg-[#F6F0E6]`} />
-        </label>
-        <label className="mt-3.5 block">
-          <span className={LABEL}>Full name</span>
-          <input
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="e.g. Nurlan Aliev"
-            className={`${FIELD} mt-1.5`}
-          />
-        </label>
-        <div className="mt-3.5 flex gap-3">
-          <label className="flex-1">
-            <span className={LABEL}>Password</span>
+      {/* H10: wrap inputs + submit in a real <form> so Enter key and assistive
+          technology treat this as a form, and submit is triggered by type="submit". */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <div className="mt-6 rounded-[20px] border border-line bg-card p-6 shadow-card">
+          <label className="block">
+            <span className={LABEL}>Email</span>
+            <input value={invite?.email ?? ""} readOnly className={`${FIELD} mt-1.5 bg-[#F6F0E6]`} />
+          </label>
+          <label className="mt-3.5 block">
+            <span className={LABEL}>Full name</span>
             <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="6+ characters"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="e.g. Nurlan Aliev"
               className={`${FIELD} mt-1.5`}
             />
           </label>
-          <label className="flex-1">
-            <span className={LABEL}>Confirm</span>
+          <div className="mt-3.5 flex gap-3">
+            <label className="flex-1">
+              <span className={LABEL}>Password</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="6+ characters"
+                className={`${FIELD} mt-1.5`}
+              />
+            </label>
+            <label className="flex-1">
+              <span className={LABEL}>Confirm</span>
+              <input
+                type="password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder="Repeat"
+                className={`${FIELD} mt-1.5`}
+              />
+            </label>
+          </div>
+          {/* B3: real checkbox for the terms agreement. The visible styled tick
+              span is kept but marked aria-hidden; the native checkbox is sr-only
+              so it is accessible to keyboard and screen readers. */}
+          <label className="mt-[18px] flex w-full cursor-pointer items-start gap-2.5 text-left">
             <input
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              placeholder="Repeat"
-              className={`${FIELD} mt-1.5`}
+              type="checkbox"
+              checked={agree}
+              onChange={(e) => setAgree(e.target.checked)}
+              className="sr-only"
             />
+            <span
+              aria-hidden="true"
+              className={`flex h-5 w-5 flex-none items-center justify-center rounded-[6px] border-[1.5px] text-xs font-bold text-brand-fg ${
+                agree ? "border-brand bg-brand" : "border-line bg-card"
+              }`}
+            >
+              {agree ? "✓" : ""}
+            </span>
+            <span className="text-[12.5px] leading-snug text-subtle">
+              I agree to the Jaqyn <b className="text-ink">Terms of Service</b> and <b className="text-ink">Privacy Policy</b>.
+            </span>
           </label>
-        </div>
-        <button onClick={() => setAgree(!agree)} className="mt-[18px] flex w-full items-start gap-2.5 text-left">
-          <span
-            className={`flex h-5 w-5 flex-none items-center justify-center rounded-[6px] border-[1.5px] text-xs font-bold text-brand-fg ${
-              agree ? "border-brand bg-brand" : "border-line bg-card"
-            }`}
+          {error && <p className="mt-3 text-[13px] font-semibold text-danger">{error}</p>}
+          <button
+            type="submit"
+            disabled={activate.isPending || !invite}
+            className="mt-5 w-full rounded-[14px] bg-brand py-[15px] text-[15px] font-bold text-brand-fg shadow-glow transition hover:brightness-105 disabled:opacity-60"
           >
-            {agree ? "✓" : ""}
-          </span>
-          <span className="text-[12.5px] leading-snug text-subtle">
-            I agree to the Jaqyn <b className="text-ink">Terms of Service</b> and <b className="text-ink">Privacy Policy</b>.
-          </span>
-        </button>
-        {error && <p className="mt-3 text-[13px] font-semibold text-danger">{error}</p>}
-        <button
-          onClick={submit}
-          disabled={activate.isPending || !invite}
-          className="mt-5 w-full rounded-[14px] bg-brand py-[15px] text-[15px] font-bold text-brand-fg shadow-glow transition hover:brightness-105 disabled:opacity-60"
-        >
-          {activate.isPending ? "Activating…" : "Activate & start setup"}
-        </button>
-      </div>
+            {activate.isPending ? "Activating…" : "Activate & start setup"}
+          </button>
+        </div>
+      </form>
 
       <div className="mt-4 flex items-center justify-between text-[12.5px] text-subtle">
         <span>{invite ? "Invitation valid" : "Validating invitation…"}</span>

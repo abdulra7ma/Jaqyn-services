@@ -99,7 +99,7 @@ def required_fields(business) -> list[dict]:
         {"label": "Description", "ok": bool((business.description or "").strip()), "step": 1},
         {"label": "Primary phone", "ok": bool((business.phone or "").strip()), "step": 1},
         {"label": "Address & map location", "ok": bool((business.address or "").strip()), "step": 1},
-        {"label": "Logo image", "ok": business.logo_set or bool(business.logo), "step": 1},
+        {"label": "Logo image", "ok": bool(business.logo), "step": 1},
         {"label": "Business type", "ok": bool(business.business_type), "step": 2},
         {"label": "Catalog (add at least one)", "ok": has_type_items, "step": 3},
     ]

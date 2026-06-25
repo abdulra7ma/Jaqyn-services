@@ -1,6 +1,7 @@
 from rest_framework import serializers
+from django.core.validators import RegexValidator
 
-from apps.businesses.models import Business, BusinessType, CatalogItem, StaffInvite
+from apps.businesses.models import Business, BusinessImage, BusinessType, CatalogItem, StaffInvite
 
 
 class BusinessTypeSerializer(serializers.ModelSerializer):
@@ -74,6 +75,11 @@ class BusinessSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "id",
             "business_code",
+            # logo_set / cover_set are set server-side by set_business_logo /
+            # set_business_cover (services.py). Clients must upload a real image via
+            # the dedicated upload endpoint — these flags cannot be faked via PATCH.
+            "logo_set",
+            "cover_set",
             "status",
             "onboarding_status",
             "verification_status",
@@ -115,6 +121,7 @@ class PublicBusinessSerializer(serializers.ModelSerializer):
     distance_km = serializers.SerializerMethodField()
     logo_url = serializers.SerializerMethodField()
     cover_url = serializers.SerializerMethodField()
+    gallery = serializers.SerializerMethodField()
 
     class Meta:
         model = Business
@@ -142,6 +149,7 @@ class PublicBusinessSerializer(serializers.ModelSerializer):
             "rewards",
             "group_offers",
             "catalog_sections",
+            "gallery",
             "distance_km",
         )
         read_only_fields = fields
@@ -194,9 +202,17 @@ class PublicBusinessSerializer(serializers.ModelSerializer):
                     "category": item.category,
                     "price": item.price,
                     "duration": item.duration,
+                    # Product photo: relative /media/... URL or None.
+                    "image_url": item.image.url if item.image else None,
                 }
             )
         return [{"title": title, "items": items} for title, items in sections.items()]
+
+    def get_gallery(self, obj):
+        """Return the ordered gallery images for the public business page."""
+        return BusinessImageSerializer(
+            obj.gallery_images.all(), many=True
+        ).data
 
     def get_distance_km(self, obj):
         distance = getattr(obj, "distance_km", None)
@@ -227,11 +243,55 @@ class BusinessImageUploadSerializer(serializers.Serializer):
     image = serializers.ImageField()
 
 
+class BusinessImageSerializer(serializers.ModelSerializer):
+    """Read-only shape for a single business gallery photo.
+
+    ``image_url`` is a relative ``/media/...`` URL (passes through the frontend
+    proxy). The frontend contract requires exactly: id, image_url, caption, sort_order.
+    """
+
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BusinessImage
+        fields = ("id", "image_url", "caption", "sort_order")
+        read_only_fields = fields
+
+    def get_image_url(self, obj: BusinessImage) -> str | None:
+        # Relative /media/... URL so it passes through the frontend Next.js proxy.
+        return obj.image.url if obj.image else None
+
+
+class GalleryUploadSerializer(serializers.Serializer):
+    """Shape validation for a gallery image upload — a single ``image`` file.
+
+    ``ImageField`` ensures the upload is a decodable image. Compression +
+    persistence is the service's concern; this serializer validates shape only.
+    """
+
+    image = serializers.ImageField()
+
+
 class CatalogItemSerializer(serializers.ModelSerializer):
+    """CatalogItem with an optional product photo URL.
+
+    ``image_url`` is a read-only SerializerMethodField that returns a relative
+    ``/media/...`` path when the item has an image, or ``None``. It is excluded
+    from writable fields so clients cannot set it via the catalog PATCH endpoint —
+    they must use the dedicated image-upload endpoint.
+    """
+
+    image_url = serializers.SerializerMethodField()
+
     class Meta:
         model = CatalogItem
-        fields = ("id", "module", "name", "category", "price", "duration", "sort_order", "is_active")
-        read_only_fields = ("id",)
+        fields = ("id", "module", "name", "category", "price", "duration", "sort_order", "is_active", "image_url")
+        read_only_fields = ("id", "image_url")
+
+    def get_image_url(self, obj: CatalogItem) -> str | None:
+        # Relative /media/... URL so it passes through the frontend proxy; None
+        # when no product image has been uploaded yet.
+        return obj.image.url if obj.image else None
 
 
 class StaffInviteSerializer(serializers.ModelSerializer):
@@ -261,3 +321,31 @@ class VerifyActionSerializer(serializers.Serializer):
 
 class RequestChangesSerializer(serializers.Serializer):
     note = serializers.CharField(required=False, allow_blank=True)
+
+
+class BusinessLeadSerializer(serializers.Serializer):
+    """Shape/format validation for a public landing-page lead submission.
+
+    Validates the incoming payload from the landing form. Business-rule mapping
+    (category normalisation, owner-less Business creation) lives in the service.
+    Fields: name, owner_name, email, phone are required; category, area, and
+    instagram_url are optional (the business can supply them during onboarding).
+    """
+
+    name = serializers.CharField(max_length=255)
+    owner_name = serializers.CharField(max_length=255)
+    email = serializers.EmailField()
+    # E.164-ish: optional leading +, then 7-15 digits only.
+    # Rejects compound values like '+996+996...' or alphabetic garbage at the API boundary.
+    phone = serializers.CharField(
+        max_length=32,
+        validators=[
+            RegexValidator(
+                r"^\+?\d{7,15}$",
+                message="Enter a valid phone number (7-15 digits, optional leading +).",
+            )
+        ],
+    )
+    category = serializers.CharField(max_length=32, required=False, allow_blank=True, default="")
+    area = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    instagram_url = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")

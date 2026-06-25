@@ -1,0 +1,11 @@
+Hi {{ owner_name }},
+
+You've been invited to set up {{ business_name }} on Jaqyn — a loyalty platform that helps your customers keep coming back.
+
+Click the link below to create your account and complete onboarding:
+
+{{ activation_url }}
+
+This link expires in {{ expires_days }} days. If you did not expect this invitation, you can ignore this email.
+
+— The Jaqyn Team

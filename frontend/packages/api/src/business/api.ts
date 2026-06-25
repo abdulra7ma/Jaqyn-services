@@ -29,6 +29,7 @@ import type {
   CatalogItem,
   CatalogItemPayload,
   Dashboard,
+  GalleryImage,
   GroupOfferFull,
   GroupOfferPayload,
   InviteValidation,
@@ -143,6 +144,58 @@ export const businessApi = {
   addCatalogItem: (payload: CatalogItemPayload) =>
     api.post<CatalogItem>("/api/business/catalog-items/", payload),
   removeCatalogItem: (id: string) => api.delete<unknown>(`/api/business/catalog-items/${id}/`),
+
+  // Multipart POST to attach an image to a catalog item (product/service/menu entry).
+  // Field name `image`; throttle scope `business_image`. Returns the updated item.
+  uploadCatalogItemImage: async (id: string, file: File): Promise<CatalogItem> => {
+    const form = new FormData();
+    form.append("image", file);
+    const access = tokenStore.getAccess();
+    const headers: Record<string, string> = {};
+    if (access) headers["Authorization"] = `Bearer ${access}`;
+    const baseUrl = API_URL.startsWith("http") ? API_URL : "";
+    const res = await fetch(`${baseUrl}/api/business/catalog-items/${id}/image/`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    const json = (await res.json()) as { success?: boolean; data?: CatalogItem };
+    if (!json || json.success === false || !json.data) {
+      throw new Error("Catalog item image upload failed");
+    }
+    return json.data;
+  },
+
+  // ---- business gallery (cap 8 photos, /api/business/gallery/) ----
+
+  // GET /api/business/gallery/ → { results: GalleryImage[] }
+  listGallery: (): Promise<GalleryImage[]> =>
+    api.get<Paginated<GalleryImage>>("/api/business/gallery/").then((d) => d.results),
+
+  // Multipart POST to add a gallery photo. Field name `image`; throttle scope
+  // `business_image`. 409 GALLERY_LIMIT_REACHED when the business already has 8.
+  uploadGalleryImage: async (file: File): Promise<GalleryImage> => {
+    const form = new FormData();
+    form.append("image", file);
+    const access = tokenStore.getAccess();
+    const headers: Record<string, string> = {};
+    if (access) headers["Authorization"] = `Bearer ${access}`;
+    const baseUrl = API_URL.startsWith("http") ? API_URL : "";
+    const res = await fetch(`${baseUrl}/api/business/gallery/`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    const json = (await res.json()) as { success?: boolean; data?: GalleryImage };
+    if (!json || json.success === false || !json.data) {
+      throw new Error("Gallery image upload failed");
+    }
+    return json.data;
+  },
+
+  // DELETE /api/business/gallery/{id}/ → success envelope (void).
+  deleteGalleryImage: (id: string): Promise<void> =>
+    api.delete<unknown>(`/api/business/gallery/${id}/`).then(() => undefined),
 
   listStaffInvites: () => api.get<StaffInviteList>("/api/business/staff-invites/"),
   addStaffInvite: (payload: StaffInvitePayload) =>

@@ -124,6 +124,11 @@ REST_FRAMEWORK = {
         # password reset, remove). Owner-only, low-frequency administrative
         # writes — bounded so credential resets can't be hammered.
         "staff_manage": "30/min",
+        # Public landing-page lead submissions (POST /api/businesses/register-lead/).
+        # No authentication is required, so the endpoint is open to the internet.
+        # 10/min per IP prevents a single source from flooding the admin inbox or
+        # creating junk Business rows.
+        "business_lead": "10/min",
     },
 }
 
@@ -196,6 +201,19 @@ CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower(
 # Public base URL of the customer web app. QR codes encode frontend URLs so a
 # phone camera opens the web landing page (not the raw JSON API endpoint).
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+
+# --- Email ---
+# Console backend is the safe default so non-docker local dev sees emails in
+# the terminal without requiring a running SMTP server. Set EMAIL_BACKEND to
+# django.core.mail.backends.smtp.EmailBackend + EMAIL_HOST=mailpit (port 1025)
+# in .env to get a clickable Mailpit UI instead.
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "1025"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "false").lower() == "true"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Jaqyn <noreply@jaqyn.local>")
 
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
 # Regex origins (dev): lets ephemeral tunnel hosts (e.g. *.trycloudflare.com) pass

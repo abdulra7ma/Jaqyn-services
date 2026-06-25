@@ -12,7 +12,6 @@ import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { OwnerShell } from "../../_components/OwnerShell";
 import { useErrMessage } from "../../../_lib/useErrMessage";
-import { useRequireAuth } from "../../../_lib/auth";
 import {
   CAMPAIGN_TYPES,
   REWARD_TYPES,
@@ -62,7 +61,6 @@ export default function NewCampaignPage() {
   const t = useT();
   const router = useRouter();
   const errMessage = useErrMessage();
-  const { isAuthenticated, ready } = useRequireAuth();
 
   const [stepIndex, setStepIndex] = useState(0);
   const [form, setForm] = useState<WizardForm>(WIZARD_DEFAULT);
@@ -115,8 +113,7 @@ export default function NewCampaignPage() {
 
   return (
     <OwnerShell title={t("cmp.biz.create")}>
-      {!ready || !isAuthenticated ? null : (
-        <div className="flex animate-[jqIn_.3s_ease] flex-col gap-6 lg:flex-row lg:items-start lg:gap-[26px]">
+      <div className="flex animate-[jqIn_.3s_ease] flex-col gap-6 lg:flex-row lg:items-start lg:gap-[26px]">
           {/* stepper */}
           <div className="flex-none lg:w-[200px]">
             <button
@@ -190,7 +187,6 @@ export default function NewCampaignPage() {
             </div>
           </div>
         </div>
-      )}
     </OwnerShell>
   );
 }

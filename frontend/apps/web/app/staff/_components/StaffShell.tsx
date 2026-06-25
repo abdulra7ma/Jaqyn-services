@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { InitialTile, UserAvatar } from "../../_components/kit";
+import { useRequireArea } from "../../_lib/auth";
 import { useStaffAuth } from "../_lib/staffAuth";
 import { STAFF_TABS, StaffNav } from "./StaffNav";
 
@@ -25,6 +26,9 @@ export function StaffShell({
 }) {
   const t = useT();
   const { staff } = useStaffAuth();
+  const { allowed } = useRequireArea("staff");
+
+  if (!allowed) return null;
 
   // Login / chrome-less screens: minimal header only, no nav.
   if (!showNav) {

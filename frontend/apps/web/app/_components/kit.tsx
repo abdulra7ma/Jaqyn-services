@@ -2,7 +2,7 @@
 
 import { cn } from "@jaqyn/ui";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { User } from "@jaqyn/api";
 
 // Shared visual vocabulary from Jaqyn.dc.html (warm terracotta/cream).
@@ -83,8 +83,9 @@ export function InitialTile({
   variant?: "cream" | "gradient";
   image?: string | null;
 }) {
+  const [imgError, setImgError] = useState(false);
   const radius = Math.round(size * 0.3);
-  if (image) {
+  if (image && !imgError) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -94,6 +95,7 @@ export function InitialTile({
         height={size}
         className="flex-none object-cover"
         style={{ width: size, height: size, borderRadius: radius }}
+        onError={() => setImgError(true)}
       />
     );
   }

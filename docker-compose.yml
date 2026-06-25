@@ -14,6 +14,7 @@ services:
     depends_on:
       - db
       - redis
+      - mailpit
 
   worker:
     build:
@@ -28,6 +29,7 @@ services:
     depends_on:
       - db
       - redis
+      - mailpit
 
   beat:
     build:
@@ -42,6 +44,16 @@ services:
     depends_on:
       - db
       - redis
+      - mailpit
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"   # Web UI
+      - "1025:1025"   # SMTP
+    environment:
+      MP_SMTP_BIND_ADDR: 0.0.0.0:1025
+      MP_UI_BIND_ADDR: 0.0.0.0:8025
 
   frontend:
     build:

@@ -11,15 +11,24 @@ import {
   useBusinessMe,
   useBusinessTypes,
   useCatalog,
+  useDeleteGalleryImage,
+  useGallery,
   useOnboardingState,
   useRemoveCatalogItem,
   useRemoveStaffInvite,
   useSaveOnboarding,
   useStaffInvites,
   useSubmitOnboarding,
+  useUploadBusinessCover,
+  useUploadBusinessLogo,
+  useUploadCatalogItemImage,
+  useUploadGalleryImage,
   type BusinessType,
+  type CatalogItem,
+  type GalleryImage,
 } from "@jaqyn/api";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { LocationPicker } from "../../_components/LocationPicker";
 import { useRequireAuth } from "../../_lib/auth";
 import { MENU_STYLES, ROLE_HINT, STAFF_LIMIT, STAFF_ROLES, type StaffRole } from "./schema";
 
@@ -73,8 +82,6 @@ type Form = {
   currency: string;
   lat: string;
   lng: string;
-  logoSet: boolean;
-  coverSet: boolean;
   businessType: string;
   menuStyle: string;
 };
@@ -95,8 +102,6 @@ const EMPTY: Form = {
   currency: "KGS",
   lat: "",
   lng: "",
-  logoSet: false,
-  coverSet: false,
   businessType: "",
   menuStyle: "Card grid",
 };
@@ -117,6 +122,14 @@ export function OnboardingFlow() {
   const addStaff = useAddStaffInvite();
   const removeStaff = useRemoveStaffInvite();
   const submit = useSubmitOnboarding();
+  const uploadLogo = useUploadBusinessLogo();
+  const uploadCover = useUploadBusinessCover();
+  const uploadCatalogImage = useUploadCatalogItemImage();
+  const gallery = useGallery(enabled);
+  const uploadGalleryImage = useUploadGalleryImage();
+  const deleteGalleryImage = useDeleteGalleryImage();
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   const [stage, setStage] = useState(1);
   const [f, setF] = useState<Form>(EMPTY);
@@ -131,6 +144,11 @@ export function OnboardingFlow() {
   const hydrated = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Refetch completion state when the user reaches the review step so canSubmit is live.
+  useEffect(() => {
+    if (stage === 5) void state.refetch();
+  }, [stage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // hydrate the form buffer once the business loads
   useEffect(() => {
@@ -152,8 +170,6 @@ export function OnboardingFlow() {
       currency: b.default_currency ?? "KGS",
       lat: b.latitude ?? "",
       lng: b.longitude ?? "",
-      logoSet: !!b.logo_set,
-      coverSet: !!b.cover_set,
       businessType: b.business_type ?? "",
       menuStyle: b.menu_style ?? "Card grid",
     });
@@ -170,27 +186,28 @@ export function OnboardingFlow() {
   function persist(next: Form) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      save.mutate({
-        display_name: next.displayName,
-        legal_name: next.legalName,
-        description: next.desc,
-        phone: next.phone,
-        public_email: next.pubEmail,
-        website_url: next.website,
-        instagram_url: next.instagram,
-        address: next.address,
-        city: next.city,
-        country: next.country,
-        latitude: next.lat,
-        longitude: next.lng,
-        timezone: next.tz,
-        default_currency: next.currency,
-        business_type: next.businessType,
-        menu_style: next.menuStyle,
-        working_hours: { display: next.hours },
-        logo_set: next.logoSet,
-        cover_set: next.coverSet,
-      });
+      save.mutate(
+        {
+          display_name: next.displayName,
+          legal_name: next.legalName,
+          description: next.desc,
+          phone: next.phone,
+          public_email: next.pubEmail,
+          website_url: next.website,
+          instagram_url: next.instagram,
+          address: next.address,
+          city: next.city,
+          country: next.country,
+          latitude: next.lat,
+          longitude: next.lng,
+          timezone: next.tz,
+          default_currency: next.currency,
+          business_type: next.businessType,
+          menu_style: next.menuStyle,
+          working_hours: { display: next.hours },
+        },
+        { onError: () => showToast("Auto-save failed — check your connection") },
+      );
     }, 600);
   }
 
@@ -218,7 +235,7 @@ export function OnboardingFlow() {
   const staffUsed = staff.data?.used ?? staffList.length;
   const completion = state.data?.completion_score ?? 0;
   const missing = state.data?.missing_required_fields ?? [];
-  const canSubmit = missing.length === 0 && !!f.businessType && items.length > 0;
+  const canSubmit = missing.length === 0 && !!f.businessType && items.length > 0 && !state.isError;
   const status = state.data?.onboarding_status;
   const changeNote = state.data?.change_note ?? "";
 
@@ -227,6 +244,7 @@ export function OnboardingFlow() {
   }
   function addCatalogItem() {
     if (!draft.name.trim()) return showToast(`Enter a ${meta.noun} name`);
+    if (!draft.price.trim()) return showToast("Enter a price");
     addItem.mutate(
       {
         name: draft.name.trim(),
@@ -235,7 +253,10 @@ export function OnboardingFlow() {
         duration: draft.duration.trim(),
         module: catalogModule,
       },
-      { onSuccess: () => setDraft({ name: "", category: "", price: "", duration: "" }) },
+      {
+        onSuccess: () => setDraft({ name: "", category: "", price: "", duration: "" }),
+        onError: (e) => showToast((e as { message?: string })?.message ?? "Failed to add"),
+      },
     );
   }
   function addStaffInvite() {
@@ -244,7 +265,10 @@ export function OnboardingFlow() {
     if (!staffDraft.contact.trim()) return showToast("Enter an email or phone");
     addStaff.mutate(
       { full_name: staffDraft.name.trim(), contact: staffDraft.contact.trim(), role: staffDraft.role },
-      { onSuccess: () => setStaffDraft({ name: "", contact: "", role: "staff" }) },
+      {
+        onSuccess: () => setStaffDraft({ name: "", contact: "", role: "staff" }),
+        onError: (e) => showToast((e as { message?: string })?.message ?? "Failed to add"),
+      },
     );
   }
   function doSubmit() {
@@ -253,6 +277,17 @@ export function OnboardingFlow() {
       onSuccess: () => setStage(6),
       onError: (e: unknown) => showToast((e as { message?: string })?.message ?? "Complete required fields first"),
     });
+  }
+
+  function onLogoPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) uploadLogo.mutate(file);
+    e.target.value = "";
+  }
+  function onCoverPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) uploadCover.mutate(file);
+    e.target.value = "";
   }
 
   if (!ready || (enabled && (me.isLoading || state.isLoading))) {
@@ -264,6 +299,19 @@ export function OnboardingFlow() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FBF7F0] px-6 text-center text-subtle">
         No business found for this account. Activate an invite first.
+      </div>
+    );
+  }
+  if (enabled && state.isError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#FBF7F0] px-6 text-center">
+        <div className="text-[15px] font-semibold text-ink">Could not load onboarding state.</div>
+        <button
+          onClick={() => state.refetch()}
+          className="rounded-[13px] bg-brand px-5 py-3 text-[14px] font-bold text-brand-fg shadow-glow"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -334,8 +382,12 @@ export function OnboardingFlow() {
             })}
           </div>
           <div className="mt-auto flex items-center gap-2 rounded-xl bg-white/5 p-[11px_13px]">
-            <span className={`h-[7px] w-[7px] rounded-full ${save.isPending ? "bg-amber" : "bg-sage-deep"}`} />
-            <span className="text-[11.5px] text-[#C9BCA8]">{save.isPending ? "Saving…" : "Progress saved automatically"}</span>
+            <span
+              className={`h-[7px] w-[7px] rounded-full ${save.isPending ? "bg-amber" : save.isError ? "bg-[#C25E3C]" : "bg-sage-deep"}`}
+            />
+            <span className="text-[11.5px] text-[#C9BCA8]">
+              {save.isPending ? "Saving…" : save.isError ? "Save failed" : "Progress saved automatically"}
+            </span>
           </div>
         </aside>
 
@@ -368,8 +420,40 @@ export function OnboardingFlow() {
 
           <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-[30px] lg:py-6">
             <div className="mx-auto max-w-[680px]">
-              {stage === 1 && <StageIdentity f={f} on={on} set={set} />}
-              {stage === 2 && <StageType types={types.data ?? []} selected={f.businessType} onSelect={selectType} />}
+              {stage === 1 && (
+                <StageIdentity
+                  f={f}
+                  on={on}
+                  onLocationChange={(lat, lng, address) =>
+                    set({ lat: String(lat), lng: String(lng), ...(address ? { address } : {}) })
+                  }
+                  logoUrl={me.data?.logo_url ?? null}
+                  coverUrl={me.data?.cover_url ?? null}
+                  logoUploading={uploadLogo.isPending}
+                  coverUploading={uploadCover.isPending}
+                  logoInputRef={logoInputRef}
+                  coverInputRef={coverInputRef}
+                  onLogoPick={onLogoPick}
+                  onCoverPick={onCoverPick}
+                />
+              )}
+              {stage === 2 && (
+                types.isLoading ? (
+                  <div className="py-12 text-center text-[13.5px] text-subtle">Loading business types…</div>
+                ) : types.isError ? (
+                  <div className="flex flex-col items-center gap-4 py-12 text-center">
+                    <div className="text-[14px] font-semibold text-ink">Could not load business types.</div>
+                    <button
+                      onClick={() => types.refetch()}
+                      className="rounded-[13px] bg-brand px-5 py-3 text-[14px] font-bold text-brand-fg shadow-glow"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : (
+                  <StageType types={types.data ?? []} selected={f.businessType} onSelect={selectType} />
+                )
+              )}
               {stage === 3 && (
                 <StageSetup
                   meta={meta}
@@ -384,6 +468,20 @@ export function OnboardingFlow() {
                   onAdd={addCatalogItem}
                   onRemove={(id) => removeItem.mutate(id)}
                   adding={addItem.isPending}
+                  onUploadItemImage={(id, file) => uploadCatalogImage.mutate({ id, file })}
+                  uploadingItemImageId={uploadCatalogImage.isPending ? (uploadCatalogImage.variables?.id ?? null) : null}
+                  galleryImages={gallery.data ?? []}
+                  onUploadGalleryImages={(files) => {
+                    files.forEach((f) =>
+                      uploadGalleryImage.mutate(f, {
+                        onError: (e) =>
+                          showToast((e as { message?: string })?.message ?? "Gallery upload failed"),
+                      }),
+                    );
+                  }}
+                  onDeleteGalleryImage={(id) => deleteGalleryImage.mutate(id)}
+                  galleryUploading={uploadGalleryImage.isPending}
+                  showToast={showToast}
                 />
               )}
               {stage === 4 && (
@@ -407,6 +505,7 @@ export function OnboardingFlow() {
                   missing={missing}
                   canSubmit={canSubmit}
                   goStage={setStage}
+                  logoUploaded={!!me.data?.logo_url}
                 />
               )}
             </div>
@@ -421,7 +520,20 @@ export function OnboardingFlow() {
               <span />
             )}
             {stage < 5 ? (
-              <button onClick={() => setStage(stage + 1)} className="rounded-[14px] bg-brand px-6 py-3.5 text-[15px] font-bold text-brand-fg shadow-glow transition hover:brightness-105 sm:px-7">
+              <button
+                onClick={() => {
+                  if (stage === 1) {
+                    if (!f.displayName.trim()) return showToast("Enter a display name");
+                    if (!f.phone.trim()) return showToast("Enter a phone number");
+                    if (!f.address.trim()) return showToast("Enter an address");
+                    if (!f.desc.trim()) return showToast("Enter a description");
+                  }
+                  if (stage === 2 && !f.businessType) return showToast("Select a business type");
+                  if (stage === 3 && items.length === 0) return showToast(`Add at least one ${meta.noun}`);
+                  setStage(stage + 1);
+                }}
+                className="rounded-[14px] bg-brand px-6 py-3.5 text-[15px] font-bold text-brand-fg shadow-glow transition hover:brightness-105 sm:px-7"
+              >
                 Continue ›
               </button>
             ) : (
@@ -446,28 +558,63 @@ export function OnboardingFlow() {
       )}
 
       {confirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4" onClick={() => setConfirmOpen(false)}>
-          <div className="w-full max-w-[400px] rounded-[20px] bg-card p-6 shadow-card" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-display text-xl font-bold text-ink">Submit for verification?</h3>
-            <p className="mt-2 text-sm leading-relaxed text-subtle">
-              We’ll review your profile and email you once it’s verified. You can keep editing until then.
-            </p>
-            <div className="mt-5 flex gap-3">
-              <button onClick={() => setConfirmOpen(false)} className="flex-1 rounded-xl border-[1.5px] border-line bg-card py-3 text-sm font-semibold text-ink">
-                Keep editing
-              </button>
-              <button onClick={doSubmit} className="flex-1 rounded-xl bg-brand py-3 text-sm font-bold text-brand-fg shadow-glow">
-                Submit
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmModal
+          isPending={submit.isPending}
+          onClose={() => setConfirmOpen(false)}
+          onSubmit={doSubmit}
+        />
       )}
     </div>
   );
 }
 
 /* --------------------------------------------------------------- stage cards */
+
+function ConfirmModal({ isPending, onClose, onSubmit }: { isPending: boolean; onClose: () => void; onSubmit: () => void }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    panelRef.current?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
+      onClick={onClose}
+      aria-hidden="true"
+    >
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-modal-title"
+        tabIndex={-1}
+        className="w-full max-w-[400px] rounded-[20px] bg-card p-6 shadow-card outline-none"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.key === "Escape" && onClose()}
+      >
+        <h3 id="confirm-modal-title" className="font-display text-xl font-bold text-ink">Submit for verification?</h3>
+        <p className="mt-2 text-sm leading-relaxed text-subtle">
+          We'll review your profile and email you once it's verified. You can keep editing until then.
+        </p>
+        <div className="mt-5 flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded-xl border-[1.5px] border-line bg-card py-3 text-sm font-semibold text-ink">
+            Keep editing
+          </button>
+          <button onClick={onSubmit} disabled={isPending} className="flex-1 rounded-xl bg-brand py-3 text-sm font-bold text-brand-fg shadow-glow disabled:opacity-60">
+            {isPending ? "Submitting…" : "Submit"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
   return (
@@ -483,29 +630,49 @@ type FormShape = Form;
 function StageIdentity({
   f,
   on,
-  set,
+  onLocationChange,
+  logoUrl,
+  coverUrl,
+  logoUploading,
+  coverUploading,
+  logoInputRef,
+  coverInputRef,
+  onLogoPick,
+  onCoverPick,
 }: {
   f: FormShape;
   on: (k: keyof FormShape) => (e: { target: { value: string } }) => void;
-  set: (p: Partial<FormShape>) => void;
+  onLocationChange: (lat: number, lng: number, address?: string) => void;
+  logoUrl: string | null;
+  coverUrl: string | null;
+  logoUploading: boolean;
+  coverUploading: boolean;
+  logoInputRef: React.RefObject<HTMLInputElement>;
+  coverInputRef: React.RefObject<HTMLInputElement>;
+  onLogoPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onCoverPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
     <div className="flex animate-[jqIn_.3s_ease] flex-col gap-4">
       <div className={CARD}>
         <div className="font-display text-[15px] font-bold text-ink">Brand</div>
-        <div className="mt-[3px] text-[12.5px] text-subtle">Click a tile to attach an image.</div>
+        <div className="mt-[3px] text-[12.5px] text-subtle">Click a tile to upload an image.</div>
         <div className="mt-3.5 flex gap-3.5">
+          {/* Logo tile */}
+          <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={onLogoPick} />
           <button
-            onClick={() => set({ logoSet: !f.logoSet })}
-            className={`flex h-24 w-24 flex-none flex-col items-center justify-center gap-1.5 rounded-2xl ${
-              f.logoSet ? "border-[1.5px] border-brand bg-brand-muted" : "border-[1.5px] border-dashed border-line bg-cream"
+            type="button"
+            onClick={() => logoInputRef.current?.click()}
+            disabled={logoUploading}
+            className={`flex h-24 w-24 flex-none flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl disabled:opacity-60 ${
+              logoUrl ? "border-[1.5px] border-brand bg-brand-muted" : "border-[1.5px] border-dashed border-line bg-cream"
             }`}
           >
-            {f.logoSet ? (
-              <>
-                <span className="text-[26px]">☕</span>
-                <span className="font-mono text-[10px] font-semibold text-brand">logo.png</span>
-              </>
+            {logoUploading ? (
+              <span className="text-[11px] font-semibold text-subtle">Uploading…</span>
+            ) : logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="Business logo" className="h-full w-full object-cover" />
             ) : (
               <>
                 <span className="text-xl text-[#C7B193]">＋</span>
@@ -513,18 +680,20 @@ function StageIdentity({
               </>
             )}
           </button>
+          {/* Cover tile */}
+          <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={onCoverPick} />
           <button
-            onClick={() => set({ coverSet: !f.coverSet })}
-            className={`flex h-24 flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl ${
-              f.coverSet ? "border-[1.5px] border-brand bg-brand-muted" : "border-[1.5px] border-dashed border-line bg-cream"
+            type="button"
+            onClick={() => coverInputRef.current?.click()}
+            disabled={coverUploading}
+            className={`flex h-24 flex-1 flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl disabled:opacity-60 ${
+              coverUrl ? "border-[1.5px] border-brand" : "border-[1.5px] border-dashed border-line bg-cream"
             }`}
+            style={coverUrl ? { background: `url(${coverUrl}) center/cover` } : undefined}
           >
-            {f.coverSet ? (
-              <>
-                <span className="text-[22px]">🖼</span>
-                <span className="font-mono text-[10px] font-semibold text-brand">cover · storefront.jpg</span>
-              </>
-            ) : (
+            {coverUploading ? (
+              <span className="text-[11px] font-semibold text-subtle">Uploading…</span>
+            ) : coverUrl ? null : (
               <>
                 <span className="text-xl text-[#C7B193]">＋</span>
                 <span className="text-[10.5px] font-semibold text-subtle">Cover image · optional</span>
@@ -571,15 +740,12 @@ function StageIdentity({
         <Field label="Address *" className="mt-3.5">
           <input value={f.address} onChange={on("address")} placeholder="Chuy Avenue 142, Bishkek" className={FIELD} />
         </Field>
-        <div
-          className="relative mt-3.5 h-[168px] overflow-hidden rounded-[14px] border border-line"
-          style={{
-            background:
-              "repeating-linear-gradient(0deg,#EBE2D2,#EBE2D2 1px,transparent 1px,transparent 26px),repeating-linear-gradient(90deg,#EBE2D2,#EBE2D2 1px,transparent 1px,transparent 26px),#F4ECDC",
-          }}
-        >
-          <div className="absolute left-[46%] top-[44%] h-6 w-6 border-[2.5px] border-white bg-brand shadow-glow" style={{ borderRadius: "50% 50% 50% 0", transform: "translate(-50%,-100%) rotate(-45deg)" }} />
-          <div className="absolute bottom-2.5 left-2.5 rounded-lg bg-white/90 px-2.5 py-1 font-mono text-[11px] font-semibold text-subtle">enter coordinates below</div>
+        <div className="mt-3.5">
+          <LocationPicker
+            lat={f.lat}
+            lng={f.lng}
+            onChange={onLocationChange}
+          />
         </div>
         <div className="mt-3.5 flex gap-3">
           <Field label="Latitude" className="flex-1">
@@ -641,7 +807,9 @@ function StageType({ types, selected, onSelect }: { types: BusinessType[]; selec
   );
 }
 
-type CatItem = { id: string; name: string; category: string; price: string; duration: string };
+// Max gallery images per business. Business rule: cap enforced server-side (409 GALLERY_LIMIT_REACHED);
+// client disables upload at the same threshold for immediate feedback.
+const GALLERY_LIMIT = 8;
 
 function StageSetup(props: {
   meta: { plural: string; noun: string };
@@ -649,15 +817,41 @@ function StageSetup(props: {
   showMenuStyle: boolean;
   menuStyle: string;
   onMenuStyle: (m: string) => void;
-  items: CatItem[];
+  items: CatalogItem[];
   draft: { name: string; category: string; price: string; duration: string };
   setDraft: (d: { name: string; category: string; price: string; duration: string }) => void;
   categories: string[];
   onAdd: () => void;
   onRemove: (id: string) => void;
   adding: boolean;
+  onUploadItemImage: (id: string, file: File) => void;
+  uploadingItemImageId: string | null;
+  galleryImages: GalleryImage[];
+  onUploadGalleryImages: (files: File[]) => void;
+  onDeleteGalleryImage: (id: string) => void;
+  galleryUploading: boolean;
+  showToast: (msg: string) => void;
 }) {
   const { meta, items, draft, setDraft, categories, showDuration, showMenuStyle } = props;
+  // One hidden file input per catalog item row; keyed by item id via refs map.
+  const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const galleryCount = props.galleryImages.length;
+  const galleryFull = galleryCount >= GALLERY_LIMIT;
+
+  function handleItemImagePick(item: CatalogItem, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) props.onUploadItemImage(item.id, file);
+    // Reset so the same file can be re-picked after a failed upload.
+    e.target.value = "";
+  }
+
+  function handleGalleryPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) props.onUploadGalleryImages(files);
+    e.target.value = "";
+  }
+
   return (
     <div className="flex animate-[jqIn_.3s_ease] flex-col gap-4">
       <div className="flex items-center gap-[11px] rounded-[14px] border border-[#D4E4D9] bg-[#EAF1EC] px-4 py-3">
@@ -726,21 +920,100 @@ function StageSetup(props: {
         {items.length === 0 ? (
           <div className="px-5 py-[34px] text-center text-[13.5px] text-subtle">No {meta.noun}s yet — add your first above.</div>
         ) : (
-          items.map((it) => (
-            <div key={it.id} className="flex items-center gap-3.5 border-b border-[#F4ECDF] px-5 py-3.5">
-              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-[10px] bg-[#F4ECDF] font-display text-sm font-bold text-brand">
-                {(it.name || "?").charAt(0).toUpperCase()}
+          items.map((it) => {
+            const isUploadingThis = props.uploadingItemImageId === it.id;
+            return (
+              <div key={it.id} className="flex items-center gap-3.5 border-b border-[#F4ECDF] px-5 py-3.5">
+                {/* Image thumb / upload button */}
+                <button
+                  type="button"
+                  onClick={() => itemInputRefs.current.get(it.id)?.click()}
+                  disabled={isUploadingThis}
+                  aria-label={it.image_url ? `Replace image for ${it.name}` : `Upload image for ${it.name}`}
+                  className={`relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-[10px] border disabled:opacity-60 ${
+                    it.image_url ? "border-brand bg-brand-muted" : "border-dashed border-line bg-[#F4ECDF]"
+                  }`}
+                >
+                  {isUploadingThis ? (
+                    <span className="text-[9px] font-bold text-subtle">…</span>
+                  ) : it.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={it.image_url} alt={it.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="font-display text-sm font-bold text-brand">
+                      {(it.name || "?").charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </button>
+                {/* Hidden file input for this item */}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  ref={(el) => {
+                    if (el) itemInputRefs.current.set(it.id, el);
+                    else itemInputRefs.current.delete(it.id);
+                  }}
+                  onChange={(e) => handleItemImagePick(it, e)}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-ink">{it.name}</div>
+                  <div className="mt-px text-xs text-subtle">{[it.category, it.duration, it.price].filter(Boolean).join("   ·   ")}</div>
+                </div>
+                <button onClick={() => props.onRemove(it.id)} aria-label={`Remove ${it.name}`} className="h-[30px] w-[30px] flex-none rounded-[9px] border border-line bg-card text-[15px] text-[#B0563A]">
+                  ×
+                </button>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-ink">{it.name}</div>
-                <div className="mt-px text-xs text-subtle">{[it.category, it.duration, it.price].filter(Boolean).join("   ·   ")}</div>
-              </div>
-              <button onClick={() => props.onRemove(it.id)} className="h-[30px] w-[30px] flex-none rounded-[9px] border border-line bg-card text-[15px] text-[#B0563A]">
-                ×
-              </button>
-            </div>
-          ))
+            );
+          })
         )}
+      </div>
+
+      {/* Gallery card */}
+      <div className={CARD}>
+        <div className="flex items-center justify-between">
+          <div className="font-display text-[15px] font-bold text-ink">Photos</div>
+          <span className="text-[12.5px] font-semibold text-subtle">{galleryCount}/{GALLERY_LIMIT}</span>
+        </div>
+        <div className="mt-[3px] text-[12.5px] text-subtle">Show customers what your space looks like.</div>
+
+        {props.galleryImages.length > 0 && (
+          <div className="mt-3.5 grid grid-cols-4 gap-2 sm:grid-cols-4">
+            {props.galleryImages.map((img) => (
+              <div key={img.id} className="group relative aspect-square overflow-hidden rounded-[10px] border border-line bg-[#F4ECDF]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.image_url} alt={img.caption || "Gallery photo"} className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => props.onDeleteGalleryImage(img.id)}
+                  aria-label="Delete photo"
+                  className="absolute right-1 top-1 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-ink/70 text-[12px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-3.5">
+          <input
+            ref={galleryInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleGalleryPick}
+          />
+          <button
+            type="button"
+            onClick={() => galleryInputRef.current?.click()}
+            disabled={galleryFull || props.galleryUploading}
+            className="rounded-xl border-[1.5px] border-dashed border-line bg-cream px-5 py-2.5 text-[13px] font-semibold text-subtle transition hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {props.galleryUploading ? "Uploading…" : galleryFull ? "Limit reached (8)" : "+ Add photos"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -814,7 +1087,7 @@ function StageStaff(props: {
                 </div>
                 <span className="text-xs font-bold text-subtle">{roleLabel}</span>
                 <span className="rounded-pill bg-[#FBEFD9] px-2.5 py-[3px] text-[11px] font-bold text-amber-deep">Pending</span>
-                <button onClick={() => props.onRemove(m.id)} className="h-[30px] w-[30px] flex-none rounded-[9px] border border-line bg-card text-[15px] text-[#B0563A]">
+                <button onClick={() => props.onRemove(m.id)} aria-label={`Remove ${m.full_name}`} className="h-[30px] w-[30px] flex-none rounded-[9px] border border-line bg-card text-[15px] text-[#B0563A]">
                   ×
                 </button>
               </div>
@@ -835,6 +1108,7 @@ function StageReview(props: {
   missing: { label: string; step: number }[];
   canSubmit: boolean;
   goStage: (n: number) => void;
+  logoUploaded: boolean;
 }) {
   const { f, meta, missing, canSubmit, goStage } = props;
   const cards = [
@@ -847,6 +1121,7 @@ function StageReview(props: {
         ["Phone", f.phone || "—"],
         ["Public email", f.pubEmail || "—"],
         ["Working hours", f.hours || "—"],
+        ["Logo", props.logoUploaded ? "Uploaded" : "Missing — required"],
       ],
     },
     {
@@ -870,8 +1145,13 @@ function StageReview(props: {
           <div className="font-display text-sm font-bold text-[#B0563A]">Required fields missing</div>
           <div className="mt-[11px] flex flex-wrap gap-2">
             {missing.map((m) => (
-              <button key={m.label} onClick={() => goStage(m.step)} className="inline-flex items-center gap-1.5 rounded-pill border border-[#EBC9BB] bg-card px-3 py-[7px] text-[12.5px] font-semibold text-[#B0563A]">
-                {m.label} ›
+              <button
+                key={m.label}
+                onClick={() => goStage(m.step)}
+                aria-label={`Fix ${m.label} (step ${m.step})`}
+                className="inline-flex items-center gap-1.5 rounded-pill border border-[#EBC9BB] bg-card px-3 py-[7px] text-[12.5px] font-semibold text-[#B0563A]"
+              >
+                {m.label} <span aria-hidden="true">›</span>
               </button>
             ))}
           </div>
@@ -887,14 +1167,14 @@ function StageReview(props: {
         <div key={sec.title} className={CARD}>
           <div className="flex items-center justify-between">
             <div className="font-display text-[15px] font-bold text-ink">{sec.title}</div>
-            <button onClick={() => goStage(sec.step)} className="text-[13px] font-bold text-brand">
+            <button onClick={() => goStage(sec.step)} aria-label={`Edit ${sec.title}`} className="text-[13px] font-bold text-brand">
               Edit
             </button>
           </div>
           <div className="mt-3.5 flex flex-col gap-[9px]">
             {sec.rows.map((r, i) => (
               <div key={i} className="flex gap-3.5 text-[13.5px]">
-                <span className="w-[140px] flex-none text-subtle">{r[0]}</span>
+                <span className="w-[100px] flex-none text-subtle sm:w-[140px]">{r[0]}</span>
                 <span className="flex-1 font-semibold text-ink">{r[1]}</span>
               </div>
             ))}

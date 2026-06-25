@@ -7,7 +7,6 @@
 import { useBusinessRewards, useCreateReward, useToggleReward, type RewardProgramFull } from "@jaqyn/api";
 import { useRouter } from "next/navigation";
 import { OwnerShell } from "../_components/OwnerShell";
-import { useAuth } from "../../_lib/auth";
 
 const CARD = "rounded-[18px] border border-line bg-card p-5";
 
@@ -28,7 +27,6 @@ const TEMPLATES = [
 ];
 
 export default function BusinessLoyaltyPage() {
-  const { isAuthenticated, ready } = useAuth();
   const router = useRouter();
   const rewards = useBusinessRewards();
   const create = useCreateReward();
@@ -42,10 +40,7 @@ export default function BusinessLoyaltyPage() {
 
   return (
     <OwnerShell title="Loyalty Program">
-      {!ready ? null : !isAuthenticated ? (
-        <SignIn />
-      ) : (
-        <div className="mx-auto flex max-w-[760px] animate-[jqIn_.3s_ease] flex-col gap-7">
+      <div className="mx-auto flex max-w-[760px] animate-[jqIn_.3s_ease] flex-col gap-7">
           {active ? (
             <div className="rounded-[20px] border border-line bg-card p-6">
               <div className="flex items-start justify-between gap-4">
@@ -120,7 +115,6 @@ export default function BusinessLoyaltyPage() {
             {create.isError && <p className="mt-3 text-sm text-danger">Could not create program — try again.</p>}
           </div>
         </div>
-      )}
     </OwnerShell>
   );
 }
@@ -134,10 +128,3 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SignIn() {
-  return (
-    <div className={`${CARD} max-w-md`}>
-      <p className="text-sm text-subtle">Sign in to manage your loyalty program.</p>
-    </div>
-  );
-}

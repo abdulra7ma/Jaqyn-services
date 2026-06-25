@@ -19,6 +19,7 @@ ERROR_MESSAGES = {
     "RATE_LIMITED": "Too many attempts. Please try again later",
     "VALIDATION_ERROR": "Validation error",
     "INVALID_IMAGE": "The uploaded file is not a valid image",
+    "GALLERY_LIMIT_REACHED": "Gallery is full — a business may have at most 8 images",
     # --- Campaign rewards (apps.campaigns) ---
     "WRONG_BUSINESS": "This belongs to another business",
     "CAMPAIGN_NOT_FOUND": "The campaign does not exist",

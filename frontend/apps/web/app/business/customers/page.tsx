@@ -5,23 +5,16 @@
 
 import { useBusinessCustomers, type MaskedCustomer } from "@jaqyn/api";
 import { OwnerShell } from "../_components/OwnerShell";
-import { useAuth } from "../../_lib/auth";
 
 const CARD = "rounded-[18px] border border-line bg-card p-5";
 
 export default function BusinessCustomersPage() {
-  const { isAuthenticated, ready } = useAuth();
   const customers = useBusinessCustomers();
   const list = customers.data ?? [];
 
   return (
     <OwnerShell title="Customers">
-      {!ready ? null : !isAuthenticated ? (
-        <div className={`${CARD} max-w-md`}>
-          <p className="text-sm text-subtle">Sign in to view your customers.</p>
-        </div>
-      ) : (
-        <div className="mx-auto max-w-[900px] animate-[jqIn_.3s_ease]">
+      <div className="mx-auto max-w-[900px] animate-[jqIn_.3s_ease]">
           <div className="mb-4 flex items-center gap-2.5">
             <div className={`${CARD} flex-1 !py-4`}>
               <div className="text-[12.5px] font-semibold text-subtle">Total customers</div>
@@ -57,7 +50,6 @@ export default function BusinessCustomersPage() {
             )}
           </div>
         </div>
-      )}
     </OwnerShell>
   );
 }

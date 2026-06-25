@@ -9,7 +9,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useBusinessMe, useMe } from "@jaqyn/api";
 import { UserAvatar } from "../../_components/kit";
-import { useAuth } from "../../_lib/auth";
+import { useAuth, useRequireArea } from "../../_lib/auth";
 
 type NavItem = { label: string; icon: string; href: string };
 type NavGroup = { label: string | null; items: NavItem[] };
@@ -149,9 +149,13 @@ function OwnerCard() {
 }
 
 export function OwnerShell({ title, children }: { title: string; children: ReactNode }) {
+  const { allowed } = useRequireArea("business");
   const pathname = usePathname();
   const [drawer, setDrawer] = useState(false);
   const biz = useBusinessMe();
+
+  if (!allowed) return null;
+
   const bizName = biz.data?.name || BIZ.name;
   const bizMeta = [biz.data?.category || BIZ.cat, biz.data?.area || BIZ.area]
     .filter(Boolean)

@@ -63,6 +63,12 @@ class Business(TimeStampedModel):
         PUBLISHED = "published", "Published"
         UNPUBLISHED = "unpublished", "Unpublished"
 
+    # Prospective owner captured by the public landing lead form, before an owner
+    # account exists. Consumed once at admin-approval to mint the owner invite; null
+    # for in-app registrations (which already have an owner).
+    pending_owner_name = models.CharField(max_length=255, blank=True)
+    pending_owner_email = models.EmailField(blank=True, null=True)
+
     # Owner is nullable: a draft business exists between admin-accept and owner activation.
     owner = models.OneToOneField(
         "accounts.User", on_delete=models.PROTECT, related_name="owned_business", null=True, blank=True
@@ -139,12 +145,40 @@ class CatalogItem(TimeStampedModel):
     duration = models.CharField(max_length=64, blank=True)
     sort_order = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    # Optional product/service photo. Nullable so existing items are unaffected.
+    # Compressed server-side to PRODUCT_MAX_DIM before storage (core.images).
+    image = models.ImageField(upload_to="business/catalog/", blank=True, null=True)
 
     class Meta:
         ordering = ("sort_order", "created_at")
 
     def __str__(self):
         return self.name
+
+
+class BusinessImage(TimeStampedModel):
+    """One photo in a business's public gallery.
+
+    A business may have at most GALLERY_LIMIT (8) gallery images; the service
+    layer enforces this cap and raises GALLERY_LIMIT_REACHED (409) when the
+    business is already at the ceiling. Images are compressed server-side to
+    GALLERY_MAX_DIM before storage. Ordering is by ``sort_order`` then insertion
+    time so the owner's manual ordering is respected.
+    """
+
+    business = models.ForeignKey(
+        Business, on_delete=models.CASCADE, related_name="gallery_images"
+    )
+    # Compressed server-side to GALLERY_MAX_DIM (core.images) before storage.
+    image = models.ImageField(upload_to="business/gallery/")
+    caption = models.CharField(max_length=255, blank=True)
+    sort_order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ("sort_order", "created_at")
+
+    def __str__(self) -> str:
+        return f"Gallery image {self.id} for {self.business_id}"
 
 
 class StaffInvite(TimeStampedModel):

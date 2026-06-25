@@ -3,23 +3,29 @@
 // Business public-profile editor (desktop + mobile), wired to /api/business/me/
 // and the catalog endpoints. Form fields persist on Save; the menu section is
 // backed by catalog items.
+// Wave-2 additions: LocationPicker (lat/lng), per-catalog-item image upload,
+// and a gallery manager (list/upload/delete, 8-photo cap with error toasts).
 
 import {
   useAddCatalogItem,
   useBusinessMe,
   useCatalog,
+  useDeleteGalleryImage,
+  useGallery,
   useOnboardingState,
   useRemoveCatalogItem,
   useSubmitOnboarding,
   useUpdateBusiness,
   useUploadBusinessCover,
   useUploadBusinessLogo,
+  useUploadCatalogItemImage,
+  useUploadGalleryImage,
 } from "@jaqyn/api";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useT } from "@jaqyn/i18n";
 import { OwnerShell } from "../_components/OwnerShell";
-import { useAuth } from "../../_lib/auth";
+import { LocationPicker } from "../../_components/LocationPicker";
 
 const FIELD =
   "w-full rounded-xl border-[1.5px] border-line bg-card px-3 py-3 text-sm font-semibold text-ink outline-none transition focus:border-brand";
@@ -39,20 +45,25 @@ const PRICE_LEVELS = ["c", "cc", "ccc"];
 const ACCENTS = ["#C25E3C", "#5E8B6A", "#E7A23E", "#6A6BC2", "#B0563A"];
 
 export default function BusinessProfilePage() {
-  const { isAuthenticated, ready } = useAuth();
-  const enabled = ready && isAuthenticated;
   const t = useT();
-  const me = useBusinessMe(enabled);
-  const onboarding = useOnboardingState(enabled);
-  const catalog = useCatalog(enabled);
+  const me = useBusinessMe();
+  const onboarding = useOnboardingState();
+  const catalog = useCatalog();
   const update = useUpdateBusiness();
   const submit = useSubmitOnboarding();
   const addItem = useAddCatalogItem();
   const removeItem = useRemoveCatalogItem();
   const uploadLogo = useUploadBusinessLogo();
   const uploadCover = useUploadBusinessCover();
+  const uploadCatalogImage = useUploadCatalogItemImage();
+  const gallery = useGallery();
+  const uploadGallery = useUploadGalleryImage();
+  const deleteGallery = useDeleteGalleryImage();
   const logoInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  // Per-item file input refs keyed by catalog item id.
+  const catalogInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // The fresh business (with logo_url / cover_url) comes from the me query, which
   // both upload mutations write back into the cache on success.
@@ -68,6 +79,47 @@ export default function BusinessProfilePage() {
     const file = e.target.files?.[0];
     if (file) uploadCover.mutate(file);
     e.target.value = "";
+  }
+
+  const galleryImages = gallery.data ?? [];
+  // Gallery is capped at 8 images. Source: spec images-gallery-location-plan.md §Contracts.
+  const GALLERY_LIMIT = 8;
+  const galleryFull = galleryImages.length >= GALLERY_LIMIT;
+
+  function onGalleryPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    const remaining = GALLERY_LIMIT - galleryImages.length;
+    const toUpload = files.slice(0, remaining);
+    toUpload.forEach((file) => {
+      uploadGallery.mutate(file, {
+        onError: (err: unknown) => {
+          const code = (err as { code?: string })?.code;
+          if (code === "GALLERY_LIMIT_REACHED") {
+            setSaved("Gallery is full (8 photos max)");
+          } else {
+            setSaved("Gallery upload failed");
+          }
+          setTimeout(() => setSaved(null), 2500);
+        },
+      });
+    });
+  }
+
+  function onCatalogImagePick(id: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    uploadCatalogImage.mutate(
+      { id, file },
+      {
+        onError: () => {
+          setSaved("Image upload failed");
+          setTimeout(() => setSaved(null), 2500);
+        },
+      },
+    );
   }
 
   const [name, setName] = useState("");
@@ -176,16 +228,6 @@ export default function BusinessProfilePage() {
         setTimeout(() => setSaved(null), 2800);
       },
     });
-  }
-
-  if (ready && !isAuthenticated) {
-    return (
-      <OwnerShell title="Business Profile">
-        <div className={`${CARD} max-w-md`}>
-          <p className="text-sm text-subtle">Sign in to edit your business profile.</p>
-        </div>
-      </OwnerShell>
-    );
   }
 
   return (
@@ -316,6 +358,22 @@ export default function BusinessProfilePage() {
                 <input value={lng} onChange={(e) => setLng(e.target.value)} placeholder="74.5698" className={`${FIELD} mt-1.5`} />
               </label>
             </div>
+            {/* Map-based location picker — updates lat/lng (and address when available)
+                immediately on search, marker drag, or map click. */}
+            <div className="mt-3.5">
+              <span className={LABEL}>Pick on map</span>
+              <div className="mt-1.5">
+                <LocationPicker
+                  lat={lat}
+                  lng={lng}
+                  onChange={(pickedLat, pickedLng, pickedAddress) => {
+                    setLat(String(pickedLat));
+                    setLng(String(pickedLng));
+                    if (pickedAddress) setAddress(pickedAddress);
+                  }}
+                />
+              </div>
+            </div>
           </div>
 
           <div className={CARD}>
@@ -358,7 +416,7 @@ export default function BusinessProfilePage() {
                     className="flex h-16 w-full items-center justify-center overflow-hidden rounded-[14px] border border-line bg-board/40"
                     style={
                       coverUrl
-                        ? { background: `url(${coverUrl}) center/cover` }
+                        ? { background: `url('${encodeURI(coverUrl)}') center/cover` }
                         : { background: `linear-gradient(150deg, ${accent}, ${shade(accent)})` }
                     }
                   />
@@ -446,6 +504,32 @@ export default function BusinessProfilePage() {
               ) : (
                 items.map((it) => (
                   <div key={it.id} className="flex items-center gap-3 rounded-xl border border-line bg-[#FBF7F0] px-3.5 py-3">
+                    {/* Item image thumbnail + upload control */}
+                    <div className="flex-none">
+                      <div
+                        className="flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-[10px] border border-line bg-card"
+                        onClick={() => catalogInputRefs.current[it.id]?.click()}
+                        title="Upload item image"
+                      >
+                        {it.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={it.image_url}
+                            alt={it.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-[18px] text-subtle">+</span>
+                        )}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        ref={(el) => { catalogInputRefs.current[it.id] = el; }}
+                        onChange={(e) => onCatalogImagePick(it.id, e)}
+                      />
+                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-[13.5px] font-semibold text-ink">{it.name}</div>
                       <div className="text-[11.5px] text-subtle">{it.category}</div>
@@ -458,6 +542,74 @@ export default function BusinessProfilePage() {
                 ))
               )}
             </div>
+          </div>
+
+          {/* Gallery manager — list / upload (multi) / delete. Cap: 8 photos. */}
+          <div className={CARD}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-display text-[15px] font-bold text-ink">Gallery</div>
+                <div className="mt-[3px] text-[12.5px] text-subtle">
+                  Photos shown on your customer profile.
+                </div>
+              </div>
+              <span className="rounded-pill bg-brand-muted px-2.5 py-1 text-[12.5px] font-bold text-brand">
+                {galleryImages.length}/{GALLERY_LIMIT}
+              </span>
+            </div>
+
+            {/* Gallery grid */}
+            {galleryImages.length > 0 && (
+              <div className="mt-3.5 grid grid-cols-4 gap-2">
+                {galleryImages.map((img) => (
+                  <div key={img.id} className="group relative aspect-square overflow-hidden rounded-[10px] border border-line bg-[#F4ECDF]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.image_url}
+                      alt={img.caption || "Gallery photo"}
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => deleteGallery.mutate(img.id)}
+                      disabled={deleteGallery.isPending}
+                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-ink/70 text-[11px] text-cream opacity-0 transition group-hover:opacity-100 disabled:opacity-40"
+                      aria-label="Delete photo"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {galleryImages.length === 0 && (
+              <div className="mt-3.5 rounded-xl border border-dashed border-line bg-[#FBF7F0] p-[18px] text-center text-[13px] text-subtle">
+                No gallery photos yet — upload up to 8.
+              </div>
+            )}
+
+            {/* Upload control — hidden at cap */}
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={onGalleryPick}
+            />
+            <button
+              type="button"
+              onClick={() => galleryInputRef.current?.click()}
+              disabled={galleryFull || uploadGallery.isPending}
+              className="mt-3.5 w-full rounded-xl border-[1.5px] border-line bg-card px-3.5 py-2.5 text-[13px] font-bold text-ink disabled:opacity-60"
+            >
+              {uploadGallery.isPending
+                ? "Uploading…"
+                : galleryFull
+                  ? "Gallery full (8/8)"
+                  : "Add photos"}
+            </button>
           </div>
 
           <div className="flex gap-[11px]">
@@ -489,7 +641,7 @@ export default function BusinessProfilePage() {
               className="flex h-[118px] items-end justify-center pb-3.5"
               style={
                 coverUrl
-                  ? { background: `url(${coverUrl}) center/cover` }
+                  ? { background: `url('${encodeURI(coverUrl)}') center/cover` }
                   : { background: `linear-gradient(150deg, ${accent}, ${shade(accent)})` }
               }
             >

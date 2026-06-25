@@ -2,6 +2,8 @@
 // the customer screens render). Kept in the API layer so screens stay decoupled
 // from transport + backend shape.
 
+import type { GalleryImage } from "../business/types";
+
 export type Role = "customer" | "business_owner" | "staff" | "admin";
 export type Language = "ru" | "en" | "ky";
 
@@ -83,6 +85,8 @@ export type Business = {
   rewards?: RewardProgram[];
   group_offers?: PublicGroupOffer[];
   catalog_sections?: CatalogSection[];
+  // Multi-photo gallery (cap 8). Present on the public business detail endpoint.
+  gallery?: GalleryImage[];
 };
 
 export type PublicCatalogItem = {
@@ -92,6 +96,8 @@ export type PublicCatalogItem = {
   category: string;
   price: string;
   duration: string;
+  // Populated when the business owner has uploaded a catalog item image.
+  image_url: string | null;
 };
 
 export type CatalogSection = {

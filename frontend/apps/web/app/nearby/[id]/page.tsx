@@ -5,6 +5,46 @@ import { useT } from "@jaqyn/i18n";
 import { Badge, Card } from "@jaqyn/ui";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
+
+/** Logo tile that falls back to the business glyph/initial when the image errors. */
+function BusinessLogo({ logoUrl, name, glyph }: { logoUrl: string | null; name: string; glyph?: string | null }) {
+  const [imgError, setImgError] = useState(false);
+  if (logoUrl && !imgError) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={logoUrl} alt={name} className="h-full w-full object-cover" onError={() => setImgError(true)} />
+    );
+  }
+  return <>{glyph || name.charAt(0).toUpperCase()}</>;
+}
+
+/** Catalog item thumbnail that falls back to a neutral placeholder when the image errors. */
+function CatalogItemThumb({ imageUrl, name }: { imageUrl: string | null; name: string }) {
+  const [imgError, setImgError] = useState(false);
+  if (imageUrl && !imgError) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={imageUrl} alt={name} className="h-full w-full object-cover" onError={() => setImgError(true)} />
+    );
+  }
+  return null;
+}
+
+/** Single gallery photo cell with object-cover + onError fallback. */
+function GalleryPhoto({ photo }: { photo: { id: string; image_url: string; caption: string } }) {
+  const [imgError, setImgError] = useState(false);
+  if (imgError) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={photo.image_url}
+      alt={photo.caption || "Gallery photo"}
+      className="aspect-square w-full rounded-xl object-cover"
+      onError={() => setImgError(true)}
+    />
+  );
+}
 import { CustomerShell } from "../../_components/CustomerShell";
 import { QueryBoundary } from "../../_components/QueryBoundary";
 import { ListGroup, ListRow } from "../../_components/kit";
@@ -27,7 +67,7 @@ export default function BusinessProfilePage() {
               <div className="overflow-hidden rounded-[22px] border border-line bg-card shadow-card">
                 <div
                   className="relative flex h-[180px] items-end justify-center p-5"
-                  style={{ background: b.cover_url ? `url(${b.cover_url}) center/cover` : `linear-gradient(150deg, ${accent}, ${shade(accent)})` }}
+                  style={{ background: b.cover_url ? `url('${encodeURI(b.cover_url)}') center/cover` : `linear-gradient(150deg, ${accent}, ${shade(accent)})` }}
                 >
                   {open !== null && (
                     <span className="absolute right-4 top-4 rounded-[12px] bg-card/95 px-3 py-1.5 text-xs font-bold text-ink shadow-card">
@@ -35,12 +75,7 @@ export default function BusinessProfilePage() {
                     </span>
                   )}
                   <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-[22px] bg-card text-[38px] shadow-card">
-                    {b.logo_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={b.logo_url} alt={b.name} className="h-full w-full object-cover" />
-                    ) : (
-                      b.glyph || b.name.charAt(0).toUpperCase()
-                    )}
+                    <BusinessLogo logoUrl={b.logo_url ?? null} name={b.name} glyph={b.glyph} />
                   </div>
                 </div>
                 <div className="p-5">
@@ -137,7 +172,12 @@ export default function BusinessProfilePage() {
                         <div className="flex flex-col gap-2">
                           {section.items.map((item) => (
                             <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl bg-[#FBF7F0] px-3.5 py-3">
-                              <div className="min-w-0">
+                              {item.image_url && (
+                                <div className="h-12 w-12 flex-none overflow-hidden rounded-lg bg-[#E8DDD0]">
+                                  <CatalogItemThumb imageUrl={item.image_url} name={item.name} />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-semibold text-ink">{item.name}</div>
                                 {item.duration && <div className="text-xs text-subtle">{item.duration}</div>}
                               </div>
@@ -146,6 +186,17 @@ export default function BusinessProfilePage() {
                           ))}
                         </div>
                       </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {b.gallery && b.gallery.length > 0 && (
+                <Card>
+                  <p className="font-display text-sm font-bold text-ink">Photos</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {b.gallery.map((photo) => (
+                      <GalleryPhoto key={photo.id} photo={photo} />
                     ))}
                   </div>
                 </Card>

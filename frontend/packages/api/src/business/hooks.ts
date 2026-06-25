@@ -38,6 +38,7 @@ export const bqk = {
   campaignVouchers: (id: string) => ["business", "campaigns", id, "vouchers"] as const,
   campaignAnalytics: (id: string) => ["business", "campaigns", id, "analytics"] as const,
   campaignSocialPost: (id: string) => ["business", "campaigns", id, "social-post"] as const,
+  gallery: ["business", "gallery"] as const,
 };
 
 export const useBusinessMe = (enabled = true) =>
@@ -412,6 +413,53 @@ export const useCancelCampaignVoucher = () => {
       // We don't know the campaign id here; invalidate all voucher lists.
       qc.invalidateQueries({ queryKey: ["business", "campaigns"], predicate: (q) => q.queryKey.includes("vouchers") });
       void vars;
+    },
+  });
+};
+
+// ---- catalog item image upload ----
+
+// Attach an image to a single catalog item (product/service/menu entry).
+// Invalidates the catalog list (image_url changed) and onboarding (completion score).
+export const useUploadCatalogItemImage = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) =>
+      businessApi.uploadCatalogItemImage(id, file),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: bqk.catalog });
+      qc.invalidateQueries({ queryKey: bqk.onboarding });
+    },
+  });
+};
+
+// ---- business gallery hooks ----
+
+// Fetch all gallery images for the authenticated business.
+export const useGallery = (enabled = true) =>
+  useQuery({ queryKey: bqk.gallery, queryFn: () => businessApi.listGallery(), enabled });
+
+// Upload a new gallery photo (multipart). Invalidates gallery, onboarding
+// (completion score), and the business `me` cache (public profile may embed gallery).
+export const useUploadGalleryImage = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => businessApi.uploadGalleryImage(file),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: bqk.gallery });
+      qc.invalidateQueries({ queryKey: bqk.onboarding });
+      qc.invalidateQueries({ queryKey: bqk.me });
+    },
+  });
+};
+
+// Delete a gallery photo by id. Invalidates the gallery list.
+export const useDeleteGalleryImage = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => businessApi.deleteGalleryImage(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: bqk.gallery });
     },
   });
 };

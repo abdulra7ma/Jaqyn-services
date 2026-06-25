@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { ACCENT, ACCENT_DEEP, avatar, smallAvatar, iconTile } from '../theme';
+import { APP_ROUTES } from '../config';
 import type { Dict } from './translations';
 
 // ===== element shapes consumed by components =====
@@ -108,12 +109,14 @@ const GROUP_TAG_STYLES: CSSProperties[] = [
 const CATEGORY_VALUES = ['Cafe', 'Restaurant', 'Salon', 'Barbershop', 'Bakery', 'Boutique', 'Gym', 'Other'];
 
 const CONTACT_LINKS: NavLink[] = [
-  { label: 'Instagram', href: '#top' },
-  { label: 'Telegram', href: '#top' },
-  { label: 'hello@jaqyn.kg', href: '#top' },
+  { label: 'Instagram', href: 'https://instagram.com/jaqyn.kg' },
+  { label: 'Telegram', href: 'https://t.me/jaqyn_kg' },
+  { label: 'hello@jaqyn.kg', href: 'mailto:hello@jaqyn.kg' },
 ];
 const PRODUCT_HREFS = ['#how', '#deals', '#qr', '#faq'];
-const BUSINESS_HREFS = ['#register', '#register', '#register'];
+// businessLinks = [Register business, Dashboard, Join the pilot].
+// Dashboard points at the live business login; the other two open the lead form.
+const BUSINESS_HREFS = ['#register', APP_ROUTES.businessLogin, '#register'];
 
 // ===== merge dict text with static structure =====
 export function buildContent(t: Dict): Content {

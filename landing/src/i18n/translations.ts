@@ -10,7 +10,7 @@ export interface FaqText { q: string; a: string; }
 
 export interface Dict {
   nav: string[]; // 5
-  header: { explore: string; register: string };
+  header: { explore: string; register: string; login: string };
   hero: {
     badge: string;
     title: { lead: string; highlight: string; trail: string };
@@ -44,10 +44,10 @@ export interface Dict {
   form: {
     eyebrow: string; heading: string; para: string; perks: string[];
     successTitle: string; successText: string; submitAnother: string; requestTitle: string;
-    labels: { business: string; owner: string; phone: string; category: string; area: string; instagram: string; optional: string };
-    placeholders: { business: string; owner: string; phone: string; area: string; instagram: string };
+    labels: { business: string; owner: string; phone: string; email: string; category: string; area: string; instagram: string; optional: string };
+    placeholders: { business: string; owner: string; phone: string; email: string; area: string; instagram: string };
     categories: string[]; // 8, indexed to categoryValues
-    submit: string; submitting: string;
+    submit: string; submitting: string; errorText: string; validationErrorText: string;
   };
   finalCta: { heading: string; para: string; register: string; explore: string };
   footer: {
@@ -59,13 +59,13 @@ export interface Dict {
 
 export const en: Dict = {
   nav: ['How it works', 'For customers', 'For businesses', 'Group deals', 'FAQ'],
-  header: { explore: 'Explore Deals', register: 'Register Business' },
+  header: { explore: 'Explore Deals', register: 'Register Business', login: 'Log in' },
   hero: {
     badge: 'Now piloting with local spots in Bishkek',
-    title: { lead: 'Unlock local rewards with your ', highlight: 'friends', trail: '.' },
+    title: { lead: 'Loyalty rewards from the local spots you ', highlight: 'love', trail: '.' },
     subtitle:
-      'Discover group deals and QR rewards from local cafes, salons, barbers, and shops. Create a group, invite friends, check in together, and unlock rewards — no app download required.',
-    ctaPrimary: 'Explore Group Deals →',
+      'Collect stamps, unlock vouchers, and join campaigns and group deals from local cafes, salons, barbers, and shops — all from one QR profile. No app download required.',
+    ctaPrimary: 'Explore nearby rewards →',
     ctaSecondary: 'Register Your Business',
     betterTitle: 'Better together.',
     betterSub: 'Rewards unlock when your group shows up.',
@@ -85,20 +85,20 @@ export const en: Dict = {
     eyebrow: 'How it works',
     heading: 'Four steps to your first reward',
     steps: [
-      { title: 'Find a local offer', text: 'Browse group deals and rewards from nearby cafes, salons, barbers, and shops.' },
-      { title: 'Create or join a group', text: 'Pick a time, invite friends, and watch the group fill up in real time.' },
-      { title: 'Check in together', text: 'Visit the business and verify your group by QR code or staff confirmation.' },
-      { title: 'Unlock the reward', text: 'Once the group is complete, the reward becomes available instantly.' },
+      { title: 'Find a local spot', text: 'Discover nearby cafes, salons, barbers, and shops and the rewards they offer.' },
+      { title: 'Show your QR', text: 'Staff scan your personal QR on each visit — no codes to type, no app to install.' },
+      { title: 'Collect progress', text: 'Earn stamps and progress toward rewards, campaigns, and group deals.' },
+      { title: 'Unlock & redeem', text: 'Hit the goal and a voucher lands in your wallet, ready to redeem.' },
     ],
   },
   customers: {
     eyebrow: 'For customers',
-    heading: 'Rewards are better when you unlock them together',
+    heading: 'Everything you earn, in one rewards wallet',
     benefits: [
-      { title: 'Group deals', text: 'Create a group, invite friends, and unlock offers together.' },
-      { title: 'Local discovery', text: 'Find nearby cafes, restaurants, salons, barbers, and shops.' },
-      { title: 'One QR profile', text: 'Collect rewards without downloading a separate app for every place.' },
-      { title: 'Real-time progress', text: 'See how many friends joined and how close you are to the reward.' },
+      { title: 'Rewards wallet', text: 'Collect stamps and vouchers across local spots and redeem them in a tap.' },
+      { title: 'Campaigns & group deals', text: 'Join visit, time-window, and group campaigns to earn even more.' },
+      { title: 'Local discovery', text: 'Find nearby cafes, restaurants, salons, barbers, and shops on the map.' },
+      { title: 'One QR profile', text: 'Collect everywhere without a separate app for each place.' },
     ],
     nearby: 'Nearby deals',
     find: 'Find a group deal',
@@ -110,14 +110,14 @@ export const en: Dict = {
   },
   business: {
     eyebrow: 'For businesses',
-    heading: 'Bring groups during slow hours',
+    heading: 'Loyalty, campaigns, and reports in one dashboard',
     para:
-      'Create offers that reward customers only when they arrive together. Set the group size, time window, reward, and daily limit from one simple dashboard — no custom app required.',
+      'Run stamp cards and voucher rewards, launch visit, time-window, and group campaigns, and see what actually brings customers back — all from one simple dashboard. No custom app required.',
     benefits: [
-      { title: 'Fill slow hours', text: 'Create offers valid only during selected days and time windows.' },
-      { title: 'Groups, not clicks', text: 'Customers invite friends and arrive together to unlock rewards.' },
-      { title: 'No custom app', text: 'Use QR codes, staff codes, and a simple web dashboard.' },
-      { title: 'Track real activity', text: 'See scans, group completions, redemptions, and returning customers.' },
+      { title: 'Loyalty programs', text: 'Stamp, visit, and spend rewards that mint vouchers automatically.' },
+      { title: 'Campaigns & group deals', text: 'Visit, time-window, and group offers to fill your slow hours.' },
+      { title: 'No custom app', text: 'QR codes, a staff scan app, and a simple web dashboard.' },
+      { title: 'Reports that matter', text: 'Scans, returning customers, redemptions, retention, and staff performance.' },
     ],
     cta: 'Register Your Business →',
   },
@@ -137,9 +137,9 @@ export const en: Dict = {
     eyebrow: 'QR loyalty',
     heading: 'Simple QR rewards for every business',
     para:
-      'Customers scan the merchant QR after a purchase, enter the staff code, and collect reward progress. Run stamp cards, coupons, and group offers from one dashboard.',
-    bullets: ['Customer scans QR', 'Phone login', 'Staff approval code', 'Reward progress', 'Staff redemption', 'Business reports'],
-    steps: ['Scan QR', 'Enter staff code', 'Collect stamp', 'Unlock reward'],
+      'Customers show their personal QR; staff scan it to add a visit and apply rewards in one tap — no codes to type. Run stamp cards, vouchers, and campaigns from one dashboard.',
+    bullets: ['Show your QR', 'Staff scans it', 'Visit counted', 'Reward progress', 'Voucher unlocked', 'Business reports'],
+    steps: ['Show your QR', 'Staff scans', 'Collect stamp', 'Unlock reward'],
   },
   example: {
     eyebrow: 'Example campaign',
@@ -193,10 +193,10 @@ export const en: Dict = {
       'Designed for small and mid-sized businesses that want simple, measurable promotions — without building their own app.',
     cards: [
       'No app download for customers',
-      'Merchant-specific rewards',
-      'QR-based verification',
-      'Staff-friendly workflow',
-      'Designed for local campaigns',
+      'Stamp cards + voucher wallet',
+      'Visit, time-window & group campaigns',
+      'QR visit scan — no codes',
+      'Retention & staff reports',
     ],
   },
   faq: {
@@ -205,7 +205,7 @@ export const en: Dict = {
     items: [
       { q: 'What is this platform?', a: 'A local rewards platform where customers unlock deals by visiting participating businesses, collecting QR rewards, or forming groups with friends.' },
       { q: 'Do customers need to download an app?', a: 'For the MVP, no. Customers use a mobile web app after scanning a QR code — nothing to install.' },
-      { q: 'How do businesses verify customers?', a: 'Through QR codes, staff approval codes, and staff redemption screens.' },
+      { q: 'How do businesses verify customers?', a: 'Staff scan the customer’s personal QR to add a visit and redeem rewards — no codes to type.' },
       { q: 'Can rewards from one business be used at another?', a: 'No. Rewards are merchant-specific unless a special campaign says otherwise.' },
       { q: 'What types of businesses can use it?', a: 'Cafes, restaurants, salons, barbershops, bakeries, boutiques, gyms, and other local small businesses.' },
       { q: 'How do group deals work?', a: 'A business sets a group offer. Customers create or join a group, invite friends, check in together, and unlock the reward when the required number of people arrives.' },
@@ -226,11 +226,13 @@ export const en: Dict = {
     successText: "We'll contact you to set up your first QR reward.",
     submitAnother: 'Submit another business',
     requestTitle: 'Request access',
-    labels: { business: 'Business name', owner: 'Owner name', phone: 'Phone number', category: 'Category', area: 'Area in Bishkek', instagram: 'Instagram', optional: '· optional' },
-    placeholders: { business: 'Manas Coffee', owner: 'Aibek', phone: '700 123 456', area: 'e.g. Chuy Ave', instagram: '@yourbusiness' },
+    labels: { business: 'Business name', owner: 'Owner name', phone: 'Phone number', email: 'Email', category: 'Category', area: 'Area in Bishkek', instagram: 'Instagram', optional: '· optional' },
+    placeholders: { business: 'Manas Coffee', owner: 'Aibek', phone: '700 123 456', email: 'you@example.com', area: 'e.g. Chuy Ave', instagram: '@yourbusiness' },
     categories: ['Cafe', 'Restaurant', 'Salon', 'Barbershop', 'Bakery', 'Boutique', 'Gym', 'Other'],
     submit: 'Request Access',
     submitting: 'Sending…',
+    errorText: 'Something went wrong. Please try again.',
+    validationErrorText: 'Please fill in all required fields and enter a valid email and phone number.',
   },
   finalCta: {
     heading: 'Ready to bring people together around local rewards?',
@@ -253,13 +255,13 @@ export const en: Dict = {
 
 export const ru: Dict = {
   nav: ['Как это работает', 'Для клиентов', 'Для бизнеса', 'Групповые акции', 'Вопросы'],
-  header: { explore: 'Смотреть акции', register: 'Регистрация бизнеса' },
+  header: { explore: 'Смотреть акции', register: 'Регистрация бизнеса', login: 'Войти' },
   hero: {
     badge: 'Пилот с локальными заведениями в Бишкеке',
-    title: { lead: 'Открывайте локальные награды вместе с ', highlight: 'друзьями', trail: '.' },
+    title: { lead: 'Награды за лояльность от мест, которые вы ', highlight: 'любите', trail: '.' },
     subtitle:
-      'Откройте групповые предложения и QR-награды от местных кафе, салонов, барберов и магазинов. Создайте группу, пригласите друзей, отметьтесь вместе и получайте награды — без установки приложения.',
-    ctaPrimary: 'Смотреть групповые акции →',
+      'Копите штампы, открывайте ваучеры и участвуйте в кампаниях и групповых акциях местных кафе, салонов, барберов и магазинов — всё с одного QR-профиля. Без установки приложения.',
+    ctaPrimary: 'Смотреть награды рядом →',
     ctaSecondary: 'Зарегистрировать бизнес',
     betterTitle: 'Вместе лучше.',
     betterSub: 'Награды открываются, когда приходит вся группа.',
@@ -279,20 +281,20 @@ export const ru: Dict = {
     eyebrow: 'Как это работает',
     heading: 'Четыре шага до первой награды',
     steps: [
-      { title: 'Найдите местное предложение', text: 'Просматривайте групповые акции и награды ближайших кафе, салонов, барберов и магазинов.' },
-      { title: 'Создайте или вступите в группу', text: 'Выберите время, пригласите друзей и следите за наполнением группы в реальном времени.' },
-      { title: 'Отметьтесь вместе', text: 'Посетите заведение и подтвердите группу по QR-коду или у персонала.' },
-      { title: 'Получите награду', text: 'Как только группа собрана, награда становится доступна мгновенно.' },
+      { title: 'Найдите местное заведение', text: 'Находите ближайшие кафе, салоны, барберов и магазины и их награды.' },
+      { title: 'Покажите свой QR', text: 'Персонал сканирует ваш персональный QR при каждом визите — без кодов и без приложения.' },
+      { title: 'Копите прогресс', text: 'Зарабатывайте штампы и прогресс к наградам, кампаниям и групповым акциям.' },
+      { title: 'Откройте и потратьте', text: 'Достигните цели — и ваучер попадёт в кошелёк, готовый к использованию.' },
     ],
   },
   customers: {
     eyebrow: 'Для клиентов',
-    heading: 'Награды лучше, когда открываешь их вместе',
+    heading: 'Всё заработанное — в одном кошельке наград',
     benefits: [
-      { title: 'Групповые акции', text: 'Создайте группу, пригласите друзей и открывайте предложения вместе.' },
-      { title: 'Локальные открытия', text: 'Находите ближайшие кафе, рестораны, салоны, барберов и магазины.' },
-      { title: 'Один QR-профиль', text: 'Собирайте награды без отдельного приложения для каждого места.' },
-      { title: 'Прогресс в реальном времени', text: 'Смотрите, сколько друзей присоединилось и насколько вы близки к награде.' },
+      { title: 'Кошелёк наград', text: 'Копите штампы и ваучеры в местных заведениях и тратьте их в одно касание.' },
+      { title: 'Кампании и групповые акции', text: 'Участвуйте в визитных, временных и групповых кампаниях, чтобы зарабатывать больше.' },
+      { title: 'Локальные открытия', text: 'Находите ближайшие кафе, рестораны, салоны, барберов и магазины на карте.' },
+      { title: 'Один QR-профиль', text: 'Собирайте везде без отдельного приложения для каждого места.' },
     ],
     nearby: 'Акции рядом',
     find: 'Найти групповую акцию',
@@ -304,14 +306,14 @@ export const ru: Dict = {
   },
   business: {
     eyebrow: 'Для бизнеса',
-    heading: 'Приводите группы в часы затишья',
+    heading: 'Лояльность, кампании и отчёты в одной панели',
     para:
-      'Создавайте предложения, которые вознаграждают клиентов только когда они приходят вместе. Задайте размер группы, время, награду и дневной лимит в одной простой панели — без отдельного приложения.',
+      'Запускайте штамп-карты и ваучерные награды, создавайте визитные, временные и групповые кампании и видьте, что действительно возвращает клиентов — всё в одной простой панели. Без отдельного приложения.',
     benefits: [
-      { title: 'Заполняйте часы затишья', text: 'Создавайте предложения, действующие только в выбранные дни и часы.' },
-      { title: 'Группы, а не клики', text: 'Клиенты приглашают друзей и приходят вместе, чтобы открыть награды.' },
-      { title: 'Без своего приложения', text: 'Используйте QR-коды, коды персонала и простую веб-панель.' },
-      { title: 'Отслеживайте реальную активность', text: 'Смотрите сканирования, собранные группы, выдачи и возвраты клиентов.' },
+      { title: 'Программы лояльности', text: 'Награды за штампы, визиты и траты, которые автоматически создают ваучеры.' },
+      { title: 'Кампании и групповые акции', text: 'Визитные, временные и групповые предложения, чтобы заполнить часы затишья.' },
+      { title: 'Без своего приложения', text: 'QR-коды, приложение для персонала и простая веб-панель.' },
+      { title: 'Важные отчёты', text: 'Сканирования, возвраты клиентов, выдачи, удержание и работа персонала.' },
     ],
     cta: 'Зарегистрировать бизнес →',
   },
@@ -331,9 +333,9 @@ export const ru: Dict = {
     eyebrow: 'QR-лояльность',
     heading: 'Простые QR-награды для любого бизнеса',
     para:
-      'Клиенты сканируют QR заведения после покупки, вводят код персонала и копят прогресс награды. Управляйте штамп-картами, купонами и групповыми акциями из одной панели.',
-    bullets: ['Клиент сканирует QR', 'Вход по телефону', 'Код подтверждения персонала', 'Прогресс награды', 'Выдача персоналом', 'Отчёты для бизнеса'],
-    steps: ['Сканировать QR', 'Ввести код персонала', 'Получить штамп', 'Открыть награду'],
+      'Клиент показывает свой персональный QR, персонал сканирует его — визит и награда засчитываются в одно касание, без ввода кодов. Управляйте штамп-картами, ваучерами и кампаниями из одной панели.',
+    bullets: ['Покажите свой QR', 'Персонал сканирует', 'Визит засчитан', 'Прогресс награды', 'Ваучер открыт', 'Отчёты для бизнеса'],
+    steps: ['Покажите QR', 'Персонал сканирует', 'Получить штамп', 'Открыть награду'],
   },
   example: {
     eyebrow: 'Пример кампании',
@@ -387,10 +389,10 @@ export const ru: Dict = {
       'Разработано для малого и среднего бизнеса, которому нужны простые, измеримые акции — без создания своего приложения.',
     cards: [
       'Без скачивания приложения для клиентов',
-      'Награды для конкретного заведения',
-      'Проверка по QR-коду',
-      'Удобно для персонала',
-      'Создано для локальных кампаний',
+      'Штамп-карты и кошелёк ваучеров',
+      'Визитные, временные и групповые кампании',
+      'QR-скан визита — без кодов',
+      'Отчёты по удержанию и персоналу',
     ],
   },
   faq: {
@@ -399,7 +401,7 @@ export const ru: Dict = {
     items: [
       { q: 'Что это за платформа?', a: 'Платформа локальных наград, где клиенты открывают предложения, посещая заведения-участники, собирая QR-награды или формируя группы с друзьями.' },
       { q: 'Нужно ли клиентам скачивать приложение?', a: 'Для MVP — нет. Клиенты пользуются мобильным веб-приложением после сканирования QR-кода — ничего устанавливать не нужно.' },
-      { q: 'Как заведения проверяют клиентов?', a: 'С помощью QR-кодов, кодов подтверждения персонала и экранов выдачи.' },
+      { q: 'Как заведения проверяют клиентов?', a: 'Персонал сканирует персональный QR клиента, чтобы засчитать визит и выдать награду — без ввода кодов.' },
       { q: 'Можно ли использовать награды одного заведения в другом?', a: 'Нет. Награды привязаны к конкретному заведению, если специальная кампания не предусматривает иное.' },
       { q: 'Какие виды бизнеса могут использовать это?', a: 'Кафе, рестораны, салоны, барбершопы, пекарни, бутики, спортзалы и другой местный малый бизнес.' },
       { q: 'Как работают групповые акции?', a: 'Заведение создаёт групповое предложение. Клиенты создают группу или вступают в неё, приглашают друзей, отмечаются вместе и открывают награду, когда приходит нужное число людей.' },
@@ -420,11 +422,13 @@ export const ru: Dict = {
     successText: 'Мы свяжемся с вами, чтобы настроить первую QR-награду.',
     submitAnother: 'Отправить ещё один бизнес',
     requestTitle: 'Запросить доступ',
-    labels: { business: 'Название бизнеса', owner: 'Имя владельца', phone: 'Номер телефона', category: 'Категория', area: 'Район в Бишкеке', instagram: 'Instagram', optional: '· необязательно' },
-    placeholders: { business: 'Manas Coffee', owner: 'Айбек', phone: '700 123 456', area: 'напр. пр. Чуй', instagram: '@вашбизнес' },
+    labels: { business: 'Название бизнеса', owner: 'Имя владельца', phone: 'Номер телефона', email: 'Эл. почта', category: 'Категория', area: 'Район в Бишкеке', instagram: 'Instagram', optional: '· необязательно' },
+    placeholders: { business: 'Manas Coffee', owner: 'Айбек', phone: '700 123 456', email: 'you@example.com', area: 'напр. пр. Чуй', instagram: '@вашбизнес' },
     categories: ['Кафе', 'Ресторан', 'Салон', 'Барбершоп', 'Пекарня', 'Бутик', 'Спортзал', 'Другое'],
     submit: 'Запросить доступ',
     submitting: 'Отправка…',
+    errorText: 'Что-то пошло не так. Пожалуйста, попробуйте снова.',
+    validationErrorText: 'Пожалуйста, заполните все обязательные поля и введите корректный email и номер телефона.',
   },
   finalCta: {
     heading: 'Готовы объединять людей вокруг локальных наград?',
@@ -447,13 +451,13 @@ export const ru: Dict = {
 
 export const ky: Dict = {
   nav: ['Кантип иштейт', 'Кардарлар үчүн', 'Бизнес үчүн', 'Топтук сунуштар', 'Суроолор'],
-  header: { explore: 'Сунуштарды көрүү', register: 'Бизнести каттоо' },
+  header: { explore: 'Сунуштарды көрүү', register: 'Бизнести каттоо', login: 'Кирүү' },
   hero: {
     badge: 'Бишкектеги жергиликтүү жайлар менен пилот',
-    title: { lead: 'Жергиликтүү сыйлыктарды ', highlight: 'досторуңуз', trail: ' менен ачыңыз.' },
+    title: { lead: 'Сиз жактырган жергиликтүү жайлардын лоялдуулук ', highlight: 'сыйлыктары', trail: '.' },
     subtitle:
-      'Жергиликтүү кафе, салон, чач тарач жана дүкөндөрдөн топтук сунуштарды жана QR сыйлыктарын табыңыз. Топ түзүп, досторуңузду чакырып, чогуу келип, сыйлыктарды ачыңыз — тиркеме орнотуунун кереги жок.',
-    ctaPrimary: 'Топтук акцияларды көрүү →',
+      'Жергиликтүү кафе, салон, чач тарач жана дүкөндөрдөн штамп чогултуп, ваучер ачып, кампанияларга жана топтук акцияларга катышыңыз — баары бир QR профилден. Тиркеме орнотуунун кереги жок.',
+    ctaPrimary: 'Жакынкы сыйлыктарды көрүү →',
     ctaSecondary: 'Бизнесиңизди каттоо',
     betterTitle: 'Чогуу жакшы.',
     betterSub: 'Сыйлыктар топ толук келгенде ачылат.',
@@ -473,20 +477,20 @@ export const ky: Dict = {
     eyebrow: 'Кантип иштейт',
     heading: 'Биринчи сыйлыкка чейин төрт кадам',
     steps: [
-      { title: 'Жергиликтүү сунушту табыңыз', text: 'Жакынкы кафе, салон, чач тарач жана дүкөндөрдүн топтук акцияларын карап чыгыңыз.' },
-      { title: 'Топ түзүңүз же кошулуңуз', text: 'Убакыт тандап, досторуңузду чакырып, топтун толушун реалдуу убакытта көрүңүз.' },
-      { title: 'Чогуу белгиленип келиңиз', text: 'Жайга барып, тобуңузду QR код же кызматкер аркылуу ырастаңыз.' },
-      { title: 'Сыйлыкты ачыңыз', text: 'Топ толук болгондо, сыйлык дароо жеткиликтүү болот.' },
+      { title: 'Жергиликтүү жай табыңыз', text: 'Жакынкы кафе, салон, чач тарач жана дүкөндөрдү жана алардын сыйлыктарын табыңыз.' },
+      { title: 'QR кодуңузду көрсөтүңүз', text: 'Ар бир барууда кызматкер жеке QR кодуңузду скандайт — код киргизбей, тиркемесиз.' },
+      { title: 'Прогресс чогултуңуз', text: 'Штамп жана сыйлыктарга, кампанияларга, топтук акцияларга карай прогресс топтоңуз.' },
+      { title: 'Ачып, колдонуңуз', text: 'Максатка жетиңиз — ваучер капчыгыңызга түшүп, колдонууга даяр болот.' },
     ],
   },
   customers: {
     eyebrow: 'Кардарлар үчүн',
-    heading: 'Сыйлыктар чогуу ачканда жакшыраак',
+    heading: 'Чогулткандын баары бир сыйлык капчыгында',
     benefits: [
-      { title: 'Топтук акциялар', text: 'Топ түзүп, досторуңузду чакырып, сунуштарды чогуу ачыңыз.' },
-      { title: 'Жергиликтүү ачылыштар', text: 'Жакынкы кафе, ресторан, салон, чач тарач жана дүкөндөрдү табыңыз.' },
-      { title: 'Бирдиктүү QR профиль', text: 'Ар бир жай үчүн өзүнчө тиркеме орнотпой сыйлыктарды чогултуңуз.' },
-      { title: 'Реалдуу убакыттагы прогресс', text: 'Канча дос кошулганын жана сыйлыкка канча калганын көрүңүз.' },
+      { title: 'Сыйлык капчыгы', text: 'Жергиликтүү жайларда штамп жана ваучер чогултуп, бир тийүүдө колдонуңуз.' },
+      { title: 'Кампаниялар жана топтук акциялар', text: 'Көбүрөөк табуу үчүн баруу, убакыт жана топтук кампанияларга катышыңыз.' },
+      { title: 'Жергиликтүү ачылыштар', text: 'Жакынкы кафе, ресторан, салон, чач тарач жана дүкөндөрдү картадан табыңыз.' },
+      { title: 'Бирдиктүү QR профиль', text: 'Ар бир жайга өзүнчө тиркемесиз бардык жерден чогултуңуз.' },
     ],
     nearby: 'Жакынкы акциялар',
     find: 'Топтук акция табуу',
@@ -498,14 +502,14 @@ export const ky: Dict = {
   },
   business: {
     eyebrow: 'Бизнес үчүн',
-    heading: 'Бош сааттарда топторду алып келиңиз',
+    heading: 'Лоялдуулук, кампаниялар жана отчёттор бир панелде',
     para:
-      'Кардарлар чогуу келгенде гана сыйлык бере турган сунуштарды түзүңүз. Топтун көлөмүн, убакытты, сыйлыкты жана күндүк лимитти бир жөнөкөй панелден жөндөңүз — өзүнчө тиркеменин кереги жок.',
+      'Штамп-карталарды жана ваучер сыйлыктарын иштетиңиз, баруу, убакыт жана топтук кампанияларды баштаңыз жана кардарларды эмне кайтарарын көрүңүз — баары бир жөнөкөй панелде. Өзүнчө тиркеменин кереги жок.',
     benefits: [
-      { title: 'Бош сааттарды толтуруңуз', text: 'Тандалган күндөрдө жана сааттарда гана иштеген сунуштарды түзүңүз.' },
-      { title: 'Чыкылдатуу эмес, топтор', text: 'Кардарлар досторун чакырып, сыйлык ачуу үчүн чогуу келишет.' },
-      { title: 'Өзүнчө тиркеме жок', text: 'QR коддорду, кызматкер коддорун жана жөнөкөй веб-панелди колдонуңуз.' },
-      { title: 'Чыныгы аракетти көзөмөлдөңүз', text: 'Скандарды, толгон топторду, сыйлык берүүлөрдү жана кайтып келген кардарларды көрүңүз.' },
+      { title: 'Лоялдуулук программалары', text: 'Ваучерлерди автоматтык түрдө түзгөн штамп, баруу жана сарптоо сыйлыктары.' },
+      { title: 'Кампаниялар жана топтук акциялар', text: 'Бош сааттарды толтуруу үчүн баруу, убакыт жана топтук сунуштар.' },
+      { title: 'Өзүнчө тиркеме жок', text: 'QR коддор, кызматкерлер үчүн тиркеме жана жөнөкөй веб-панель.' },
+      { title: 'Маанилүү отчёттор', text: 'Скандар, кайтып келген кардарлар, берүүлөр, кармап туруу жана кызматкерлердин иши.' },
     ],
     cta: 'Бизнесиңизди каттоо →',
   },
@@ -525,9 +529,9 @@ export const ky: Dict = {
     eyebrow: 'QR лоялдуулук',
     heading: 'Ар бир бизнес үчүн жөнөкөй QR сыйлыктар',
     para:
-      'Кардарлар сатып алгандан кийин жайдын QR кодун скандап, кызматкер кодун киргизип, сыйлык прогрессин чогултушат. Штамп-карталарды, купондорду жана топтук акцияларды бир панелден башкарыңыз.',
-    bullets: ['Кардар QR скандайт', 'Телефон менен кирүү', 'Кызматкердин ырастоо коду', 'Сыйлык прогресси', 'Кызматкердин берүүсү', 'Бизнес отчёттору'],
-    steps: ['QR скандоо', 'Кызматкер кодун киргизүү', 'Штамп алуу', 'Сыйлык ачуу'],
+      'Кардар өзүнүн жеке QR кодун көрсөтөт, кызматкер аны скандайт — баруу жана сыйлык бир тийүүдө эсептелет, код киргизүүнүн кереги жок. Штамп-карталарды, ваучерлерди жана кампанияларды бир панелден башкарыңыз.',
+    bullets: ['QR кодуңузду көрсөтүңүз', 'Кызматкер скандайт', 'Баруу эсептелди', 'Сыйлык прогресси', 'Ваучер ачылды', 'Бизнес отчёттору'],
+    steps: ['QR көрсөтүү', 'Кызматкер скандайт', 'Штамп алуу', 'Сыйлык ачуу'],
   },
   example: {
     eyebrow: 'Кампания мисалы',
@@ -581,10 +585,10 @@ export const ky: Dict = {
       'Өз тиркемесин жасабай туруп, жөнөкөй жана өлчөнүүчү акцияларды каалаган чакан жана орто бизнес үчүн иштелип чыккан.',
     cards: [
       'Кардарларга тиркеме жүктөөнүн кереги жок',
-      'Конкреттүү жайдын сыйлыктары',
-      'QR аркылуу текшерүү',
-      'Кызматкерлерге ыңгайлуу',
-      'Жергиликтүү кампаниялар үчүн',
+      'Штамп-карталар жана ваучер капчыгы',
+      'Баруу, убакыт жана топтук кампаниялар',
+      'QR баруу сканы — кодсуз',
+      'Кармап туруу жана кызматкер отчёттору',
     ],
   },
   faq: {
@@ -593,7 +597,7 @@ export const ky: Dict = {
     items: [
       { q: 'Бул кандай платформа?', a: 'Кардарлар катышкан жайларга барып, QR сыйлыктарын чогултуп же достору менен топ түзүп сунуштарды ача турган жергиликтүү сыйлык платформасы.' },
       { q: 'Кардарлар тиркеме жүктөшү керекпи?', a: 'MVP үчүн жок. Кардарлар QR кодду скандагандан кийин мобилдик веб-тиркемени колдонушат — эч нерсе орнотуунун кереги жок.' },
-      { q: 'Жайлар кардарларды кантип текшерет?', a: 'QR коддору, кызматкердин ырастоо коддору жана берүү экрандары аркылуу.' },
+      { q: 'Жайлар кардарларды кантип текшерет?', a: 'Кызматкер кардардын жеке QR кодун скандап, баруу эсептейт жана сыйлык берет — код киргизүүнүн кереги жок.' },
       { q: 'Бир жайдын сыйлыгын башка жайда колдонсо болобу?', a: 'Жок. Атайын кампания башкача айтпаса, сыйлыктар белгилүү бир жайга гана таандык.' },
       { q: 'Кандай бизнес түрлөрү колдоно алат?', a: 'Кафе, ресторан, салон, барбершоп, наабайканалар, бутиктер, спортзалдар жана башка жергиликтүү чакан бизнес.' },
       { q: 'Топтук акциялар кантип иштейт?', a: 'Жай топтук сунуш түзөт. Кардарлар топ түзөт же кошулат, досторун чакырат, чогуу белгиленет жана керектүү сандагы адам келгенде сыйлыкты ачат.' },
@@ -614,11 +618,13 @@ export const ky: Dict = {
     successText: 'Биринчи QR сыйлыгыңызды жөндөө үчүн сиз менен байланышабыз.',
     submitAnother: 'Дагы бир бизнес жөнөтүү',
     requestTitle: 'Уруксат суроо',
-    labels: { business: 'Бизнестин аталышы', owner: 'Ээсинин аты', phone: 'Телефон номери', category: 'Категория', area: 'Бишкектеги аймак', instagram: 'Instagram', optional: '· милдеттүү эмес' },
-    placeholders: { business: 'Manas Coffee', owner: 'Айбек', phone: '700 123 456', area: 'мис. Чүй пр.', instagram: '@бизнесиңиз' },
+    labels: { business: 'Бизнестин аталышы', owner: 'Ээсинин аты', phone: 'Телефон номери', email: 'Электрондук почта', category: 'Категория', area: 'Бишкектеги аймак', instagram: 'Instagram', optional: '· милдеттүү эмес' },
+    placeholders: { business: 'Manas Coffee', owner: 'Айбек', phone: '700 123 456', email: 'you@example.com', area: 'мис. Чүй пр.', instagram: '@бизнесиңиз' },
     categories: ['Кафе', 'Ресторан', 'Салон', 'Барбершоп', 'Наабайкана', 'Бутик', 'Спортзал', 'Башка'],
     submit: 'Уруксат сурайм',
     submitting: 'Жөнөтүлүүдө…',
+    errorText: 'Бир нерсе туура болгон жок. Кайра аракет кылыңыз.',
+    validationErrorText: 'Бардык милдеттүү талааларды толтуруп, туура email жана телефон номерин киргизиңиз.',
   },
   finalCta: {
     heading: 'Адамдарды жергиликтүү сыйлыктар тегерегинде бириктирүүгө даярсызбы?',

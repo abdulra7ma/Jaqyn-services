@@ -8,15 +8,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BusinessShell } from "../_components/BusinessShell";
 import { useErrMessage } from "../../_lib/useErrMessage";
-import { useAuth, useRequireAuth } from "../../_lib/auth";
+import { useAuth, useRequireArea } from "../../_lib/auth";
 
 export default function BusinessMorePage() {
   const t = useT();
   const errMessage = useErrMessage();
   const router = useRouter();
-  const { isAuthenticated } = useRequireAuth();
+  const { allowed } = useRequireArea("business");
   const { logout } = useAuth();
-  const me = useBusinessMe(isAuthenticated);
+  const me = useBusinessMe();
   const update = useUpdateBusiness();
   const regen = useRegenerateApprovalCode();
 
@@ -33,7 +33,7 @@ export default function BusinessMorePage() {
     }
   }, [me.data]);
 
-  if (!isAuthenticated) return null;
+  if (!allowed) return null;
 
   return (
     <BusinessShell title={t("biz.more.title")}>

@@ -110,7 +110,6 @@ def test_submit_blocked_until_required_complete(api_client):
             "phone": "+996555120880",
             "address": "Chuy 142",
             "business_type": "cafe",
-            "logo_set": True,
         },
         format="json",
     )
@@ -120,11 +119,56 @@ def test_submit_blocked_until_required_complete(api_client):
         format="json",
     )
 
+    # Simulate a real logo upload (server-side) — logo_set=True via PATCH is no longer
+    # accepted; only set_business_logo (services.py) sets the logo field.
+    business.refresh_from_db()
+    business.logo.name = "business/logos/test.jpg"
+    business.logo_set = True
+    business.save(update_fields=["logo", "logo_set", "updated_at"])
+
     ok = api_client.post("/api/business/onboarding/submit/")
     assert ok.status_code == 200
     business.refresh_from_db()
     assert business.onboarding_status == Business.OnboardingStatus.SUBMITTED
     assert business.verification_status == Business.VerificationStatus.PENDING
+
+
+def test_logo_set_flag_via_patch_does_not_satisfy_logo_requirement(api_client):
+    """PATCH logo_set=true (no real file) must NOT count as a real logo upload.
+
+    Sending logo_set in the PATCH payload is silently ignored (read-only field).
+    The required_fields check requires bool(business.logo), not logo_set.
+    """
+    make_type("cafe", "menu")
+    business = activated_owner(api_client, draft_business())
+
+    # Fill all required fields and pass logo_set=True — but no real logo file
+    api_client.patch(
+        "/api/business/onboarding/",
+        {
+            "display_name": "Manas Coffee",
+            "description": "Cozy roastery",
+            "phone": "+996555120880",
+            "address": "Chuy 142",
+            "business_type": "cafe",
+            "logo_set": True,  # client-supplied flag — must be ignored
+        },
+        format="json",
+    )
+    api_client.post(
+        "/api/business/catalog-items/",
+        {"name": "Cappuccino", "category": "Coffee", "price": "150 c", "module": "menu"},
+        format="json",
+    )
+
+    # No real logo → submit must still be blocked
+    res = api_client.post("/api/business/onboarding/submit/")
+    assert res.status_code == 400, "Submit should be blocked when logo_set but no real logo"
+
+    # Confirm business.logo_set was not flipped by the PATCH
+    business.refresh_from_db()
+    assert not business.logo_set, "logo_set must not be writable via PATCH"
+    assert not business.logo, "logo must remain unset"
 
 
 def test_catalog_item_crud_scoped(api_client):
@@ -171,10 +215,15 @@ def test_admin_verifies_and_publishes(api_client):
     business = activated_owner(api_client, draft_business())
     api_client.patch(
         "/api/business/onboarding/",
-        {"display_name": "Manas Coffee", "description": "d", "phone": "+996", "address": "a", "business_type": "cafe", "logo_set": True},
+        {"display_name": "Manas Coffee", "description": "d", "phone": "+996", "address": "a", "business_type": "cafe"},
         format="json",
     )
     api_client.post("/api/business/catalog-items/", {"name": "X", "price": "1 c", "module": "menu"}, format="json")
+    # Simulate a real logo upload (server-side) so the logo requirement is satisfied
+    business.refresh_from_db()
+    business.logo.name = "business/logos/test.jpg"
+    business.logo_set = True
+    business.save(update_fields=["logo", "logo_set", "updated_at"])
     api_client.post("/api/business/onboarding/submit/")
 
     admin = User.objects.create_superuser(phone="+996700999000", password="secret")

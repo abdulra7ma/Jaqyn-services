@@ -11,7 +11,6 @@ import { useRouter } from "next/navigation";
 import { OwnerShell } from "../_components/OwnerShell";
 import { KpiCard, StatusPill, TYPE_GLYPH } from "../_components/campaigns";
 import { QueryBoundary } from "../../_components/QueryBoundary";
-import { useRequireAuth } from "../../_lib/auth";
 
 const TABLE_COLS = "grid grid-cols-[2.4fr_1fr_1fr_1fr_1fr_1fr] items-center";
 
@@ -48,13 +47,11 @@ function CampaignRow({ row }: { row: BusinessCampaignRow }) {
 export default function BusinessCampaignsPage() {
   const t = useT();
   const router = useRouter();
-  const { isAuthenticated, ready } = useRequireAuth();
-  const list = useBusinessCampaigns(isAuthenticated);
+  const list = useBusinessCampaigns();
 
   return (
     <OwnerShell title={t("cmp.biz.title")}>
-      {!ready || !isAuthenticated ? null : (
-        <div className="animate-[jqIn_.3s_ease]">
+      <div className="animate-[jqIn_.3s_ease]">
           <div className="mb-5 flex items-center justify-between gap-4">
             <p className="text-[13.5px] text-subtle">{t("cmp.biz.subtitle")}</p>
             <button
@@ -106,7 +103,6 @@ export default function BusinessCampaignsPage() {
             )}
           </QueryBoundary>
         </div>
-      )}
     </OwnerShell>
   );
 }

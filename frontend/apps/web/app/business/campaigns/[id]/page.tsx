@@ -26,7 +26,6 @@ import { SocialPostStudio } from "../../_components/SocialPostStudio";
 import { StatusPill, TYPE_GLYPH, VoucherStatusPill, ruleSummary } from "../../_components/campaigns";
 import { QueryBoundary } from "../../../_components/QueryBoundary";
 import { useErrMessage } from "../../../_lib/useErrMessage";
-import { useRequireAuth } from "../../../_lib/auth";
 import { ruleLinesFor } from "./rules";
 
 type Tab = "overview" | "participants" | "vouchers";
@@ -36,14 +35,11 @@ const PANEL = "rounded-[18px] border border-line bg-card p-5";
 export default function CampaignDetailPage() {
   const t = useT();
   const { id } = useParams<{ id: string }>();
-  const { isAuthenticated, ready } = useRequireAuth();
   const campaign = useBusinessCampaign(id);
 
   return (
     <OwnerShell title={t("cmp.biz.title")}>
-      {!ready || !isAuthenticated ? null : (
-        <QueryBoundary query={campaign}>{(c) => <Detail campaign={c} />}</QueryBoundary>
-      )}
+      <QueryBoundary query={campaign}>{(c) => <Detail campaign={c} />}</QueryBoundary>
     </OwnerShell>
   );
 }

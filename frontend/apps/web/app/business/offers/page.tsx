@@ -18,7 +18,6 @@ import {
 } from "@jaqyn/api";
 import { useRef, useState } from "react";
 import { OwnerShell } from "../_components/OwnerShell";
-import { useAuth } from "../../_lib/auth";
 
 const CARD = "rounded-[18px] border border-line bg-card p-5";
 const FIELD =
@@ -41,11 +40,9 @@ function fmtTime(iso: string) {
 }
 
 export default function BusinessOffersPage() {
-  const { isAuthenticated, ready } = useAuth();
-  const enabled = ready && isAuthenticated;
-  const dash = useDashboard(enabled);
+  const dash = useDashboard();
   const offers = useBusinessOffers();
-  const deals = useBusinessGroupDeals(enabled);
+  const deals = useBusinessGroupDeals();
   const create = useCreateOffer();
   const updateOffer = useUpdateOffer();
   const deleteOffer = useDeleteOffer();
@@ -148,12 +145,7 @@ export default function BusinessOffersPage() {
 
   return (
     <OwnerShell title="Group Deals">
-      {!ready ? null : !isAuthenticated ? (
-        <div className={`${CARD} max-w-md`}>
-          <p className="text-sm text-subtle">Sign in to manage your group deals.</p>
-        </div>
-      ) : (
-        <div className="animate-[jqIn_.3s_ease]">
+      <div className="animate-[jqIn_.3s_ease]">
           {/* stats */}
           <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             {stats.map((s) => (
@@ -304,7 +296,6 @@ export default function BusinessOffersPage() {
           </div>
           <p className="mt-3 text-[12px] text-subtle">Members column shows joined · checked-in. Staff verify and redeem from Staff Mode.</p>
         </div>
-      )}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4" onClick={() => setOpen(false)}>
