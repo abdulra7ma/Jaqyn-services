@@ -1,7 +1,7 @@
 "use client";
 
-import type { Area, AuthResult } from "@jaqyn/api";
-import { usePasswordLogin, useRequestOtp, useVerifyOtp } from "@jaqyn/api";
+import type { AuthResult } from "@jaqyn/api";
+import { postAuthRoute, usePasswordLogin, useRequestOtp, useVerifyOtp } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Button, Input } from "@jaqyn/ui";
 import Link from "next/link";
@@ -9,13 +9,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { ConsentNote } from "../_components/ConsentNote";
 import { useErrMessage } from "../_lib/useErrMessage";
-
-/** Where a user lands after login — owner/staff to their console, else the return URL. */
-function areaPath(area: Area, returnTo: string) {
-  if (area === "business") return "/business/dashboard";
-  if (area === "staff") return "/staff";
-  return returnTo || "/";
-}
 
 function LoginFlow() {
   const t = useT();
@@ -35,14 +28,7 @@ function LoginFlow() {
   const verifyOtp = useVerifyOtp();
   const passwordLogin = usePasswordLogin();
 
-  // New customers (or any who never finished the tour) land on the product tour first.
-  const go = (r: AuthResult) => {
-    if (r.area === "customer" && (r.is_new || r.onboarding_completed === false)) {
-      router.replace(`/onboarding?return=${encodeURIComponent(returnTo)}`);
-      return;
-    }
-    router.replace(areaPath(r.area, returnTo));
-  };
+  const go = (r: AuthResult) => router.replace(postAuthRoute(r, returnTo));
   const swap = mode === "email" ? "animate-[jqSwapR_.3s_ease]" : "animate-[jqSwapL_.3s_ease]";
 
   return (
