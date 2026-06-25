@@ -196,6 +196,18 @@ export const usePasswordLogin = () => {
   });
 };
 
+export const useRequestPasswordReset = () =>
+  useMutation({ mutationFn: (email: string) => customerApi.requestPasswordReset(email) });
+
+export const useResetPassword = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, code, newPassword }: { email: string; code: string; newPassword: string }) =>
+      customerApi.resetPassword(email, code, newPassword),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.me }),
+  });
+};
+
 export const useRequestEmailOtp = () =>
   useMutation({
     mutationFn: (payload: RequestEmailOtpPayload) => customerApi.requestEmailOtp(payload),

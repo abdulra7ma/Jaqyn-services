@@ -470,6 +470,7 @@ export type AuthResult = {
 };
 export type VerifyOtpResult = AuthResult;
 export type PasswordLoginResult = AuthResult;
+export type ResetPasswordResult = AuthResult;
 export type ProfilePatch = Partial<{
   name: string;
   email: string;

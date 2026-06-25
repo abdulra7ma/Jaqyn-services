@@ -34,6 +34,7 @@ import type {
   Me,
   ProfilePatch,
   PasswordLoginResult,
+  ResetPasswordResult,
   Redemption,
   CustomerQr,
   NearbyParams,
@@ -49,6 +50,8 @@ export interface CustomerApi {
   requestOtp(phone: string): Promise<RequestOtpResult>;
   verifyOtp(phone: string, code: string): Promise<VerifyOtpResult>;
   passwordLogin(email: string, password: string): Promise<PasswordLoginResult>;
+  requestPasswordReset(email: string): Promise<{ message: string }>;
+  resetPassword(email: string, code: string, newPassword: string): Promise<ResetPasswordResult>;
   requestEmailOtp(payload: RequestEmailOtpPayload): Promise<RequestOtpResult>;
   verifyEmailOtp(email: string, code: string): Promise<EmailOtpResult>;
   me(): Promise<Me>;
@@ -120,6 +123,18 @@ export const customerApi: CustomerApi = {
     const res = await api.post<PasswordLoginResult>(
       "/api/auth/login-password/",
       { email, password },
+      { auth: false },
+    );
+    tokenStore.set(res.access, res.refresh);
+    session.setUserId(res.user.id);
+    return res;
+  },
+  requestPasswordReset: (email) =>
+    api.post<{ message: string }>("/api/auth/request-password-reset/", { email }, { auth: false }),
+  resetPassword: async (email, code, new_password) => {
+    const res = await api.post<ResetPasswordResult>(
+      "/api/auth/reset-password/",
+      { email, code, new_password },
       { auth: false },
     );
     tokenStore.set(res.access, res.refresh);
