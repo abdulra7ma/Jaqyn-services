@@ -7,11 +7,13 @@ from apps.accounts.serializers import (
     CustomerProfileSerializer,
     PasswordLoginSerializer,
     ProfileUpdateSerializer,
+    RequestEmailOTPSerializer,
     RequestOTPSerializer,
     UserSerializer,
+    VerifyEmailOTPSerializer,
     VerifyOTPSerializer,
 )
-from apps.accounts.services import authenticate_password, issue_otp, resolve_area, verify_otp
+from apps.accounts.services import authenticate_password, issue_email_otp, issue_otp, resolve_area, verify_email_otp, verify_otp
 from core.response import success_response
 
 
@@ -57,6 +59,38 @@ class VerifyOTPView(APIView):
         serializer = VerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user, is_new, access, refresh = verify_otp(serializer.validated_data["phone"], serializer.validated_data["code"])
+        return success_response(_auth_payload(user, access, refresh, is_new=is_new))
+
+
+class RequestEmailOTPView(APIView):
+    permission_classes = [AllowAny]  # Public signup endpoint — no token required
+
+    def post(self, request):
+        serializer = RequestEmailOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+        from django.conf import settings
+
+        request_id = issue_email_otp(
+            email=d["email"],
+            name=d["name"],
+            password=d["password"],
+            phone=d.get("phone") or None,
+            ip_address=request_ip(request),
+        )
+        return success_response({"request_id": request_id, "expires_in": settings.OTP_TTL_SECONDS})
+
+
+class VerifyEmailOTPView(APIView):
+    permission_classes = [AllowAny]  # Public signup endpoint — no token required
+
+    def post(self, request):
+        serializer = VerifyEmailOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user, is_new, access, refresh = verify_email_otp(
+            serializer.validated_data["email"],
+            serializer.validated_data["code"],
+        )
         return success_response(_auth_payload(user, access, refresh, is_new=is_new))
 
 

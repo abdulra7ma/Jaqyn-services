@@ -49,3 +49,17 @@ class ProfileUpdateSerializer(serializers.Serializer):
     marketing_opt_in = serializers.BooleanField(required=False)
     onboarding_completed = serializers.BooleanField(required=False)
     avatar_emoji = serializers.CharField(max_length=8, required=False, allow_blank=True)
+
+
+class RequestEmailOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    name = serializers.CharField(max_length=255)
+    password = serializers.CharField(min_length=8, max_length=128)
+    phone = serializers.RegexField(
+        regex=r"^\+[1-9]\d{7,14}$", required=False, allow_blank=True, allow_null=True
+    )
+
+
+class VerifyEmailOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField(min_length=6, max_length=6)
