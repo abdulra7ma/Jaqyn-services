@@ -32,6 +32,7 @@ from apps.campaigns.services.social import SocialPost, build_social_post
 from apps.campaigns.services.scanner import (
     CustomerScanResult,
     EligibleCampaignView,
+    SkippedCampaign,
     StaffScannerService,
     UnifiedScanResult,
 )
@@ -50,6 +51,7 @@ __all__ = [
     "StaffScannerService",
     "CustomerScanResult",
     "EligibleCampaignView",
+    "SkippedCampaign",
     "UnifiedScanResult",
     "FraudService",
     "FraudSignal",

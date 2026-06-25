@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from uuid import UUID
 
 from django.utils import timezone
 from rest_framework import status
@@ -26,6 +27,7 @@ from apps.campaigns.models import (
 from apps.campaigns.services.eligibility import (
     CampaignEligibilityService,
     EligibilityResult,
+    IneligibilityReason,
 )
 from apps.campaigns.services.fraud import FraudService
 from apps.campaigns.services.group import CampaignGroupService, GroupConfirmResult
@@ -55,29 +57,46 @@ class EligibleCampaignView:
 
 
 @dataclass(frozen=True)
-class UnifiedScanResult:
-    """Result of a single staff scan that advances loyalty + one campaign (§14).
+class SkippedCampaign:
+    """A campaign that was a candidate this scan but did not advance (§14).
 
-    One staff action drives two independent legs:
+    ``campaign_id`` is the raw ``Campaign`` primary key (a ``UUID``) so callers
+    can match it against a campaign without coercion; the serializer renders it
+    as a string at the API boundary (Task 4). ``reason_code`` is the domain error
+    code from the eligibility/fraud gate (e.g. ``CAMPAIGN_MIN_GAP``) so the staff
+    UI and audit log can explain the gap.
+    """
+
+    campaign_id: UUID
+    name: str
+    reason_code: str
+
+
+@dataclass(frozen=True)
+class UnifiedScanResult:
+    """Result of a single staff scan that advances loyalty + campaigns (§14).
+
+    One staff action drives independent legs:
 
     * ``loyalty`` — the baseline leg, always attempted. Holds the
       ``staff_collect`` result dict on success, else ``None`` with
-      ``loyalty_skipped_reason`` carrying the domain error code (e.g. no active
-      program, scan interval, needs-amount for SPEND).
-    * ``campaign`` — the conditional leg. Holds the
-      :class:`~apps.campaigns.services.progress.ProgressResult` for the single
-      prioritized eligible campaign on success, else ``None`` with
-      ``campaign_skipped_reason``. ``None`` for both when no eligible campaign.
+      ``loyalty_skipped_reason`` carrying the domain error code.
+    * ``campaigns`` — every campaign that advanced this scan: all eligible
+      campaigns with ``allow_multiple_campaign_counting`` set, plus the single
+      prioritized eligible default campaign (one visit, one default stamp). Each
+      element is a :class:`~apps.campaigns.services.progress.ProgressResult`.
+    * ``skipped_campaigns`` — campaigns that were candidates but were blocked
+      (e.g. min-gap), each carrying its reason code.
 
-    The two legs are independent: neither failure aborts the other. Only an
-    invalid / non-CUSTOMER_PROFILE token hard-fails (raised before this is built).
+    The legs are independent: no leg's failure aborts another. Only an invalid /
+    non-CUSTOMER_PROFILE token hard-fails (raised before this is built).
     """
 
     customer: object
     loyalty: dict | None
     loyalty_skipped_reason: str | None
-    campaign: "ProgressResult | None"
-    campaign_skipped_reason: str | None
+    campaigns: list[ProgressResult]
+    skipped_campaigns: list[SkippedCampaign]
 
 
 @dataclass(frozen=True)
@@ -244,14 +263,13 @@ class StaffScannerService:
         ``loyalty_skipped_reason`` and the scan continues — a loyalty failure
         never aborts the campaign leg.
 
-        CAMPAIGN leg (conditional): the target is the explicitly tapped
-        ``campaign_id`` when given, else the single prioritized *eligible*
-        campaign chosen by the §14 resolver over ``scan_customer_qr``'s
-        eligibility rows. If a target exists it is confirmed via
-        :meth:`confirm_visit`; on a ``JaqynAPIException`` the code is captured in
-        ``campaign_skipped_reason`` and the scan still returns. With no eligible
-        campaign both campaign fields are ``None``. A campaign failure never
-        aborts the loyalty award.
+        CAMPAIGN leg (conditional): advances every eligible campaign that opts
+        into ``allow_multiple_campaign_counting`` plus the single prioritized
+        eligible default campaign (§14). An explicit ``campaign_id`` overrides
+        this and targets only that campaign. Each advance runs its own
+        atomic/lock seam via :meth:`confirm_visit`; a campaign blocked by the
+        eligibility/fraud gate is recorded in ``skipped_campaigns`` and never
+        aborts the others or the loyalty award.
 
         The two legs are independent — each runs its own atomic/lock seam inside
         its own service. They are deliberately NOT wrapped in one outer
@@ -282,35 +300,73 @@ class StaffScannerService:
             loyalty_skipped_reason = exc.code
 
         # --- CAMPAIGN leg (conditional) -------------------------------------
-        campaign_result: ProgressResult | None = None
-        campaign_skipped_reason: str | None = None
-        target_id = campaign_id
-        if target_id is None:
-            # Resolve the single prioritized eligible campaign (§14). Reuses the
-            # eligibility pipeline directly so the resolver gets the real
-            # EligibilityResult rows (not the flattened scan views).
-            results = CampaignEligibilityService.eligible_campaigns_for_customer(
-                staff.business, customer.id, now
-            )
-            target = CampaignProgressService.resolve_priority_campaign(
-                results, now=now
-            )
-            target_id = target.id if target is not None else None
+        # One visit advances: every eligible campaign that opts into stacking
+        # (allow_multiple_campaign_counting), plus exactly one prioritized
+        # eligible *default* campaign (§14 — a visit counts toward one default
+        # campaign unless the business opted that campaign into stacking). A
+        # tapped campaign_id forces the single default slot.
+        campaigns: list[ProgressResult] = []
+        skipped: list[SkippedCampaign] = []
 
-        if target_id is not None:
+        results = CampaignEligibilityService.eligible_campaigns_for_customer(
+            staff.business, customer.id, now
+        )
+        eligible = [r for r in results if r.eligible]
+
+        if campaign_id is not None:
+            # Explicit single-target contract: advance only the tapped campaign.
+            target_ids = [campaign_id]
+        else:
+            # Stacking targets: every stacking campaign that is eligible, plus any
+            # stacking campaign blocked only by the min-gap fraud gate — those are
+            # genuine candidates this visit, so confirm_visit re-runs the gate and
+            # records them in skipped_campaigns rather than silently dropping them.
+            stacking_ids = [
+                r.campaign.id
+                for r in results
+                if r.campaign.allow_multiple_campaign_counting
+                and (
+                    r.eligible
+                    or r.reason_code == IneligibilityReason.MIN_GAP.value
+                )
+            ]
+            default_results = [
+                r for r in eligible if not r.campaign.allow_multiple_campaign_counting
+            ]
+            chosen_default = CampaignProgressService.resolve_priority_campaign(
+                default_results, now=now
+            )
+            target_ids = list(stacking_ids)
+            if chosen_default is not None:
+                target_ids.append(chosen_default.id)
+
+        # Map id → name for skipped reporting without a second query.
+        name_by_id = {r.campaign.id: r.campaign.name for r in results}
+        for target_id in target_ids:
             try:
-                campaign_result = StaffScannerService.confirm_visit(
-                    staff, target_id, customer, request=request, now=now
+                campaigns.append(
+                    StaffScannerService.confirm_visit(
+                        staff, target_id, customer, request=request, now=now
+                    )
                 )
             except JaqynAPIException as exc:
-                campaign_skipped_reason = exc.code
+                skipped.append(
+                    SkippedCampaign(
+                        # Raw campaign id (UUID); the serializer str-ifies at the
+                        # API boundary (Task 4). Kept raw here so callers can match
+                        # it against a ``Campaign.id`` without coercing.
+                        campaign_id=target_id,
+                        name=name_by_id.get(target_id, ""),
+                        reason_code=exc.code,
+                    )
+                )
 
         return UnifiedScanResult(
             customer=customer,
             loyalty=loyalty,
             loyalty_skipped_reason=loyalty_skipped_reason,
-            campaign=campaign_result,
-            campaign_skipped_reason=campaign_skipped_reason,
+            campaigns=campaigns,
+            skipped_campaigns=skipped,
         )
 
     @staticmethod
