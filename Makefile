@@ -73,6 +73,22 @@ dev:
 dev-stop:
 	docker compose stop web worker beat db redis
 	@lsof -nP -iTCP:3000 -sTCP:LISTEN -t 2>/dev/null | xargs kill 2>/dev/null || true
+dev-local:
+	@echo "▸ starting backend (db redis web worker beat)…"; \
+	docker compose up -d --force-recreate db redis web worker beat >/dev/null; \
+	echo; \
+	echo "════════════════════════════════════════════════════════════"; \
+	echo "  📱 Open on phone:  http://localhost:3000"; \
+	echo "     Backend API:    http://localhost:8000"; \
+	echo "     On this Mac:    http://localhost:3000"; \
+	echo "════════════════════════════════════════════════════════════"; \
+	echo; \
+	echo "▸ starting frontend dev (API → http://localhost:8000)…"; \
+	cd frontend && NEXT_PUBLIC_API_URL="http://localhost:8000" corepack pnpm --filter web exec next dev -p 3000 -H
+
+dev-local-stop:
+	docker compose stop web worker beat db redis
+	@lsof -nP -iTCP:3000 -sTCP:LISTEN -t 2>/dev/null | xargs kill 2>/dev/null || true
 
 up:
 	docker compose up --build

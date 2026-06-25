@@ -1,4 +1,8 @@
+from datetime import timedelta
+
+from django.conf import settings
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -151,6 +155,8 @@ class CustomerPresentRedemptionView(APIView):
         data = RewardRedemptionSerializer(redemption).data
         data["business_name"] = redemption.business.name
         data["reward_description"] = redemption.reward_program.reward_description
+        ttl = getattr(settings, "REWARD_PRESENT_TTL_SECONDS", 120)
+        data["present_expires_at"] = (timezone.now() + timedelta(seconds=ttl)).isoformat()
         return success_response(data)
 
 

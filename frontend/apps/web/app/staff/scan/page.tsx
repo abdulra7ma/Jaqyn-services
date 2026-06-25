@@ -6,6 +6,7 @@ import {
   useRedeemCampaignVoucher,
   useScanCampaignVoucher,
   useScanCustomerForCampaigns,
+  useStaffRedeem,
 } from "@jaqyn/api";
 import type {
   CampaignScanRow,
@@ -233,10 +234,21 @@ function VisitEligibilitySheet({
 // campaign. Each leg renders its own row; a null leg shows a muted skipped line.
 // A completed campaign gets the celebratory amber/gift treatment (mirrors the
 // former visit_complete sheet); the green success flash + countdown are kept.
-function VisitUnifiedSheet({ result, onDismiss }: { result: UnifiedScanResult; onDismiss: () => void }) {
+function VisitUnifiedSheet({
+  result,
+  onDismiss,
+  onGiveReward,
+  isGivingReward,
+}: {
+  result: UnifiedScanResult;
+  onDismiss: () => void;
+  onGiveReward?: (code: string, rewardTitle: string) => void;
+  isGivingReward?: boolean;
+}) {
   const t = useT();
   const { loyalty, campaign } = result;
   const campaignComplete = campaign?.state === "completed";
+  const rewardReady = loyalty?.state === "reward_ready";
 
   // A completed campaign warrants the longer, amber celebratory treatment.
   const flashColor = campaignComplete ? "var(--amber, #E7A23E)" : "var(--sage, #3F7355)";
@@ -246,7 +258,8 @@ function VisitUnifiedSheet({ result, onDismiss }: { result: UnifiedScanResult; o
     <SheetBackdrop dim="rgba(8,6,3,.5)" onDismiss={onDismiss}>
       <Flash color={flashColor} />
       <div style={{ ...SHEET_STYLE, padding: "30px 26px 30px" }} onClick={(e) => e.stopPropagation()}>
-        <CountdownBar duration={duration} onDone={onDismiss} />
+        {/* Only auto-dismiss when no reward action is pending */}
+        {!rewardReady && <CountdownBar duration={duration} onDone={onDismiss} />}
 
         <div style={{ textAlign: "center" }}>
           <div style={{
@@ -323,6 +336,23 @@ function VisitUnifiedSheet({ result, onDismiss }: { result: UnifiedScanResult; o
             />
           )}
         </div>
+
+        {/* Give Reward button — only when loyalty reward is ready to hand out */}
+        {rewardReady && loyalty?.redemption?.code && (
+          <button
+            type="button"
+            onClick={() => onGiveReward?.(loyalty.redemption!.code, loyalty.reward?.title ?? "")}
+            disabled={isGivingReward}
+            style={{
+              width: "100%", marginTop: 18, padding: 18, border: "none", borderRadius: 16,
+              background: "var(--accent, #C25E3C)", color: "#fff",
+              font: "700 17px 'Hanken Grotesk',sans-serif", cursor: "pointer",
+              boxShadow: "0 12px 26px -8px rgba(160,73,42,.55)", opacity: isGivingReward ? 0.6 : 1,
+            }}
+          >
+            {isGivingReward ? "…" : t("staff.scan.confirmGive")}
+          </button>
+        )}
       </div>
     </SheetBackdrop>
   );
@@ -673,6 +703,7 @@ export default function StaffScanPage() {
   const confirmVisit = useConfirmVisitUnified();
   const scanVoucher = useScanCampaignVoucher();
   const redeemVoucher = useRedeemCampaignVoucher();
+  const redeemLoyalty = useStaffRedeem();
   const confirmGroup = useConfirmGroup();
 
   const [mode, setMode] = useState<ScanMode>("visit");
@@ -711,7 +742,17 @@ export default function StaffScanPage() {
     confirmVisit.reset();
     scanVoucher.reset();
     redeemVoucher.reset();
+    redeemLoyalty.reset();
     confirmGroup.reset();
+  };
+
+  const handleGiveReward = (code: string, rewardTitle: string) => {
+    redeemLoyalty.mutate({ code }, {
+      onSuccess() {
+        setOverlay({ kind: "reward_redeemed", rewardTitle });
+      },
+      onError(error) { showError(error); },
+    });
   };
 
   // Map a thrown ApiClientError code to the design's invalid-voucher sheet. Falls
@@ -894,7 +935,14 @@ export default function StaffScanPage() {
             isPending={confirmVisit.isPending}
           />
         )}
-        {overlay?.kind === "visit_unified" && <VisitUnifiedSheet result={overlay.result} onDismiss={dismiss} />}
+        {overlay?.kind === "visit_unified" && (
+          <VisitUnifiedSheet
+            result={overlay.result}
+            onDismiss={dismiss}
+            onGiveReward={handleGiveReward}
+            isGivingReward={redeemLoyalty.isPending}
+          />
+        )}
         {overlay?.kind === "group_eligible" && (
           <GroupEligibleSheet group={overlay.group} onConfirm={handleConfirmGroup} onDismiss={dismiss} isPending={confirmGroup.isPending} />
         )}

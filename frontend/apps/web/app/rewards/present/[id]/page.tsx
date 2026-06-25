@@ -66,7 +66,7 @@ export default function PresentRedemptionPage() {
     hasFired.current = true;
     present.mutate(id, {
       onSuccess: (data) => {
-        setExpiresAt(data.expires_at ?? null);
+        setExpiresAt(data.present_expires_at ?? null);
         setRewardTitle(data.reward_title ?? "");
         setBusinessName(data.business_name ?? "");
       },

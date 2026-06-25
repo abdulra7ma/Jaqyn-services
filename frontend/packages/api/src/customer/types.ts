@@ -139,6 +139,7 @@ export type Redemption = {
   presented_at: string | null;
   redeemed_at: string | null;
   expires_at: string | null;
+  present_expires_at?: string;
   reward_title?: string;
   reward_description?: string;
   business_name?: string;
