@@ -181,6 +181,11 @@ function LoginFlow() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
+                <div className="-mt-1 flex justify-end">
+                  <Link href="/forgot-password" className="text-xs font-semibold text-brand hover:underline">
+                    {t("auth.forgotLink")}
+                  </Link>
+                </div>
                 {passwordLogin.isError && <p className="text-sm text-danger">{errMessage(passwordLogin.error)}</p>}
                 <Button type="submit" disabled={passwordLogin.isPending || !email || !password}>
                   {passwordLogin.isPending ? t("common.loading") : t("auth.signIn")}
