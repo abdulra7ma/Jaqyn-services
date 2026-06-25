@@ -112,6 +112,23 @@ class CustomerScanResult:
     campaigns: list[EligibleCampaignView] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class ScanDispatch:
+    """Read-only routing result for a single staff scan (unified scanner).
+
+    ``kind`` tags how the frontend should route the scan. Exactly one payload is
+    set per kind: ``customer_result`` for ``"customer"``, ``voucher`` for
+    ``"voucher"``, ``reason_code`` for ``"invalid"`` (the typed voucher error or
+    ``INVALID_QR_TOKEN``). No writes happen while resolving — the apply step is a
+    separate, explicit staff confirm.
+    """
+
+    kind: str  # "customer" | "voucher" | "invalid"
+    customer_result: CustomerScanResult | None = None
+    voucher: CampaignRewardVoucher | None = None
+    reason_code: str | None = None
+
+
 def ensure_business_active(business: Business) -> None:
     """Raise ``BUSINESS_NOT_ACTIVE`` unless the business is APPROVED.
 
@@ -175,6 +192,97 @@ class StaffScannerService:
         }
         views = [_to_view(result, progress_by_campaign) for result in results]
         return CustomerScanResult(customer=customer, business=business, campaigns=views)
+
+    @staticmethod
+    def resolve_scan(
+        staff: StaffMember, raw_token: str, request=None, now: datetime | None = None
+    ) -> ScanDispatch:
+        """Resolve a scanned token to a routing tag without writing (unified scan).
+
+        The unified scanner replaced the manual visit/redeem mode toggle: a token
+        is opaque to the client, so this read-only resolve tells the frontend
+        which preview to open. Resolves via ``resolve_qr_token`` (audit action
+        ``staff_scan_resolve``), guards the business is active, then dispatches:
+
+        * ``CUSTOMER_PROFILE`` → ``kind="customer"`` carrying the same
+          :class:`CustomerScanResult` (eligible-campaign rows) the collect
+          preview renders.
+        * ``CAMPAIGN_REWARD`` → validate the voucher; valid →
+          ``kind="voucher"``; a typed voucher error (already redeemed / expired /
+          wrong business / …) is **caught** and returned as ``kind="invalid"``
+          with its ``reason_code`` (an invalid voucher is a normal preview, not a
+          request failure).
+        * anything else → ``kind="invalid"`` with ``INVALID_QR_TOKEN``.
+
+        Redemption and cancellation deactivate the voucher's QR token
+        (``is_active=False``), so ``resolve_qr_token`` rejects it up front with
+        ``INVALID_QR_TOKEN`` — it never reaches the type switch. To still give the
+        staff a meaningful preview ("already redeemed"), that rejection is caught
+        and the raw token is matched directly against a campaign reward voucher
+        (FK lookup, tolerant of an inactive token). A match re-runs the read-only
+        voucher validation to surface the real reason (e.g.
+        ``VOUCHER_ALREADY_REDEEMED``); no match falls through to
+        ``INVALID_QR_TOKEN``.
+
+        Read-only: it neither awards a stamp nor redeems a voucher. The apply
+        step (``confirm_visit_unified`` / ``redeem_reward_voucher``) is a separate
+        staff confirm.
+        """
+        now = now or timezone.now()
+        ensure_business_active(staff.business)
+        try:
+            qr_token = resolve_qr_token(raw_token, request, action="staff_scan_resolve")
+        except JaqynAPIException:
+            # A redeemed/cancelled voucher has a deactivated QR token, which
+            # resolve_qr_token rejects as INVALID_QR_TOKEN. Fall back to a direct
+            # voucher lookup so the staff still sees a typed preview reason
+            # instead of a bare "invalid token". Anything that isn't a known
+            # voucher stays INVALID_QR_TOKEN.
+            return StaffScannerService._dispatch_inactive_voucher(staff, raw_token)
+
+        if qr_token.type == QRCodeToken.Type.CUSTOMER_PROFILE and qr_token.customer:
+            customer_result = StaffScannerService.scan_customer_qr(
+                staff, raw_token, request=request, now=now
+            )
+            return ScanDispatch(kind="customer", customer_result=customer_result)
+
+        if qr_token.type == QRCodeToken.Type.CAMPAIGN_REWARD:
+            try:
+                voucher = CampaignRewardService.validate_reward_voucher(
+                    staff, token=raw_token, request=request
+                )
+            except JaqynAPIException as exc:
+                return ScanDispatch(kind="invalid", reason_code=exc.code)
+            return ScanDispatch(kind="voucher", voucher=voucher)
+
+        return ScanDispatch(kind="invalid", reason_code="INVALID_QR_TOKEN")
+
+    @staticmethod
+    def _dispatch_inactive_voucher(staff: StaffMember, raw_token: str) -> ScanDispatch:
+        """Resolve a deactivated-token voucher to a typed invalid dispatch.
+
+        A redeemed or cancelled voucher's QR token is ``is_active=False``, so the
+        normal ``resolve_qr_token`` path rejects it before the type switch. This
+        matches the raw token directly against a ``CAMPAIGN_REWARD`` voucher (FK
+        lookup, which ignores ``is_active``); if found, it re-runs the read-only
+        voucher validation by voucher code to surface the real reason code (e.g.
+        ``VOUCHER_ALREADY_REDEEMED``). When the token belongs to no voucher it is
+        a genuine ``INVALID_QR_TOKEN``. Read-only — no writes.
+        """
+        voucher = (
+            CampaignRewardVoucher.objects.select_related("business")
+            .filter(qr_token__token=raw_token)
+            .first()
+        )
+        if voucher is None:
+            return ScanDispatch(kind="invalid", reason_code="INVALID_QR_TOKEN")
+        try:
+            valid = CampaignRewardService.validate_reward_voucher(
+                staff, code=voucher.voucher_code
+            )
+        except JaqynAPIException as exc:
+            return ScanDispatch(kind="invalid", reason_code=exc.code)
+        return ScanDispatch(kind="voucher", voucher=valid)
 
     @staticmethod
     def confirm_visit(
