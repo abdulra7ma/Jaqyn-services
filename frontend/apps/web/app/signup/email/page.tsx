@@ -1,7 +1,7 @@
 "use client";
 
 import { useRequestEmailOtp, useVerifyEmailOtp } from "@jaqyn/api";
-import type { AuthResult } from "@jaqyn/api";
+import type { Area, AuthResult } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Button, Input } from "@jaqyn/ui";
 import Link from "next/link";
@@ -10,6 +10,13 @@ import { useEffect, useRef, useState } from "react";
 import { useErrMessage } from "../../_lib/useErrMessage";
 
 const RESEND_COOLDOWN_SECONDS = 60;
+
+/** Where a user lands after auth — owner/staff to their console, else the fallback. */
+function areaPath(area: Area, fallback: string) {
+  if (area === "business") return "/business/dashboard";
+  if (area === "staff") return "/staff";
+  return fallback;
+}
 
 export default function EmailSignupPage() {
   const t = useT();
@@ -54,7 +61,7 @@ export default function EmailSignupPage() {
       router.replace("/onboarding");
       return;
     }
-    router.replace("/");
+    router.replace(areaPath(r.area, "/"));
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
