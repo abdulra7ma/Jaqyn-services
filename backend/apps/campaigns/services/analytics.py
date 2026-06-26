@@ -12,10 +12,14 @@ from decimal import Decimal
 
 from django.db.models import Count, Q
 
+from django.db.models import Sum
+
 from apps.campaigns.models import (
     Campaign,
     CampaignParticipant,
     CampaignRewardVoucher,
+    Group,
+    GroupMember,
 )
 
 
@@ -45,12 +49,134 @@ class CampaignMetrics:
     returning_customers: int
 
 
+# Fraction of required progress at/above which a participant is "close to reward".
+# 0.8 = within the last 20% of a campaign's required count. Source:
+# campaigns-restructure plan §1.5 (Individual: close_to_reward = participants ≥ 80%).
+_CLOSE_TO_REWARD_RATIO = 0.8
+
+
+@dataclass(frozen=True)
+class CampaignTypeStats:
+    """The three type-specific headline stats shown on a campaign card (§1.5).
+
+    Exactly three numbers, their meaning fixed by ``campaign_type``:
+
+    * **INDIVIDUAL** — ``stat_a`` enrolled, ``stat_b`` redeemed, ``stat_c``
+      close-to-reward (participants ≥ 80% of required progress).
+    * **GROUP** — ``stat_a`` groups created, ``stat_b`` customers joined,
+      ``stat_c`` redeemed.
+    * **SOCIAL** — ``stat_a`` joined, ``stat_b`` redeemed, ``stat_c`` reach
+      (sum of self-entered ``follower_count``).
+
+    ``labels`` maps each slot to its human label so a caller renders the triplet
+    without re-deriving the meaning from the type.
+    """
+
+    campaign_id: str
+    campaign_type: str
+    stat_a: int
+    stat_b: int
+    stat_c: int
+    labels: dict[str, str]
+
+
 class CampaignAnalyticsService:
     """Compute campaign metrics on read (plan §1.2).
 
     MVP computes everything from the participant/voucher tables on demand; hot
     counters can be denormalised later without changing this surface.
     """
+
+    @staticmethod
+    def type_stats(campaign: Campaign) -> CampaignTypeStats:
+        """Return the three type-specific headline stats for a campaign (§1.5).
+
+        Branches on ``campaign.campaign_type`` and returns a
+        :class:`CampaignTypeStats` triplet (never a bare dict). Each branch uses
+        aggregate queries only — no per-row loop / N+1:
+
+        * INDIVIDUAL: enrolled (all participants), redeemed (REDEEMED vouchers),
+          close_to_reward (participants whose ``progress_count`` is ≥ 80% of the
+          rule's ``required_count``; 0 when no required count is set).
+        * GROUP: groups_created, customers_joined (group members), redeemed.
+        * SOCIAL: joined, redeemed, reach (sum of participant ``follower_count``).
+        """
+        ctype = campaign.campaign_type
+        redeemed = CampaignRewardVoucher.objects.filter(
+            campaign=campaign, status=CampaignRewardVoucher.Status.REDEEMED
+        ).count()
+
+        if ctype == Campaign.CampaignType.GROUP:
+            groups_created = Group.objects.filter(campaign=campaign).count()
+            customers_joined = GroupMember.objects.filter(
+                group__campaign=campaign
+            ).count()
+            return CampaignTypeStats(
+                campaign_id=str(campaign.id),
+                campaign_type=ctype,
+                stat_a=groups_created,
+                stat_b=customers_joined,
+                stat_c=redeemed,
+                labels={
+                    "stat_a": "Groups created",
+                    "stat_b": "Customers joined",
+                    "stat_c": "Redeemed",
+                },
+            )
+
+        if ctype == Campaign.CampaignType.SOCIAL:
+            joined = CampaignParticipant.objects.filter(campaign=campaign).count()
+            reach = (
+                CampaignParticipant.objects.filter(campaign=campaign).aggregate(
+                    reach=Sum("follower_count")
+                )["reach"]
+                or 0
+            )
+            return CampaignTypeStats(
+                campaign_id=str(campaign.id),
+                campaign_type=ctype,
+                stat_a=joined,
+                stat_b=redeemed,
+                stat_c=reach,
+                labels={
+                    "stat_a": "Joined",
+                    "stat_b": "Redeemed",
+                    "stat_c": "Reach",
+                },
+            )
+
+        # INDIVIDUAL (default).
+        enrolled = CampaignParticipant.objects.filter(campaign=campaign).count()
+        rule = getattr(campaign, "rule", None)
+        required = rule.required_count if rule is not None else 0
+        close_to_reward = 0
+        if required:
+            threshold = required * _CLOSE_TO_REWARD_RATIO
+            close_to_reward = (
+                CampaignParticipant.objects.filter(
+                    campaign=campaign,
+                    progress_count__gte=threshold,
+                )
+                .exclude(
+                    status__in=[
+                        CampaignParticipant.Status.COMPLETED,
+                        CampaignParticipant.Status.REDEEMED,
+                    ]
+                )
+                .count()
+            )
+        return CampaignTypeStats(
+            campaign_id=str(campaign.id),
+            campaign_type=ctype,
+            stat_a=enrolled,
+            stat_b=redeemed,
+            stat_c=close_to_reward,
+            labels={
+                "stat_a": "Enrolled",
+                "stat_b": "Redeemed",
+                "stat_c": "Close to reward",
+            },
+        )
 
     @staticmethod
     def campaign_metrics(campaign: Campaign) -> CampaignMetrics:

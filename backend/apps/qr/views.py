@@ -54,14 +54,29 @@ class QRResolveView(APIView):
         qr_token = resolve_qr_token(token, request)
         active_reward = None
         if qr_token.business:
-            reward = qr_token.business.reward_programs.filter(is_active=True).order_by("-created_at").first()
-            if reward:
+            # The first-scan card surfaces a business's most recent ACTIVE
+            # campaign (loyalty programs are now INDIVIDUAL campaigns post
+            # restructure). Imported locally to avoid a module-level qr→campaigns
+            # import cycle.
+            from apps.campaigns.models import Campaign
+
+            campaign = (
+                Campaign.objects.filter(
+                    business=qr_token.business, status=Campaign.Status.ACTIVE
+                )
+                .select_related("rule", "reward")
+                .order_by("-created_at")
+                .first()
+            )
+            if campaign:
+                rule = getattr(campaign, "rule", None)
+                reward = getattr(campaign, "reward", None)
                 active_reward = {
-                    "id": str(reward.id),
-                    "type": reward.type,
-                    "title": reward.title,
-                    "required_count": reward.required_count,
-                    "reward_description": reward.reward_description,
+                    "id": str(campaign.id),
+                    "type": campaign.campaign_type,
+                    "title": campaign.name,
+                    "required_count": rule.required_count if rule is not None else None,
+                    "reward_description": reward.description if reward is not None else "",
                 }
         return success_response({
             "type": qr_token.type,

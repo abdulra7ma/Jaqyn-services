@@ -47,8 +47,6 @@ INSTALLED_APPS = [
     "apps.businesses",
     "apps.staff",
     "apps.qr",
-    "apps.loyalty",
-    "apps.groups",
     "apps.campaigns",
     "apps.reporting",
     "apps.notifications",
@@ -65,7 +63,7 @@ UNFOLD = {
     "SITE_HEADER": "Jaqyn",
     "SITE_SUBHEADER": "Loyalty & rewards control panel",
     # Material Symbols glyph shown next to the site header.
-    "SITE_SYMBOL": "loyalty",
+    "SITE_SYMBOL": "campaign",
     # Browser-tab favicon: the Jaqyn "J" mark (href resolved lazily per request).
     "SITE_FAVICONS": [
         {
@@ -132,15 +130,12 @@ UNFOLD = {
                 ],
             },
             {
-                "title": _("Loyalty & Campaigns"),
+                "title": _("Campaigns"),
                 "items": [
-                    {"title": _("Reward programs"), "icon": "redeem", "link": reverse_lazy("admin:loyalty_rewardprogram_changelist")},
-                    {"title": _("Reward progress"), "icon": "trending_up", "link": reverse_lazy("admin:loyalty_customerrewardprogress_changelist")},
-                    {"title": _("Redemptions"), "icon": "card_giftcard", "link": reverse_lazy("admin:loyalty_rewardredemption_changelist")},
                     {"title": _("Campaigns"), "icon": "campaign", "link": reverse_lazy("admin:campaigns_campaign_changelist")},
+                    {"title": _("Participants"), "icon": "trending_up", "link": reverse_lazy("admin:campaigns_campaignparticipant_changelist")},
                     {"title": _("Campaign vouchers"), "icon": "confirmation_number", "link": reverse_lazy("admin:campaigns_campaignrewardvoucher_changelist")},
-                    {"title": _("Group offers"), "icon": "groups", "link": reverse_lazy("admin:groups_groupoffer_changelist")},
-                    {"title": _("Group deals"), "icon": "diversity_3", "link": reverse_lazy("admin:groups_groupdeal_changelist")},
+                    {"title": _("Groups"), "icon": "groups", "link": reverse_lazy("admin:campaigns_group_changelist")},
                 ],
             },
             {

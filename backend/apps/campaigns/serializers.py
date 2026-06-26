@@ -18,7 +18,7 @@ from apps.campaigns.models import (
     CampaignReward,
     CampaignRewardVoucher,
     CampaignRule,
-    GroupSession,
+    Group,
 )
 from core.frontend import frontend_base_url
 
@@ -30,7 +30,11 @@ class CampaignRuleSerializer(serializers.ModelSerializer):
         model = CampaignRule
         fields = (
             "rule_type",
+            "mechanic",
             "required_count",
+            "required_spend",
+            "min_spend",
+            "max_banked",
             "minimum_time_between_actions",
             "max_count_per_day",
             "required_group_size",
@@ -84,6 +88,7 @@ class CampaignWriteSerializer(serializers.ModelSerializer):
             "completion_limit_per_customer",
             "auto_join_enabled",
             "allow_multiple_campaign_counting",
+            "instagram_handle",
             "rule",
             "reward",
         )
@@ -154,6 +159,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "completion_limit_per_customer",
             "auto_join_enabled",
             "allow_multiple_campaign_counting",
+            "instagram_handle",
             "rule",
             "reward",
             "required_count",
@@ -324,6 +330,7 @@ class CampaignDetailSerializer(CampaignSerializer):
             "completion_limit_per_customer",
             "auto_join_enabled",
             "allow_multiple_campaign_counting",
+            "instagram_handle",
             "rule",
             "reward",
             "required_count",
@@ -474,13 +481,13 @@ class CampaignRewardVoucherSerializer(serializers.ModelSerializer):
         return getattr(staff, "name", "") or ""
 
 
-class GroupSessionSerializer(serializers.ModelSerializer):
+class GroupSerializer(serializers.ModelSerializer):
     """A group session with its members flattened for the group screen (read-only)."""
 
     members = serializers.SerializerMethodField()
 
     class Meta:
-        model = GroupSession
+        model = Group
         fields = (
             "id",
             "campaign",
@@ -495,7 +502,7 @@ class GroupSessionSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
-    def get_members(self, obj: GroupSession) -> list[dict]:
+    def get_members(self, obj: Group) -> list[dict]:
         return [
             {
                 "id": str(member.id),
@@ -665,18 +672,14 @@ def _mask_phone(phone: str | None) -> str:
 class UnifiedScanResultSerializer(serializers.Serializer):
     """Shape of a :class:`StaffScannerService.UnifiedScanResult` (unified scan).
 
-    Emits exactly: ``customer`` (name + masked phone), the passthrough
-    ``staff_collect`` ``loyalty`` dict (or ``null``) with its
-    ``loyalty_skipped`` reason code, the list of advanced campaign
-    ``ProgressResult`` shapes (``campaigns``), and the list of
+    Emits exactly: ``customer`` (name + masked phone), the list of advanced
+    campaign ``ProgressResult`` shapes (``campaigns``), and the list of
     ``skipped_campaigns`` (each ``campaign_id`` + ``name`` + ``reason_code``).
-    The legs are independent — the loyalty leg may be present while every
-    campaign is skipped, or vice versa.
+    Post-restructure there is no loyalty leg — a loyalty card is now an INDIVIDUAL
+    campaign, so it advances through ``campaigns`` like any other.
     """
 
     customer = serializers.SerializerMethodField()
-    loyalty = serializers.SerializerMethodField()
-    loyalty_skipped = serializers.SerializerMethodField()
     campaigns = serializers.SerializerMethodField()
     skipped_campaigns = serializers.SerializerMethodField()
 
@@ -685,13 +688,6 @@ class UnifiedScanResultSerializer(serializers.Serializer):
             "name": getattr(obj.customer, "name", None),
             "phone": _mask_phone(getattr(obj.customer, "phone", None)),
         }
-
-    def get_loyalty(self, obj) -> dict | None:
-        # The staff_collect dict is passed through verbatim (already a plain dict).
-        return obj.loyalty
-
-    def get_loyalty_skipped(self, obj) -> str | None:
-        return obj.loyalty_skipped_reason
 
     def get_campaigns(self, obj) -> list:
         return ProgressResultSerializer(
@@ -740,7 +736,7 @@ class GroupConfirmResultSerializer(serializers.Serializer):
     many members were checked in so the staff UI can show the table size.
     """
 
-    session = GroupSessionSerializer()
+    session = GroupSerializer()
     member_count = serializers.IntegerField()
     voucher = serializers.SerializerMethodField()
 

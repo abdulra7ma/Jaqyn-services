@@ -24,7 +24,7 @@ from apps.campaigns.serializers import (
     UnifiedScanResultSerializer,
 )
 from apps.campaigns.services import StaffScannerService
-from apps.loyalty.services import get_staff_for_user
+from apps.staff.services import get_staff_for_user
 from core.permissions import IsStaff
 from core.response import success_response
 

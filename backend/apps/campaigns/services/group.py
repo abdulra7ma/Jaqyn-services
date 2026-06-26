@@ -8,7 +8,7 @@ voucher), reusing :class:`CampaignRewardService` and the same reward-cap re-chec
 the visit path uses.
 
 Contention is handled the same way as the visit path: the ``Campaign`` row is
-locked first, then the ``GroupSession`` row, in that fixed order, so the
+locked first, then the ``Group`` row, in that fixed order, so the
 single-voucher mint is serialised and the reward cap can never be overshot. The
 leader's reward notification is scheduled only via ``transaction.on_commit`` (the
 non-negotiable Celery-with-Postgres rule).
@@ -31,8 +31,8 @@ from apps.campaigns.models import (
     Campaign,
     CampaignParticipant,
     CampaignRewardVoucher,
-    GroupSession,
-    GroupSessionMember,
+    Group,
+    GroupMember,
 )
 from apps.campaigns.services.eligibility import CampaignEligibilityService
 from apps.campaigns.services.progress import (
@@ -56,7 +56,7 @@ class GroupConfirmResult:
     checked in (leader included) so the staff UI can show "4 / 4 confirmed".
     """
 
-    session: GroupSession
+    session: Group
     voucher: CampaignRewardVoucher
     member_count: int
 
@@ -65,7 +65,7 @@ class CampaignGroupService:
     """Run group-campaign sessions end to end (plan §11 / Q4 / Q6).
 
     The contention-sensitive entry point is :meth:`confirm_group_visit`, which
-    mints the single leader voucher under a ``Campaign`` → ``GroupSession`` lock
+    mints the single leader voucher under a ``Campaign`` → ``Group`` lock
     ordering so a double-confirm cannot mint two vouchers.
     """
 
@@ -115,15 +115,15 @@ class CampaignGroupService:
         campaign: Campaign,
         leader,
         now: datetime | None = None,
-    ) -> GroupSession:
+    ) -> Group:
         """Start a group session for a leader, minting the GROUP_INVITE token (§11).
 
         Rejects a non-GROUP campaign (``VALIDATION_ERROR``) or a campaign that is
-        not ACTIVE (``CAMPAIGN_NOT_ACTIVE``). Creates a FORMING :class:`GroupSession`
+        not ACTIVE (``CAMPAIGN_NOT_ACTIVE``). Creates a FORMING :class:`Group`
         whose ``required_size`` is the rule's group size and whose ``expires_at`` is
         ``now`` plus the check-in window, mints a ``GROUP_INVITE`` QR token whose
         value is the session's ``invite_token`` (members join by scanning it), and
-        enrols the leader as the first ``GroupSessionMember`` (CHECKED_IN — the
+        enrols the leader as the first ``GroupMember`` (CHECKED_IN — the
         leader is present by definition). The leader is also auto-joined as a
         :class:`CampaignParticipant` so the reward can attach to their row on
         completion. Runs in one atomic block.
@@ -150,10 +150,10 @@ class CampaignGroupService:
                 campaign=campaign.id,
                 expires_at=now + timedelta(minutes=window),
             )
-            session = GroupSession.objects.create(
+            session = Group.objects.create(
                 campaign=campaign,
                 group_leader=leader,
-                status=GroupSession.Status.FORMING,
+                status=Group.Status.FORMING,
                 required_size=required_size,
                 invite_token=token.token,
                 expires_at=now + timedelta(minutes=window),
@@ -161,20 +161,20 @@ class CampaignGroupService:
             # The leader is a participant so the reward attaches to a real row on
             # completion; they are present, so they are CHECKED_IN from the start.
             CampaignProgressService.join_campaign(campaign, leader)
-            GroupSessionMember.objects.create(
-                group_session=session,
+            GroupMember.objects.create(
+                group=session,
                 customer=leader,
-                status=GroupSessionMember.Status.CHECKED_IN,
+                status=GroupMember.Status.CHECKED_IN,
                 joined_at=now,
                 checked_in_at=now,
             )
 
         emit_event(
-            "campaign_group_session_started",
+            "campaign_group_started",
             business_id=str(campaign.business_id),
             campaign_id=str(campaign.id),
             customer_id=str(leader.id),
-            group_session_id=str(session.id),
+            group_id=str(session.id),
         )
         return session
 
@@ -184,7 +184,7 @@ class CampaignGroupService:
         invite_token: str,
         customer,
         now: datetime | None = None,
-    ) -> GroupSessionMember:
+    ) -> GroupMember:
         """Join a forming group session via its invite token (§11, idempotent).
 
         Resolves the session by ``invite_token`` (``GROUP_SESSION_NOT_FOUND`` if no
@@ -198,7 +198,7 @@ class CampaignGroupService:
         now = now or timezone.now()
         with transaction.atomic():
             session = (
-                GroupSession.objects.select_for_update()
+                Group.objects.select_for_update()
                 .select_related("campaign")
                 .filter(invite_token=invite_token)
                 .first()
@@ -207,41 +207,41 @@ class CampaignGroupService:
                 raise JaqynAPIException(
                     "GROUP_SESSION_NOT_FOUND", status_code=status.HTTP_404_NOT_FOUND
                 )
-            existing = GroupSessionMember.objects.filter(
-                group_session=session, customer=customer
+            existing = GroupMember.objects.filter(
+                group=session, customer=customer
             ).first()
             if existing is not None:
                 return existing
-            if session.status != GroupSession.Status.FORMING:
+            if session.status != Group.Status.FORMING:
                 raise JaqynAPIException(
                     "GROUP_SESSION_INVALID_STATE",
                     status_code=status.HTTP_409_CONFLICT,
                 )
-            member_count = GroupSessionMember.objects.filter(
-                group_session=session
+            member_count = GroupMember.objects.filter(
+                group=session
             ).count()
             if member_count >= session.required_size:
                 raise JaqynAPIException(
                     "GROUP_SESSION_FULL", status_code=status.HTTP_409_CONFLICT
                 )
-            member = GroupSessionMember.objects.create(
-                group_session=session,
+            member = GroupMember.objects.create(
+                group=session,
                 customer=customer,
-                status=GroupSessionMember.Status.JOINED,
+                status=GroupMember.Status.JOINED,
                 joined_at=now,
             )
             # Reaching the required size flips the session to FULL so late joiners
             # are rejected; it is not yet COMPLETED — staff confirmation does that.
             if member_count + 1 >= session.required_size:
-                session.status = GroupSession.Status.FULL
+                session.status = Group.Status.FULL
                 session.save(update_fields=["status", "updated_at"])
 
         emit_event(
-            "campaign_group_session_joined",
+            "campaign_group_joined",
             business_id=str(session.campaign.business_id),
             campaign_id=str(session.campaign_id),
             customer_id=str(customer.id),
-            group_session_id=str(session.id),
+            group_id=str(session.id),
         )
         return member
 
@@ -249,7 +249,7 @@ class CampaignGroupService:
     def confirm_group_visit(
         cls,
         staff: StaffMember,
-        group_session_id,
+        group_id,
         now: datetime | None = None,
     ) -> GroupConfirmResult:
         """Confirm a group check-in and issue the single leader voucher (§11 / Q4).
@@ -257,7 +257,7 @@ class CampaignGroupService:
         The coordinated MVP confirmation: the staff member confirms the whole table
         at once. Loads the session and asserts it belongs to the staff member's
         business (``WRONG_BUSINESS``). Locks the ``Campaign`` row first, then the
-        ``GroupSession`` row (the fixed Campaign → session order that prevents a
+        ``Group`` row (the fixed Campaign → session order that prevents a
         deadlock with the visit path). Validates the session has not expired past
         ``expires_at`` / the check-in window (``GROUP_SESSION_INVALID_STATE``) and
         has reached ``required_size`` (``GROUP_SESSION_FULL`` reason reused for the
@@ -272,8 +272,8 @@ class CampaignGroupService:
         """
         now = now or timezone.now()
         session = (
-            GroupSession.objects.select_related("campaign", "campaign__reward")
-            .filter(id=group_session_id)
+            Group.objects.select_related("campaign", "campaign__reward")
+            .filter(id=group_id)
             .first()
         )
         if session is None:
@@ -288,13 +288,13 @@ class CampaignGroupService:
         with transaction.atomic():
             campaign = cls._lock_campaign(session.campaign_id)
             session = (
-                GroupSession.objects.select_for_update()
+                Group.objects.select_for_update()
                 .select_related("campaign")
                 .get(id=session.id)
             )
             if session.status not in {
-                GroupSession.Status.FORMING,
-                GroupSession.Status.FULL,
+                Group.Status.FORMING,
+                Group.Status.FULL,
             }:
                 # Already COMPLETED/EXPIRED/CANCELLED — a re-confirm must not mint
                 # a second voucher.
@@ -303,7 +303,7 @@ class CampaignGroupService:
                     status_code=status.HTTP_409_CONFLICT,
                 )
             if session.expires_at is not None and session.expires_at <= now:
-                session.status = GroupSession.Status.EXPIRED
+                session.status = Group.Status.EXPIRED
                 session.save(update_fields=["status", "updated_at"])
                 raise JaqynAPIException(
                     "GROUP_SESSION_INVALID_STATE",
@@ -312,8 +312,8 @@ class CampaignGroupService:
                 )
 
             members = list(
-                GroupSessionMember.objects.select_for_update().filter(
-                    group_session=session
+                GroupMember.objects.select_for_update().filter(
+                    group=session
                 )
             )
             if len(members) < session.required_size:
@@ -339,8 +339,8 @@ class CampaignGroupService:
                 )
 
             for member in members:
-                if member.status == GroupSessionMember.Status.JOINED:
-                    member.status = GroupSessionMember.Status.CHECKED_IN
+                if member.status == GroupMember.Status.JOINED:
+                    member.status = GroupMember.Status.CHECKED_IN
                     member.checked_in_at = now
                     member.save(update_fields=["status", "checked_in_at", "updated_at"])
 
@@ -362,7 +362,7 @@ class CampaignGroupService:
                     update_fields=["status", "completed_at", "updated_at"]
                 )
 
-            session.status = GroupSession.Status.COMPLETED
+            session.status = Group.Status.COMPLETED
             session.completed_at = now
             session.save(update_fields=["status", "completed_at", "updated_at"])
 
@@ -377,7 +377,7 @@ class CampaignGroupService:
             business_id=str(campaign.business_id),
             campaign_id=str(campaign.id),
             customer_id=str(leader.id),
-            group_session_id=str(session.id),
+            group_id=str(session.id),
             voucher_id=str(voucher.id),
         )
         return GroupConfirmResult(
@@ -385,7 +385,22 @@ class CampaignGroupService:
         )
 
     @staticmethod
-    def get_session_for_customer(group_session_id, customer) -> GroupSession:
+    def expire_old_groups(now: datetime | None = None) -> int:
+        """Expire FORMING/FULL groups whose check-in window has closed (plan §1.4).
+
+        Idempotent batch used by the ``expire_old_groups`` Celery task (replaces the
+        deleted ``groups.services.expire_old_groups``). Only groups still FORMING or
+        FULL with ``expires_at <= now`` are flipped to EXPIRED, so re-running is a
+        no-op. Returns the number of groups expired.
+        """
+        now = now or timezone.now()
+        return Group.objects.filter(
+            status__in=[Group.Status.FORMING, Group.Status.FULL],
+            expires_at__lte=now,
+        ).update(status=Group.Status.EXPIRED, updated_at=now)
+
+    @staticmethod
+    def get_session_for_customer(group_id, customer) -> Group:
         """Load a group session the customer is a member of, or raise (§11).
 
         Raises ``GROUP_SESSION_NOT_FOUND`` when the session does not exist or the
@@ -394,15 +409,15 @@ class CampaignGroupService:
         for the group screen.
         """
         session = (
-            GroupSession.objects.select_related("campaign")
+            Group.objects.select_related("campaign")
             .prefetch_related("members")
-            .filter(id=group_session_id)
+            .filter(id=group_id)
             .first()
         )
         if session is None or not (
             session.group_leader_id == customer.id
-            or GroupSessionMember.objects.filter(
-                group_session=session, customer=customer
+            or GroupMember.objects.filter(
+                group=session, customer=customer
             ).exists()
         ):
             raise JaqynAPIException(
@@ -411,7 +426,7 @@ class CampaignGroupService:
         return session
 
     @classmethod
-    def invite_link_for_session(cls, group_session_id, customer) -> GroupSession:
+    def invite_link_for_session(cls, group_id, customer) -> Group:
         """Return the session so the leader can surface its invite token/QR (§11).
 
         Only the leader may fetch the invite link (``PERMISSION_DENIED`` for a
@@ -419,7 +434,7 @@ class CampaignGroupService:
         (``GROUP_SESSION_INVALID_STATE``) — a completed/expired session has no live
         invite. The view builds the scannable URL from ``invite_token``.
         """
-        session = cls.get_session_for_customer(group_session_id, customer)
+        session = cls.get_session_for_customer(group_id, customer)
         if session.group_leader_id != customer.id:
             raise JaqynAPIException(
                 "PERMISSION_DENIED",
@@ -427,8 +442,8 @@ class CampaignGroupService:
                 status.HTTP_403_FORBIDDEN,
             )
         if session.status not in {
-            GroupSession.Status.FORMING,
-            GroupSession.Status.FULL,
+            Group.Status.FORMING,
+            Group.Status.FULL,
         }:
             raise JaqynAPIException(
                 "GROUP_SESSION_INVALID_STATE", status_code=status.HTTP_409_CONFLICT

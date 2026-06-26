@@ -29,10 +29,12 @@ def _bust_on_business_content_change(sender: type, **kwargs: Any) -> None:
 
 def connect_cross_app_signals() -> None:
     """Connect signals for models owned by other apps (imported lazily to avoid an
-    import cycle at app-loading time). Called from ``BusinessesConfig.ready``."""
-    from apps.groups.models import GroupOffer
-    from apps.loyalty.models import RewardProgram
+    import cycle at app-loading time). Called from ``BusinessesConfig.ready``.
 
-    for model in (RewardProgram, GroupOffer):
+    A campaign change busts the discovery cache (campaigns replaced the deleted
+    loyalty programs + group offers that the discovery payload used to embed)."""
+    from apps.campaigns.models import Campaign
+
+    for model in (Campaign,):
         post_save.connect(_bust_on_business_content_change, sender=model)
         post_delete.connect(_bust_on_business_content_change, sender=model)

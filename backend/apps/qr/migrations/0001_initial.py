@@ -12,8 +12,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("businesses", "0001_initial"),
-        ("groups", "0001_initial"),
-        ("loyalty", "0001_initial"),
         ("staff", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
@@ -99,36 +97,6 @@ class Migration(migrations.Migration):
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="qr_tokens",
                         to=settings.AUTH_USER_MODEL,
-                    ),
-                ),
-                (
-                    "group_deal",
-                    models.ForeignKey(
-                        blank=True,
-                        null=True,
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="qr_tokens",
-                        to="groups.groupdeal",
-                    ),
-                ),
-                (
-                    "reward_progress",
-                    models.ForeignKey(
-                        blank=True,
-                        null=True,
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="qr_tokens",
-                        to="loyalty.customerrewardprogress",
-                    ),
-                ),
-                (
-                    "reward_redemption",
-                    models.ForeignKey(
-                        blank=True,
-                        null=True,
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="qr_tokens",
-                        to="loyalty.rewardredemption",
                     ),
                 ),
             ],

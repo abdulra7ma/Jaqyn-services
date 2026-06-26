@@ -17,7 +17,7 @@ from django.shortcuts import render
 from django.utils import timezone
 
 from apps.businesses.models import Business
-from apps.loyalty.models import RewardRedemption
+from apps.campaigns.models import CampaignRewardVoucher
 from apps.qr.models import ScanLog
 from apps.reporting.dashboard import _last_months
 
@@ -57,8 +57,8 @@ def _leaderboard() -> list[dict[str, Any]]:
         .annotate(
             scans=Count("scan_logs", filter=Q(scan_logs__status=ScanLog.Status.SUCCESS), distinct=True),
             redemptions=Count(
-                "reward_redemptions",
-                filter=Q(reward_redemptions__status=RewardRedemption.Status.REDEEMED),
+                "campaign_vouchers",
+                filter=Q(campaign_vouchers__status=CampaignRewardVoucher.Status.REDEEMED),
                 distinct=True,
             ),
         )
@@ -111,7 +111,7 @@ def _redemptions_chart() -> tuple[str, str]:
     months = _last_months(REDEMPTION_MONTHS)
     by_month = {
         (r["m"].year, r["m"].month): r["c"]
-        for r in RewardRedemption.objects.filter(status=RewardRedemption.Status.REDEEMED)
+        for r in CampaignRewardVoucher.objects.filter(status=CampaignRewardVoucher.Status.REDEEMED)
         .annotate(m=TruncMonth("redeemed_at")).values("m").annotate(c=Count("id"))
         if r["m"] is not None
     }

@@ -17,7 +17,7 @@ from apps.campaigns.serializers import (
     CampaignProgressSerializer,
     CampaignRewardVoucherSerializer,
     CampaignSerializer,
-    GroupSessionSerializer,
+    GroupSerializer,
 )
 from apps.campaigns.services import (
     CampaignGroupService,
@@ -152,7 +152,7 @@ def _invite_url(request, session) -> str:
 
 class GroupSessionStartView(APIView):
     permission_classes = [IsCustomer]
-    serializer_class = GroupSessionSerializer
+    serializer_class = GroupSerializer
     throttle_scope = "campaign_join"
 
     def get_throttles(self):
@@ -164,24 +164,24 @@ class GroupSessionStartView(APIView):
         campaign = CampaignService.get_discoverable(campaign_id)
         session = CampaignGroupService.start_group_session(campaign, request.user)
         return success_response(
-            GroupSessionSerializer(session).data, status=201
+            GroupSerializer(session).data, status=201
         )
 
 
 class GroupSessionDetailView(APIView):
     permission_classes = [IsCustomer]
-    serializer_class = GroupSessionSerializer
+    serializer_class = GroupSerializer
 
     def get(self, request, group_session_id):
         session = CampaignGroupService.get_session_for_customer(
             group_session_id, request.user
         )
-        return success_response(GroupSessionSerializer(session).data)
+        return success_response(GroupSerializer(session).data)
 
 
 class GroupSessionInviteView(APIView):
     permission_classes = [IsCustomer]
-    serializer_class = GroupSessionSerializer
+    serializer_class = GroupSerializer
     throttle_scope = "campaign_join"
 
     def get_throttles(self):
@@ -193,6 +193,6 @@ class GroupSessionInviteView(APIView):
         session = CampaignGroupService.invite_link_for_session(
             group_session_id, request.user
         )
-        data = dict(GroupSessionSerializer(session).data)
+        data = dict(GroupSerializer(session).data)
         data["invite_url"] = _invite_url(request, session)
         return success_response(data)

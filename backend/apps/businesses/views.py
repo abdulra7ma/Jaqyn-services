@@ -84,7 +84,7 @@ class PublicBusinessDetailView(APIView):
     def get(self, request, business_id):
         business = get_object_or_404(
             Business.objects.prefetch_related(
-                "catalog_items", "reward_programs", "group_offers", "gallery_images"
+                "catalog_items", "campaigns__rule", "campaigns__reward", "gallery_images"
             ),
             id=business_id,
             status=Business.Status.APPROVED,

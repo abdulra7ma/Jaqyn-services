@@ -34,7 +34,7 @@ from apps.campaigns.services import (
     CampaignService,
     build_social_post,
 )
-from apps.loyalty.services import get_staff_for_user
+from apps.staff.services import get_staff_for_user
 from core.images import CAMPAIGN_MAX_DIM, compress_image
 from core.pagination import StandardResultsSetPagination
 from core.permissions import IsBusinessOwner, IsBusinessOwnerOrStaff, IsStaff
@@ -233,13 +233,18 @@ class CampaignDuplicateView(_OwnerMixin, APIView):
             "completion_limit_per_customer": source.completion_limit_per_customer,
             "auto_join_enabled": source.auto_join_enabled,
             "allow_multiple_campaign_counting": source.allow_multiple_campaign_counting,
+            "instagram_handle": source.instagram_handle,
         }
         rule = getattr(source, "rule", None)
         reward = getattr(source, "reward", None)
         rule_data = (
             {
                 "rule_type": rule.rule_type,
+                "mechanic": rule.mechanic,
                 "required_count": rule.required_count,
+                "required_spend": rule.required_spend,
+                "min_spend": rule.min_spend,
+                "max_banked": rule.max_banked,
                 "minimum_time_between_actions": rule.minimum_time_between_actions,
                 "max_count_per_day": rule.max_count_per_day,
                 "required_group_size": rule.required_group_size,

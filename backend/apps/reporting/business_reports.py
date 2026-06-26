@@ -24,7 +24,7 @@ from django.db.models.functions import ExtractHour, TruncDate, TruncMonth
 from django.utils import timezone
 
 from apps.businesses.models import Business
-from apps.loyalty.models import CustomerRewardProgress, RewardRedemption, RewardTransaction
+from apps.campaigns.models import CampaignParticipant, CampaignRewardVoucher
 from apps.qr.models import ScanLog
 from apps.staff.models import StaffMember
 from core.exceptions import JaqynAPIException
@@ -224,20 +224,24 @@ def _raw_metrics(business: Business, start: datetime, end: datetime) -> _RawMetr
     visits = sum(int(r["days"]) for r in visit_rows)
     repeat = sum(1 for r in visit_rows if int(r["days"]) >= RETURNING_MIN_VISITS)
 
-    redemptions = RewardRedemption.objects.filter(business=business, created_at__gte=start, created_at__lt=end)
+    redemptions = CampaignRewardVoucher.objects.filter(business=business, created_at__gte=start, created_at__lt=end)
     redemptions_total = redemptions.count()
-    redemptions_claimed = redemptions.filter(status=RewardRedemption.Status.REDEEMED).count()
+    redemptions_claimed = redemptions.filter(status=CampaignRewardVoucher.Status.REDEEMED).count()
 
-    spend = RewardTransaction.objects.filter(
-        business=business,
-        action=RewardTransaction.Action.EARNED,
-        amount_spend__isnull=False,
+    # Spend telemetry: sum the accumulated current_spend across participants who
+    # joined in-window for the business's SPEND campaigns. Post-restructure spend
+    # lives on CampaignParticipant.current_spend (loyalty RewardTransaction is
+    # gone); this approximates window spend without a per-action JSON aggregate.
+    spend = CampaignParticipant.objects.filter(
+        campaign__business=business,
         created_at__gte=start,
         created_at__lt=end,
-    ).aggregate(total=Sum("amount_spend"))["total"]
+    ).aggregate(total=Sum("current_spend"))["total"]
+    if not spend:
+        spend = None
 
     enrolled = (
-        CustomerRewardProgress.objects.filter(business=business, created_at__gte=start, created_at__lt=end)
+        CampaignParticipant.objects.filter(campaign__business=business, created_at__gte=start, created_at__lt=end)
         .values("customer")
         .distinct()
         .count()
@@ -391,14 +395,14 @@ def _staff_performance(business: Business, window: ReportWindow) -> tuple[list[S
     prev_scans = _success_scans(business, window.prev_start, window.prev_end).filter(staff__isnull=False)
     prev_by_staff = {row["staff"]: row["c"] for row in prev_scans.values("staff").annotate(c=Count("id"))}
 
-    redemptions = RewardRedemption.objects.filter(
+    redemptions = CampaignRewardVoucher.objects.filter(
         business=business,
-        status=RewardRedemption.Status.REDEEMED,
-        redeemed_by__isnull=False,
-        created_at__gte=window.start,
-        created_at__lt=window.end,
+        status=CampaignRewardVoucher.Status.REDEEMED,
+        redeemed_by_staff__isnull=False,
+        redeemed_at__gte=window.start,
+        redeemed_at__lt=window.end,
     )
-    redemptions_by_staff = {row["redeemed_by"]: row["c"] for row in redemptions.values("redeemed_by").annotate(c=Count("id"))}
+    redemptions_by_staff = {row["redeemed_by_staff"]: row["c"] for row in redemptions.values("redeemed_by_staff").annotate(c=Count("id"))}
 
     # First-ever scan per customer (across all time) → attribute the sign-up.
     signups_by_staff: dict[object, int] = {}
@@ -459,11 +463,13 @@ def _insights(business: Business, busiest: list[SeriesPoint]) -> list[Insight]:
     out: list[Insight] = []
 
     close = 0
-    for p in CustomerRewardProgress.objects.filter(
-        business=business, status=CustomerRewardProgress.Status.ACTIVE, target_count__gt=0
-    ).values("current_count", "target_count"):
-        target = p["target_count"]
-        if target and p["current_count"] < target and p["current_count"] >= float(CLOSE_TO_REWARD_RATIO) * target:
+    for p in CampaignParticipant.objects.filter(
+        campaign__business=business,
+        status__in=[CampaignParticipant.Status.JOINED, CampaignParticipant.Status.IN_PROGRESS],
+        campaign__rule__required_count__gt=0,
+    ).values("progress_count", "campaign__rule__required_count"):
+        target = p["campaign__rule__required_count"]
+        if target and p["progress_count"] < target and p["progress_count"] >= float(CLOSE_TO_REWARD_RATIO) * target:
             close += 1
     if close:
         out.append(Insight("💡", f"{close} customers are close to a reward. Encourage one more visit — they convert faster than new visitors."))

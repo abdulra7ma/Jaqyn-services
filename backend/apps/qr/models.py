@@ -18,9 +18,9 @@ class QRCodeToken(UUIDModel):
     type = models.CharField(max_length=32, choices=Type.choices)
     business = models.ForeignKey("businesses.Business", on_delete=models.CASCADE, related_name="qr_tokens", blank=True, null=True)
     customer = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="qr_tokens", blank=True, null=True)
-    reward_progress = models.ForeignKey("loyalty.CustomerRewardProgress", on_delete=models.CASCADE, related_name="qr_tokens", blank=True, null=True)
-    reward_redemption = models.ForeignKey("loyalty.RewardRedemption", on_delete=models.CASCADE, related_name="qr_tokens", blank=True, null=True)
-    group_deal = models.ForeignKey("groups.GroupDeal", on_delete=models.CASCADE, related_name="qr_tokens", blank=True, null=True)
+    # Campaign this token belongs to, when any. Stored as a bare UUID (not an FK)
+    # so the qr app stays decoupled from the campaigns app. The legacy
+    # loyalty/groups FKs were dropped in the campaigns restructure (clean cut).
     campaign = models.UUIDField(blank=True, null=True)
     expires_at = models.DateTimeField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
