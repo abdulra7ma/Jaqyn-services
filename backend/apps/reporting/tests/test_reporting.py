@@ -6,8 +6,15 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.businesses.models import Business
-from apps.groups.models import GroupDeal, GroupMember, GroupOffer
-from apps.loyalty.models import CustomerRewardProgress, RewardProgram, RewardRedemption, RewardTransaction
+from apps.campaigns.models import (
+    Campaign,
+    CampaignParticipant,
+    CampaignReward,
+    CampaignRewardVoucher,
+    CampaignRule,
+    Group,
+    GroupMember,
+)
 from apps.qr.models import ScanLog
 from apps.staff.models import StaffMember
 
@@ -31,30 +38,28 @@ def make_business():
 
 def seed_metrics(business):
     customer = User.objects.create_user(phone="+996707999123", role=User.Role.CUSTOMER, is_phone_verified=True, name="Customer")
-    program = RewardProgram.objects.create(
-        business=business,
-        type=RewardProgram.Type.STAMP,
-        title="Reward",
-        description="Desc",
-        required_count=1,
-        reward_description="Prize",
+    campaign = Campaign.objects.create(
+        business=business, name="Reward", campaign_type=Campaign.CampaignType.INDIVIDUAL,
+        status=Campaign.Status.ACTIVE,
     )
-    progress = CustomerRewardProgress.objects.create(customer=customer, business=business, reward_program=program, current_count=1, target_count=1)
-    RewardRedemption.objects.create(customer=customer, business=business, reward_program=program, progress=progress, code="ABCDEFGH", status=RewardRedemption.Status.REDEEMED)
+    reward = CampaignReward.objects.create(
+        campaign=campaign, reward_type=CampaignReward.RewardType.FREE_ITEM, title="Prize",
+    )
+    CampaignRewardVoucher.objects.create(
+        customer=customer, business=business, campaign=campaign, reward=reward,
+        voucher_code="ABCDEFGH", status=CampaignRewardVoucher.Status.REDEEMED,
+    )
     ScanLog.objects.create(customer=customer, business=business, action="collect", status=ScanLog.Status.SUCCESS)
     ScanLog.objects.create(customer=customer, business=business, action="redeem", status=ScanLog.Status.SUCCESS)
-    offer = GroupOffer.objects.create(
-        business=business,
-        title="Group",
-        description="Desc",
-        category="cafe",
-        min_group_size=1,
-        reward_description="Group reward",
-        valid_days=["mon"],
-        status=GroupOffer.Status.ACTIVE,
+    group_campaign = Campaign.objects.create(
+        business=business, name="Group", campaign_type=Campaign.CampaignType.GROUP,
+        status=Campaign.Status.ACTIVE,
     )
-    deal = GroupDeal.objects.create(group_offer=offer, leader=customer, visit_time=timezone.now(), invite_token="invite", status=GroupDeal.Status.COMPLETED)
-    GroupMember.objects.create(group_deal=deal, customer=customer, status=GroupMember.Status.CHECKED_IN)
+    group = Group.objects.create(
+        campaign=group_campaign, group_leader=customer, required_size=1,
+        invite_token="invite", status=Group.Status.COMPLETED,
+    )
+    GroupMember.objects.create(group=group, customer=customer, status=GroupMember.Status.CHECKED_IN)
     return customer
 
 
@@ -128,9 +133,13 @@ def test_business_reports_forbidden_for_other_role(api_client):
 
 def test_report_staff_and_spend(api_client):
     business = make_business()
-    program = RewardProgram.objects.create(
-        business=business, type=RewardProgram.Type.STAMP, title="R", description="d",
-        required_count=6, reward_description="free",
+    campaign = Campaign.objects.create(
+        business=business, name="R", campaign_type=Campaign.CampaignType.INDIVIDUAL,
+        status=Campaign.Status.ACTIVE,
+    )
+    CampaignRule.objects.create(
+        campaign=campaign, rule_type=CampaignRule.RuleType.VISIT_COUNT,
+        mechanic=CampaignRule.Mechanic.SPEND, required_spend=Decimal("1000"),
     )
     staff = StaffMember.objects.create(business=business, name="Aigerim", role=StaffMember.Role.CASHIER)
     now = timezone.localtime()
@@ -140,11 +149,9 @@ def test_report_staff_and_spend(api_client):
     _scan_at(business, c1, now - timedelta(days=2), staff=staff)
     _scan_at(business, c1, now - timedelta(days=1), staff=staff)  # 2nd visit-day → returning
     _scan_at(business, c2, now - timedelta(days=1), staff=staff)
-    progress = CustomerRewardProgress.objects.create(customer=c1, business=business, reward_program=program, current_count=1, target_count=6)
-    RewardTransaction.objects.create(
-        customer=c1, business=business, reward_program=program, progress=progress,
-        action=RewardTransaction.Action.EARNED, amount_count=1, amount_spend=Decimal("200"),
-        source=RewardTransaction.Source.STAFF_MANUAL, staff=staff,
+    # Spend telemetry now lives on CampaignParticipant.current_spend.
+    CampaignParticipant.objects.create(
+        customer=c1, campaign=campaign, current_spend=Decimal("200"),
     )
 
     api_client.force_authenticate(business.owner)

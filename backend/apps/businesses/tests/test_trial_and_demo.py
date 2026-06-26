@@ -9,7 +9,7 @@ from apps.businesses.demo_services import DEMO_OWNER_PASSWORD, create_demo_busin
 from apps.businesses.models import Business
 from apps.businesses.services import approve_business
 from apps.businesses.trial_services import expiring_trials, start_trial, trial_status
-from apps.loyalty.models import RewardProgram
+from apps.campaigns.models import Campaign
 from apps.system.models import SystemConfiguration
 
 pytestmark = pytest.mark.django_db
@@ -105,8 +105,8 @@ class TestCreateDemoBusiness:
         owner = User.objects.get(email=result.owner_email)
         assert owner.role == User.Role.BUSINESS_OWNER
         assert owner.check_password(DEMO_OWNER_PASSWORD)
-        # Seeded loyalty + catalog.
-        assert RewardProgram.objects.filter(business=biz).exists()
+        # Seeded campaign (loyalty card → INDIVIDUAL campaign) + catalog.
+        assert Campaign.objects.filter(business=biz, campaign_type=Campaign.CampaignType.INDIVIDUAL).exists()
         assert biz.catalog_items.count() == 3
 
     def test_each_call_is_unique(self):

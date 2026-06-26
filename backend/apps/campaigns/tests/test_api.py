@@ -106,7 +106,7 @@ def test_campaign_create_happy_path():
     client = owner_client(business)
     payload = {
         "name": "Coffee streak",
-        "campaign_type": Campaign.CampaignType.VISIT,
+        "campaign_type": Campaign.CampaignType.INDIVIDUAL,
         "active_days": [],
         "rule": {"rule_type": "visit_count", "required_count": 5},
         "reward": {"reward_type": "free_item", "title": "Free latte"},
@@ -583,17 +583,17 @@ def test_list_my_progress_no_n_plus_one(django_assert_num_queries):
 def test_list_filter_by_type():
     """?type= narrows the list to one campaign_type; unknown values are ignored."""
     business = make_business()
-    make_campaign(business, campaign_type=Campaign.CampaignType.VISIT)
-    make_campaign(business, campaign_type=Campaign.CampaignType.TIME_WINDOW)
+    make_campaign(business, campaign_type=Campaign.CampaignType.INDIVIDUAL)
+    make_campaign(business, campaign_type=Campaign.CampaignType.SOCIAL)
     make_campaign(business, campaign_type=Campaign.CampaignType.GROUP)
     client = customer_client(make_customer())
 
-    visit = client.get("/api/customer/campaigns/?type=visit")
-    assert visit.data["data"]["count"] == 1
-    assert visit.data["data"]["results"][0]["campaign_type"] == "visit"
+    individual = client.get("/api/customer/campaigns/?type=individual")
+    assert individual.data["data"]["count"] == 1
+    assert individual.data["data"]["results"][0]["campaign_type"] == "individual"
 
-    tw = client.get("/api/customer/campaigns/?type=time_window")
-    assert tw.data["data"]["count"] == 1
+    social = client.get("/api/customer/campaigns/?type=social")
+    assert social.data["data"]["count"] == 1
 
     group = client.get("/api/customer/campaigns/?type=group")
     assert group.data["data"]["count"] == 1

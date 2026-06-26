@@ -6,7 +6,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.accounts.tasks import send_otp
 from apps.businesses.models import Business
-from apps.groups.models import GroupDeal, GroupMember, GroupOffer
+from apps.campaigns.models import Campaign, Group, GroupMember
 from apps.notifications.models import NotificationLog, NotificationPreference
 from apps.notifications.services import notifier
 from apps.notifications.tasks import send_business_weekly_report, send_group_full_notification
@@ -31,22 +31,15 @@ def make_business():
 
 def make_group(business):
     customer = User.objects.create_user(phone="+996708900001", role=User.Role.CUSTOMER, is_phone_verified=True)
-    offer = GroupOffer.objects.create(
-        business=business,
-        title="Notify group",
-        description="Desc",
-        category="cafe",
-        min_group_size=1,
-        reward_description="Reward",
-        valid_from=date.today(),
-        valid_to=date.today(),
-        valid_days=["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
-        time_start=time(0, 0),
-        time_end=time(23, 59),
-        status=GroupOffer.Status.ACTIVE,
+    campaign = Campaign.objects.create(
+        business=business, name="Notify group", campaign_type=Campaign.CampaignType.GROUP,
+        status=Campaign.Status.ACTIVE,
     )
-    group = GroupDeal.objects.create(group_offer=offer, leader=customer, visit_time=timezone.now(), invite_token="notify-invite")
-    GroupMember.objects.create(group_deal=group, customer=customer)
+    group = Group.objects.create(
+        campaign=campaign, group_leader=customer, required_size=1,
+        invite_token="notify-invite", status=Group.Status.FORMING,
+    )
+    GroupMember.objects.create(group=group, customer=customer)
     return group
 
 

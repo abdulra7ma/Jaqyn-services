@@ -27,8 +27,8 @@ from apps.campaigns.models import (
     CampaignReward,
     CampaignRewardVoucher,
     CampaignRule,
-    GroupSession,
-    GroupSessionMember,
+    Group,
+    GroupMember,
 )
 from apps.campaigns.services import (
     CampaignGroupService,
@@ -175,7 +175,7 @@ def test_staff_confirm_unknown_group_is_not_found():
 def test_start_group_session_mints_invite_token_and_enrols_leader():
     """Starting a session creates a FORMING session, a GROUP_INVITE token, the leader.
 
-    The leader is recorded both as a CHECKED_IN ``GroupSessionMember`` and as a
+    The leader is recorded both as a CHECKED_IN ``GroupMember`` and as a
     ``CampaignParticipant`` so the reward attaches to a real row on completion.
     """
     business = make_business()
@@ -184,13 +184,13 @@ def test_start_group_session_mints_invite_token_and_enrols_leader():
 
     session = CampaignGroupService.start_group_session(campaign, leader)
 
-    assert session.status == GroupSession.Status.FORMING
+    assert session.status == Group.Status.FORMING
     assert session.required_size == 3
     assert QRCodeToken.objects.filter(
         token=session.invite_token, type=QRCodeToken.Type.GROUP_INVITE
     ).exists()
-    leader_member = GroupSessionMember.objects.get(group_session=session, customer=leader)
-    assert leader_member.status == GroupSessionMember.Status.CHECKED_IN
+    leader_member = GroupMember.objects.get(group=session, customer=leader)
+    assert leader_member.status == GroupMember.Status.CHECKED_IN
     assert CampaignParticipant.objects.filter(campaign=campaign, customer=leader).exists()
 
 
@@ -219,7 +219,7 @@ def test_join_group_session_is_idempotent_and_caps_at_required_size():
 
     # Required size (2) reached with leader + this member → session flips to FULL.
     session.refresh_from_db()
-    assert session.status == GroupSession.Status.FULL
+    assert session.status == Group.Status.FULL
 
     overflow = make_customer("813")
     with pytest.raises(JaqynAPIException) as exc:
@@ -246,7 +246,7 @@ def test_group_completion_issues_one_voucher_to_the_leader():
     result = StaffScannerService.confirm_group_visit(staff, session.id)
 
     session.refresh_from_db()
-    assert session.status == GroupSession.Status.COMPLETED
+    assert session.status == Group.Status.COMPLETED
     assert result.voucher.customer_id == leader.id
 
     leader_vouchers = CampaignRewardVoucher.objects.filter(

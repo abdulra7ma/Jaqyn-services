@@ -47,7 +47,7 @@ def test_admin_index_renders_dashboard_widgets(admin_client):
     assert "Pending One" in body
     # Curated nav sections replace the flat app dump; internal models stay off it.
     assert "Onboarding &amp; businesses" in body
-    assert "Loyalty &amp; campaigns" in body
+    assert "Campaigns" in body
     assert "Campaign actions" not in body
     assert "Reward transactions" not in body
     # Inline actions + onboarding pipeline are present.

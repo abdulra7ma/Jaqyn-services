@@ -2,8 +2,7 @@ import pytest
 
 from apps.accounts.models import User
 from apps.businesses.models import Business, CatalogItem
-from apps.groups.models import GroupOffer
-from apps.loyalty.models import RewardProgram
+from apps.campaigns.models import Campaign, CampaignReward, CampaignRule
 
 
 pytestmark = pytest.mark.django_db
@@ -193,24 +192,28 @@ def test_public_business_detail_includes_catalog_rewards_and_group_offers(api_cl
         tags=["Brunch"],
     )
     CatalogItem.objects.create(business=business, module="menu", name="Cappuccino", category="Coffee", price="150 c")
-    RewardProgram.objects.create(
-        business=business,
-        type=RewardProgram.Type.STAMP,
-        title="Buy 5 coffees",
-        description="Collect stamps",
-        required_count=5,
-        reward_description="Free coffee",
-        is_active=True,
+    individual = Campaign.objects.create(
+        business=business, name="Buy 5 coffees",
+        campaign_type=Campaign.CampaignType.INDIVIDUAL, status=Campaign.Status.ACTIVE,
     )
-    GroupOffer.objects.create(
-        business=business,
-        title="Bring friends",
-        description="Coffee group deal",
-        category="coffee",
-        min_group_size=3,
-        reward_type=GroupOffer.RewardType.GROUP_DISCOUNT,
-        reward_description="15% off",
-        status=GroupOffer.Status.ACTIVE,
+    CampaignRule.objects.create(
+        campaign=individual, rule_type=CampaignRule.RuleType.VISIT_COUNT,
+        mechanic=CampaignRule.Mechanic.STAMP, required_count=5,
+    )
+    CampaignReward.objects.create(
+        campaign=individual, reward_type=CampaignReward.RewardType.FREE_ITEM,
+        title="Buy 5 coffees", description="Free coffee",
+    )
+    group = Campaign.objects.create(
+        business=business, name="Bring friends",
+        campaign_type=Campaign.CampaignType.GROUP, status=Campaign.Status.ACTIVE,
+    )
+    CampaignRule.objects.create(
+        campaign=group, rule_type=CampaignRule.RuleType.GROUP_CHECKIN, required_group_size=3,
+    )
+    CampaignReward.objects.create(
+        campaign=group, reward_type=CampaignReward.RewardType.DISCOUNT,
+        title="Bring friends", description="15% off",
     )
 
     res = api_client.get(f"/api/businesses/{business.id}/?lat=42.8745&lng=74.5697")
