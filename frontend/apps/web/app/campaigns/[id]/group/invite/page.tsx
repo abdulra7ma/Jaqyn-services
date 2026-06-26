@@ -76,7 +76,8 @@ function InviteBody({ campaignId }: { campaignId: string }) {
   const session = sessionQuery.data;
   const remaining = Math.max(0, session.required_size - session.joined_count);
   const rewardTitle = campaign.data?.reward.title ?? "";
-  const link = inviteUrl(session.invite_code, session.invite_url);
+  // Branded short link (prototype). Pre-launch the deep link resolves it.
+  const link = inviteUrl(session.invite_code);
   const message = t("cmp.invite.message")
     .replace("{business}", session.business_name)
     .replace("{count}", String(remaining))

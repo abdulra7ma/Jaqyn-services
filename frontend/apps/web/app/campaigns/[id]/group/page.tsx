@@ -180,7 +180,9 @@ function GroupSessionView({ campaignId, sessionId }: { campaignId: string; sessi
   const remaining = Math.max(0, session.required_size - session.joined_count);
   const isFull = session.status === "full" || session.joined_count >= session.required_size;
   const isDone = session.status === "completed";
-  const link = inviteUrl(session.invite_code, session.invite_url);
+  // Display the branded short link (prototype "jaqyn.kg/g/<code>"); the real
+  // deep link resolves it. Matches SCREEN 4/5 of the prototype.
+  const link = inviteUrl(session.invite_code);
 
   return (
     <>

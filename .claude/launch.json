@@ -8,7 +8,7 @@
       "runtimeArgs": ["pnpm", "--filter", "web", "dev"],
       "port": 3000,
       "autoPort": false,
-      "env": { "API_PROXY_TARGET": "http://127.0.0.1:8000" }
+      "env": { "API_PROXY_TARGET": "http://127.0.0.1:8000", "NEXT_PUBLIC_DEMO_MODE": "1" }
     },
     {
       "name": "web-preview",

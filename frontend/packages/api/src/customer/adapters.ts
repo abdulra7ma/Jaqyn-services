@@ -195,7 +195,14 @@ export function adaptCampaign(raw: Raw): Campaign {
     end_label: formatDateLabel(raw.end_at) ?? raw.end ?? "",
     // Derive from end_at; the backend does not emit a days_left field.
     days_left: computeDaysLeft(raw.end_at),
-    active_days: raw.active_days ?? raw.days ?? "",
+    // Backend `active_days` is a JSON array of weekday codes. Coerce to a display
+    // string: empty when every day / none is set (the UI then shows "Daily"),
+    // otherwise the joined codes. (Field is typed `string` downstream.)
+    active_days: Array.isArray(raw.active_days)
+      ? raw.active_days.length === 0 || raw.active_days.length >= 7
+        ? ""
+        : raw.active_days.join(", ")
+      : (raw.active_days ?? raw.days ?? ""),
     // Backend emits separate active_start_time / active_end_time fields
     // (HH:MM:SS); derive a combined display string. No single active_hours field.
     active_hours: deriveActiveHours(raw.active_start_time, raw.active_end_time),
