@@ -4,7 +4,7 @@
 // Metric cards read live metrics; the weekly chart + activity feed fall back to
 // graceful empty states when there's no history yet. Design from Jaqyn.dc.html.
 
-import { useBusinessMe, useDashboard, useBusinessRewards } from "@jaqyn/api";
+import { useBusinessMe, useDashboard } from "@jaqyn/api";
 import Link from "next/link";
 import { OwnerShell } from "../_components/OwnerShell";
 
@@ -14,7 +14,6 @@ const DAYS = ["M", "T", "W", "T", "F", "S", "S"];
 export default function BusinessDashboardPage() {
   const me = useBusinessMe();
   const dash = useDashboard();
-  const rewards = useBusinessRewards();
 
   const m = dash.data?.metrics;
   const metrics = [
@@ -23,7 +22,6 @@ export default function BusinessDashboardPage() {
     { label: "Returning", value: m?.returning_customers ?? 0, sub: "repeat customers" },
     { label: "Rewards redeemed", value: m?.rewards_redeemed ?? 0, sub: `${m?.rewards_issued ?? 0} issued` },
   ];
-  const activeReward = rewards.data?.find((r) => r.is_active);
 
   return (
     <OwnerShell title="Dashboard">
@@ -78,17 +76,17 @@ export default function BusinessDashboardPage() {
           <div className="flex flex-col items-start justify-between gap-4 rounded-[18px] bg-brand-gradient p-[22px] text-brand-fg sm:flex-row sm:items-center">
             <div>
               <div className="text-xs font-bold uppercase tracking-[0.05em] opacity-85">
-                {activeReward ? "Active loyalty program" : "No active loyalty program"}
+                Loyalty program
               </div>
               <div className="mt-[7px] font-display text-xl font-bold">
-                {activeReward?.title ?? "Set up your first reward"}
+                Manage your rewards
               </div>
               <div className="mt-1.5 text-[13px] opacity-90">
-                {activeReward?.reward_description ?? "Reward repeat customers and bring them back."}
+                Reward repeat customers and bring them back.
               </div>
             </div>
             <Link href="/business/rewards" className="flex-none whitespace-nowrap rounded-[13px] bg-card px-5 py-3.5 text-sm font-bold text-brand-deep">
-              {activeReward ? "Manage program" : "Create program"}
+              Manage program
             </Link>
           </div>
         </div>

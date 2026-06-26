@@ -1,24 +1,13 @@
 "use client";
 
-import { useMe, useMyQr, useRewards, useWallet, type RewardProgress } from "@jaqyn/api";
+import { useMe, useMyQr } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { CustomerShell } from "../_components/CustomerShell";
 import { QueryBoundary } from "../_components/QueryBoundary";
 import { InitialTile } from "../_components/kit";
 import { ScanIcon } from "../_components/icons";
 import { useRequireAuth } from "../_lib/auth";
-
-/** Track counts from the previous poll to detect increments. */
-function usePrevCounts(list: RewardProgress[] | undefined) {
-  const ref = useRef<Record<string, number>>({});
-  if (list) {
-    list.forEach((p) => {
-      if (!(p.id in ref.current)) ref.current[p.id] = p.current_count;
-    });
-  }
-  return ref;
-}
 
 /** +996700000001 → +996 700 *** 01 */
 function maskPhone(phone?: string) {
@@ -28,55 +17,11 @@ function maskPhone(phone?: string) {
   return `+${d.slice(0, 3)} ${d.slice(3, 6)} *** ${d.slice(-2)}`;
 }
 
-type StampToast = { programId: string; businessName: string; newCount: number; target: number };
-
-/** Track wallet available count per business+reward to detect new banked vouchers. */
-function usePrevWalletCounts(
-  available: { business: { id: string }; reward: { id: string }; count: number }[] | undefined,
-) {
-  const ref = useRef<Record<string, number>>({});
-  if (available) {
-    available.forEach((item) => {
-      const key = `${item.business.id}:${item.reward.id}`;
-      if (!(key in ref.current)) ref.current[key] = item.count;
-    });
-  }
-  return ref;
-}
-
-/** Track completed_count per program to detect card completions. */
-function usePrevCompletedCounts(
-  inProgress: RewardProgress[] | undefined,
-) {
-  // completed_count lives on the RewardProgress type only after the banking-rewards
-  // backend ships; it is not in the current type definition. We track current_count
-  // going to 0 (reset) as a proxy signal — when a stamp card resets to 0 after having
-  // been at target, a voucher was banked.
-  const ref = useRef<Record<string, number>>({});
-  if (inProgress) {
-    inProgress.forEach((p) => {
-      if (!(p.id in ref.current)) ref.current[p.id] = p.current_count;
-    });
-  }
-  return ref;
-}
-
-type EarnedToast = { key: string; businessName: string };
-
 export default function MyQrPage() {
   const t = useT();
   const { isAuthenticated } = useRequireAuth();
   const me = useMe(isAuthenticated);
   const qr = useMyQr(isAuthenticated);
-  const rewards = useRewards({ refetchInterval: 3000 });
-  const wallet = useWallet({ refetchInterval: 3000 });
-
-  const [stampToasts, setStampToasts] = useState<StampToast[]>([]);
-  const [earnedToasts, setEarnedToasts] = useState<EarnedToast[]>([]);
-  const [readyPrograms, setReadyPrograms] = useState<Set<string>>(new Set());
-  const prevCounts = usePrevCounts(rewards.data);
-  const prevWalletCounts = usePrevWalletCounts(wallet.data?.available);
-  const prevInProgressCounts = usePrevCompletedCounts(rewards.data);
 
   // Keep the screen awake while the QR is shown so staff can scan it.
   useEffect(() => {
@@ -92,78 +37,6 @@ export default function MyQrPage() {
       void lock?.release().catch(() => {});
     };
   }, []);
-
-  // -- stamp toasts (existing) + card-reset (earn-banked) detection ----------
-  useEffect(() => {
-    if (!rewards.data) return;
-    const newToasts: StampToast[] = [];
-    const newEarned: EarnedToast[] = [];
-    const nowReady = new Set<string>();
-    rewards.data.forEach((p) => {
-      const prev = prevCounts.current[p.id];
-      const target = p.target_count ?? p.reward_program.required_count ?? 0;
-      if (prev !== undefined && p.current_count > prev) {
-        newToasts.push({
-          programId: p.id,
-          businessName: p.business.name || p.reward_program.title,
-          newCount: p.current_count,
-          target,
-        });
-      }
-      // Detect card reset: prev was at (or above) target and is now 0 → a voucher was banked
-      if (
-        prev !== undefined &&
-        target > 0 &&
-        prev >= target &&
-        p.current_count === 0
-      ) {
-        const key = `reset:${p.id}`;
-        newEarned.push({ key, businessName: p.business.name || p.reward_program.title });
-      }
-      prevCounts.current[p.id] = p.current_count;
-      prevInProgressCounts.current[p.id] = p.current_count;
-      if (p.status === "unlocked") nowReady.add(p.id);
-    });
-    if (newToasts.length > 0) {
-      setStampToasts((prev) => [...prev, ...newToasts]);
-      newToasts.forEach((toast) => {
-        setTimeout(() => {
-          setStampToasts((prev) => prev.filter((x) => x.programId !== toast.programId));
-        }, 5000);
-      });
-    }
-    if (newEarned.length > 0) {
-      setEarnedToasts((prev) => [...prev, ...newEarned]);
-      newEarned.forEach((toast) => {
-        setTimeout(() => {
-          setEarnedToasts((prev) => prev.filter((x) => x.key !== toast.key));
-        }, 6000);
-      });
-    }
-    setReadyPrograms(nowReady);
-  }, [rewards.data]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // -- wallet available-count change → banked voucher celebration ----------
-  useEffect(() => {
-    if (!wallet.data?.available) return;
-    const newEarned: EarnedToast[] = [];
-    wallet.data.available.forEach((item) => {
-      const key = `${item.business.id}:${item.reward.id}`;
-      const prev = prevWalletCounts.current[key];
-      if (prev !== undefined && item.count > prev) {
-        newEarned.push({ key: `wallet:${key}`, businessName: item.business.name });
-      }
-      prevWalletCounts.current[key] = item.count;
-    });
-    if (newEarned.length > 0) {
-      setEarnedToasts((prev) => [...prev, ...newEarned]);
-      newEarned.forEach((toast) => {
-        setTimeout(() => {
-          setEarnedToasts((prev) => prev.filter((x) => x.key !== toast.key));
-        }, 6000);
-      });
-    }
-  }, [wallet.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const name = me.data?.user.name || me.data?.user.phone || "?";
 
@@ -252,59 +125,6 @@ export default function MyQrPage() {
                     {t("qr.share")}
                   </button>
                 </div>
-
-                {/* live stamp-added toasts */}
-                {stampToasts.map((toast) => (
-                  <div
-                    key={toast.programId}
-                    className="mt-4 w-full max-w-sm animate-[jqIn_.3s_ease] rounded-2xl border border-line bg-card px-4 py-3 shadow-card"
-                  >
-                    <p className="text-sm font-bold text-brand">{t("qr.stampAddedNow")}</p>
-                    <p className="mt-0.5 text-xs text-subtle">
-                      {toast.businessName}
-                      {toast.target > 0 && (
-                        <>
-                          {" · "}
-                          {t("collect.progress")
-                            .replace("{count}", String(toast.newCount))
-                            .replace("{total}", String(toast.target))}
-                        </>
-                      )}
-                    </p>
-                  </div>
-                ))}
-
-                {/* reward-earned (banked) celebration toasts */}
-                {earnedToasts.map((toast) => (
-                  <div
-                    key={toast.key}
-                    className="mt-4 w-full max-w-sm animate-[jqIn_.3s_ease] rounded-2xl border border-amber/40 bg-amber/10 px-4 py-3 shadow-card"
-                  >
-                    <p className="text-sm font-bold text-amber-700">
-                      🎁 {t("rewards.earned")} · {t("rewards.earnedBanked")}
-                    </p>
-                    {toast.businessName && (
-                      <p className="mt-0.5 text-xs text-subtle">{toast.businessName}</p>
-                    )}
-                  </div>
-                ))}
-
-                {/* reward-ready banners (existing) */}
-                {Array.from(readyPrograms).map((progId) => {
-                  const p = rewards.data?.find((r) => r.id === progId);
-                  if (!p) return null;
-                  return (
-                    <div
-                      key={progId}
-                      className="mt-4 w-full max-w-sm rounded-2xl border border-amber/40 bg-amber/10 px-4 py-3 shadow-card"
-                    >
-                      <p className="text-sm font-bold text-amber-700">{t("qr.rewardReady")}</p>
-                      <p className="mt-0.5 text-xs text-subtle">
-                        {p.business.name || p.reward_program.title} · {p.reward_program.reward_description}
-                      </p>
-                    </div>
-                  );
-                })}
 
                 {/* footer hint */}
                 <div className="mt-auto flex items-center gap-2 pt-8 text-center text-xs font-semibold text-subtle">

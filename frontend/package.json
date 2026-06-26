@@ -7,6 +7,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "dev:customer": "pnpm --filter customer dev",
     "dev:business": "pnpm --filter business dev",
     "dev:staff": "pnpm --filter staff dev"

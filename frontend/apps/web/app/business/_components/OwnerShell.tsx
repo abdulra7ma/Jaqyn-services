@@ -8,80 +8,56 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useBusinessMe, useMe } from "@jaqyn/api";
+import { useT } from "@jaqyn/i18n";
 import { UserAvatar } from "../../_components/kit";
 import { useAuth, useRequireArea } from "../../_lib/auth";
 
-type NavItem = { label: string; icon: string; href: string };
-type NavGroup = { label: string | null; items: NavItem[] };
+type NavItem = { key: string; icon: string; href: string };
 
-export const OWNER_NAV: NavGroup[] = [
-  { label: null, items: [{ label: "Dashboard", icon: "▢", href: "/business/dashboard" }] },
-  {
-    label: "Loyalty",
-    items: [
-      { label: "Loyalty program", icon: "◎", href: "/business/rewards" },
-      { label: "QR Code", icon: "▦", href: "/business/qr" },
-    ],
-  },
-  {
-    label: "Grow",
-    items: [
-      { label: "Campaigns", icon: "◇", href: "/business/campaigns" },
-      { label: "Group Deals", icon: "⛌", href: "/business/offers" },
-    ],
-  },
-  {
-    label: "Insights",
-    items: [
-      { label: "Customers", icon: "◐", href: "/business/customers" },
-      { label: "Reports", icon: "◔", href: "/business/reports" },
-    ],
-  },
-  {
-    label: "Account",
-    items: [
-      { label: "Profile", icon: "◑", href: "/business/profile" },
-      { label: "Manage Staff", icon: "◍", href: "/business/staff" },
-      { label: "Staff Mode", icon: "⊕", href: "/staff" },
-    ],
-  },
+// Flat, outcome-first owner sidebar (campaigns-restructure design §6). No more
+// Loyalty-program or Group-Deals items — loyalty is now an Individual campaign and
+// Groups live inside a Group campaign's detail. "Rewards / Redemptions" is the
+// voucher redemption-tracking view, not a loyalty builder. Labels via @jaqyn/i18n.
+export const OWNER_NAV: NavItem[] = [
+  { key: "owner.nav.dashboard", icon: "▢", href: "/business/dashboard" },
+  { key: "owner.nav.campaigns", icon: "◇", href: "/business/campaigns" },
+  { key: "owner.nav.rewards", icon: "◎", href: "/business/rewards" },
+  { key: "owner.nav.customers", icon: "◐", href: "/business/customers" },
+  { key: "owner.nav.analytics", icon: "◔", href: "/business/reports" },
+  { key: "owner.nav.qr", icon: "▦", href: "/business/qr" },
+  { key: "owner.nav.staff", icon: "◍", href: "/business/staff" },
+  { key: "owner.nav.settings", icon: "◑", href: "/business/profile" },
 ];
 
 const BIZ = { name: "Manas Coffee", cat: "Cafe", area: "Chuy Avenue", owner: "Nurlan A." };
 
 function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  const t = useT();
   return (
-    <div className="flex flex-col gap-[13px]">
-      {OWNER_NAV.map((g, gi) => (
-        <div key={gi}>
-          {g.label && (
-            <div className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.09em] text-[#7E7060]">{g.label}</div>
-          )}
-          <div className="flex flex-col gap-0.5">
-            {g.items.map((n) => {
-              const active = pathname === n.href || pathname.startsWith(n.href + "/");
-              return (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  onClick={onNavigate}
-                  className={`flex items-center gap-2.5 rounded-[11px] px-3 py-2.5 text-[13.5px] font-semibold transition ${
-                    active ? "bg-brand text-brand-fg" : "text-[#C9BCA8] hover:bg-white/5"
-                  }`}
-                >
-                  <span className="w-[18px] text-center text-[15px]">{n.icon}</span>
-                  {n.label}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
+    <nav className="flex flex-col gap-0.5">
+      {OWNER_NAV.map((n) => {
+        const active = pathname === n.href || pathname.startsWith(n.href + "/");
+        return (
+          <Link
+            key={n.href}
+            href={n.href}
+            onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
+            className={`flex items-center gap-2.5 rounded-[11px] px-3 py-2.5 text-[13.5px] font-semibold transition ${
+              active ? "bg-brand text-brand-fg" : "text-[#C9BCA8] hover:bg-white/5"
+            }`}
+          >
+            <span className="w-[18px] text-center text-[15px]">{n.icon}</span>
+            {t(n.key)}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
 function OwnerCard() {
+  const t = useT();
   const router = useRouter();
   const { logout } = useAuth();
   const me = useMe();
@@ -114,14 +90,14 @@ function OwnerCard() {
             className="flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-[13px] font-semibold text-board hover:bg-white/5"
           >
             <span className="w-[18px] text-center text-[15px]">⊕</span>
-            Switch to Staff Mode
+            {t("owner.nav.staffMode")}
           </Link>
           <button
             onClick={signOut}
             className="flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13px] font-semibold text-[#E8A48C] hover:bg-white/5"
           >
             <span className="w-[18px] text-center text-[15px]">⏻</span>
-            Log out
+            {t("owner.nav.logout")}
           </button>
         </div>
       )}

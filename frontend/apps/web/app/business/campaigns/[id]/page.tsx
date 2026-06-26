@@ -1,21 +1,18 @@
 "use client";
 
-// Business campaigns — Detail (plan §2.4, design BUSINESS · detail). Gradient hero,
-// lifecycle controls (pause / resume / end / duplicate / publish), and three tabs:
-// Overview (metrics + reward + rules), Participants, Vouchers. Wired to the business
-// campaign hooks; mutations invalidate the relevant keys (handled in the hooks).
+// Business campaigns — detail (campaigns-restructure design §5). Gradient hero,
+// lifecycle controls, and the tabbed payload (overview/participants/groups/
+// reward_usage/analytics/settings) — Groups only for GROUP campaigns. Fed from the
+// single tabbed detail response; mutations invalidate the relevant keys.
 
 import {
   useBusinessCampaign,
   useBusinessMe,
   useCampaignAction,
-  useCampaignAnalytics,
-  useCampaignParticipants,
-  useCampaignVouchers,
   useCancelCampaignVoucher,
   useDuplicateCampaign,
   useUploadCampaignImage,
-  type BusinessCampaign,
+  type CampaignDetailTabs,
   type CampaignLifecycleAction,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
@@ -24,47 +21,58 @@ import { useParams, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { OwnerShell } from "../../_components/OwnerShell";
 import { SocialPostStudio } from "../../_components/SocialPostStudio";
-import { StatusPill, TYPE_GLYPH, VoucherStatusPill, ruleSummary } from "../../_components/campaigns";
+import { StatusPill, TYPE_GLYPH, TypeBadge, VoucherStatusPill } from "../../_components/campaigns";
 import { QueryBoundary } from "../../../_components/QueryBoundary";
 import { useErrMessage } from "../../../_lib/useErrMessage";
 import { ruleLinesFor } from "./rules";
 
-type Tab = "overview" | "participants" | "vouchers";
+// Groups tab only appears for GROUP campaigns (campaigns-restructure design §5).
+type Tab = "overview" | "participants" | "groups" | "rewardUsage" | "analytics" | "settings";
 
 const PANEL = "rounded-[18px] border border-line bg-card p-5";
 
 export default function CampaignDetailPage() {
   const t = useT();
   const { id } = useParams<{ id: string }>();
-  const campaign = useBusinessCampaign(id);
+  const detail = useBusinessCampaign(id);
 
   return (
     <OwnerShell title={t("cmp.biz.title")}>
-      <QueryBoundary query={campaign}>{(c) => <Detail campaign={c} />}</QueryBoundary>
+      <QueryBoundary query={detail}>{(d) => <Detail id={id} tabs={d} />}</QueryBoundary>
     </OwnerShell>
   );
 }
 
-function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
+function Detail({ id, tabs }: { id: string; tabs: CampaignDetailTabs }) {
   const t = useT();
   const router = useRouter();
   const errMessage = useErrMessage();
+  const c = tabs.overview;
+  const isGroup = c.type === "group";
+
+  const tabList: Tab[] = [
+    "overview",
+    "participants",
+    ...(isGroup ? (["groups"] as const) : []),
+    "rewardUsage",
+    "analytics",
+    "settings",
+  ];
   const [tab, setTab] = useState<Tab>("overview");
 
   const action = useCampaignAction();
   const duplicate = useDuplicateCampaign();
   const me = useBusinessMe();
-  const uploadImage = useUploadCampaignImage(c.id);
+  const uploadImage = useUploadCampaignImage(id);
   const fileRef = useRef<HTMLInputElement>(null);
   const [studioOpen, setStudioOpen] = useState(false);
 
   function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file
+    e.target.value = "";
     if (file) uploadImage.mutate(file);
   }
 
-  // Available lifecycle controls per status (plan §1.3 / design controls).
   const controls: { action: CampaignLifecycleAction; labelKey: string }[] = [];
   if (c.status === "draft" || c.status === "scheduled")
     controls.push({ action: "publish", labelKey: "cmp.biz.ctrl.publish" });
@@ -72,12 +80,9 @@ function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
   if (c.status === "paused") controls.push({ action: "resume", labelKey: "cmp.biz.ctrl.resume" });
   if (c.status === "active" || c.status === "paused" || c.status === "scheduled")
     controls.push({ action: "end", labelKey: "cmp.biz.ctrl.end" });
-  // Cancel is available before a campaign goes live (backend CampaignCancelView
-  // accepts draft/scheduled); it voids the campaign rather than ending a run.
   if (c.status === "draft" || c.status === "scheduled")
     controls.push({ action: "cancel", labelKey: "cmp.biz.ctrl.cancel" });
 
-  const tabs: Tab[] = ["overview", "participants", "vouchers"];
   const busy = action.isPending || duplicate.isPending;
 
   return (
@@ -104,23 +109,11 @@ function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
             <StatusPill status={c.status} />
           </div>
           <p className="mt-1 text-[13px] opacity-85">
-            {t(`cmp.type.${c.type}`)} · {c.start_label} – {c.end_label} ·{" "}
-            {ruleSummary(t, c.type, {
-              type: c.type,
-              name: c.name,
-              required_count: c.rule.required_count,
-              required_group_size: c.rule.required_group_size,
-              window_before_time: c.rule.window_before_time,
-            })}
+            {t(`cmp.biz.type.${c.type}`)}
+            {c.start_label || c.end_label ? ` · ${c.start_label} – ${c.end_label}` : ""}
           </p>
         </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          onChange={onPickPhoto}
-          className="hidden"
-        />
+        <input ref={fileRef} type="file" accept="image/*" onChange={onPickPhoto} className="hidden" />
         <button
           onClick={() => fileRef.current?.click()}
           disabled={uploadImage.isPending}
@@ -144,7 +137,7 @@ function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
         {controls.map((ctrl) => (
           <button
             key={ctrl.action}
-            onClick={() => action.mutate({ id: c.id, action: ctrl.action })}
+            onClick={() => action.mutate({ id, action: ctrl.action })}
             disabled={busy}
             className="rounded-xl border-[1.5px] border-line bg-card px-4 py-2.5 text-[13px] font-semibold text-ink transition active:scale-[.99] disabled:opacity-60"
           >
@@ -153,7 +146,7 @@ function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
         ))}
         <button
           onClick={() =>
-            duplicate.mutate(c.id, {
+            duplicate.mutate(id, {
               onSuccess: (copy) => router.push(`/business/campaigns/${copy.id}`),
             })
           }
@@ -170,13 +163,13 @@ function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
       )}
 
       {/* tabs */}
-      <div className="mt-[22px] flex gap-1 border-b border-line">
-        {tabs.map((tb) => (
+      <div className="mt-[22px] flex gap-1 overflow-x-auto border-b border-line">
+        {tabList.map((tb) => (
           <button
             key={tb}
             onClick={() => setTab(tb)}
             aria-current={tab === tb}
-            className={`-mb-px border-b-2 px-4 py-2.5 text-[13.5px] font-semibold transition ${
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-[13.5px] font-semibold transition ${
               tab === tb ? "border-brand text-brand-deep" : "border-transparent text-subtle"
             }`}
           >
@@ -185,13 +178,16 @@ function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
         ))}
       </div>
 
-      {tab === "overview" && <OverviewTab campaign={c} />}
-      {tab === "participants" && <ParticipantsTab id={c.id} />}
-      {tab === "vouchers" && <VouchersTab id={c.id} />}
+      {tab === "overview" && <OverviewTab tabs={tabs} />}
+      {tab === "participants" && <ParticipantsTab tabs={tabs} />}
+      {tab === "groups" && <GroupsTab tabs={tabs} />}
+      {tab === "rewardUsage" && <RewardUsageTab id={id} tabs={tabs} />}
+      {tab === "analytics" && <AnalyticsTab tabs={tabs} />}
+      {tab === "settings" && <SettingsTab tabs={tabs} />}
 
       {studioOpen && (
         <SocialPostStudio
-          campaignId={c.id}
+          campaignId={id}
           campaignName={c.name}
           businessName={me.data?.display_name || me.data?.name || ""}
           onClose={() => setStudioOpen(false)}
@@ -203,6 +199,230 @@ function Detail({ campaign: c }: { campaign: BusinessCampaign }) {
 
 // ---- Overview --------------------------------------------------------------
 
+function OverviewTab({ tabs }: { tabs: CampaignDetailTabs }) {
+  const t = useT();
+  const c = tabs.overview;
+  return (
+    <div className="mt-[22px] grid gap-4 lg:grid-cols-2">
+      <div className={PANEL}>
+        <h3 className="font-display text-[15px] font-bold text-ink">{t("cmp.biz.overview.reward")}</h3>
+        <div className="mt-3 flex items-center gap-3">
+          <div
+            className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-xl bg-brand-muted text-xl"
+            aria-hidden
+          >
+            🎁
+          </div>
+          <div className="min-w-0">
+            <div className="text-[14.5px] font-bold text-ink">{c.reward.title}</div>
+            <div className="mt-0.5 truncate text-[12.5px] text-subtle">{c.reward.description}</div>
+          </div>
+        </div>
+      </div>
+      <div className={PANEL}>
+        <h3 className="font-display text-[15px] font-bold text-ink">{t("cmp.biz.overview.rules")}</h3>
+        <ul className="mt-3 flex flex-col gap-2">
+          {ruleLinesFor(t, c).map((line, i) => (
+            <li key={i} className="flex gap-2.5 text-[13px] leading-snug text-subtle">
+              <span className="font-bold text-brand" aria-hidden>
+                ·
+              </span>
+              {line}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ---- Participants ----------------------------------------------------------
+
+const PART_COLS = "grid grid-cols-[2fr_1fr_1.3fr_1.3fr_1.2fr] items-center";
+
+function ParticipantsTab({ tabs }: { tabs: CampaignDetailTabs }) {
+  const t = useT();
+  const rows = tabs.participants;
+  if (rows.length === 0)
+    return <p className="mt-[22px] text-sm text-subtle">{t("cmp.biz.part.empty")}</p>;
+  return (
+    <div className="mt-[22px] overflow-x-auto rounded-[18px] border border-line bg-card">
+      <div className="min-w-[640px]">
+        <div
+          className={`${PART_COLS} border-b border-line px-[22px] py-3.5 text-[11.5px] font-bold uppercase tracking-[0.04em] text-subtle`}
+        >
+          <span>{t("cmp.biz.part.col.customer")}</span>
+          <span>{t("cmp.biz.part.col.progress")}</span>
+          <span>{t("cmp.biz.part.col.status")}</span>
+          <span>{t("cmp.biz.part.col.last")}</span>
+          <span>{t("cmp.biz.part.col.reward")}</span>
+        </div>
+        {rows.map((p) => (
+          <div key={p.id} className={`${PART_COLS} border-b border-[#F4ECDF] px-[22px] py-4`}>
+            <span className="text-[13.5px] font-semibold text-ink">{p.name}</span>
+            <span className="text-[13.5px] font-bold text-ink">
+              {p.progress}
+              {p.goal != null ? ` / ${p.goal}` : ""}
+            </span>
+            <span>
+              <Badge tone={p.status === "completed" || p.status === "redeemed" ? "ok" : "warn"}>
+                {t(`cmp.biz.part.status.${p.status}`)}
+              </Badge>
+            </span>
+            <span className="text-[13px] text-subtle">{p.last_visit_label}</span>
+            <span className="text-[13px] text-subtle">{p.reward_label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---- Groups (GROUP campaigns only) -----------------------------------------
+
+function GroupsTab({ tabs }: { tabs: CampaignDetailTabs }) {
+  const t = useT();
+  const groups = tabs.groups;
+  if (groups.length === 0)
+    return <p className="mt-[22px] text-sm text-subtle">{t("cmp.biz.groups.empty")}</p>;
+  return (
+    <div className="mt-[22px] grid gap-3 sm:grid-cols-2">
+      {groups.map((g) => (
+        <div key={g.id} className={PANEL}>
+          <div className="flex items-center justify-between">
+            <Badge tone="brand">{t(`cmp.status.${statusKey(g.status)}`)}</Badge>
+            <span className="text-[13px] font-bold text-ink">
+              {g.members.length} {t("cmp.biz.groups.size").replace("{size}", String(g.required_size))}
+            </span>
+          </div>
+          <ul className="mt-3 flex flex-col gap-1.5">
+            {g.members.map((m) => (
+              <li key={m.id} className="flex items-center justify-between text-[13px] text-subtle">
+                <span className="truncate">{m.customer.slice(0, 8)}</span>
+                <span>{m.status}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Group status strings reuse the campaign status pill copy where they overlap;
+// unknown values fall back to "active" so the i18n lookup never misses.
+function statusKey(s: string): "active" | "ended" | "cancelled" {
+  if (s === "completed") return "ended";
+  if (s === "cancelled" || s === "expired") return "cancelled";
+  return "active";
+}
+
+// ---- Reward Usage ----------------------------------------------------------
+
+const VOUCH_COLS = "grid grid-cols-[1.2fr_1.6fr_1fr_1fr_1fr_1.1fr] items-center";
+
+function RewardUsageTab({ id, tabs }: { id: string; tabs: CampaignDetailTabs }) {
+  const t = useT();
+  const rows = tabs.reward_usage;
+  const cancel = useCancelCampaignVoucher();
+  const [cancelId, setCancelId] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+
+  if (rows.length === 0)
+    return <p className="mt-[22px] text-sm text-subtle">{t("cmp.biz.vouch.empty")}</p>;
+
+  return (
+    <div className="mt-[22px] overflow-x-auto rounded-[18px] border border-line bg-card">
+      <div className="min-w-[680px]">
+        <div
+          className={`${VOUCH_COLS} border-b border-line px-[22px] py-3.5 text-[11.5px] font-bold uppercase tracking-[0.04em] text-subtle`}
+        >
+          <span>{t("cmp.biz.vouch.col.voucher")}</span>
+          <span>{t("cmp.biz.vouch.col.customer")}</span>
+          <span>{t("cmp.biz.vouch.col.status")}</span>
+          <span>{t("cmp.biz.vouch.col.issued")}</span>
+          <span>{t("cmp.biz.vouch.col.expires")}</span>
+          <span>{t("cmp.biz.vouch.col.redeemedBy")}</span>
+        </div>
+        {rows.map((v) => (
+          <div key={v.id} className={`${VOUCH_COLS} border-b border-[#F4ECDF] px-[22px] py-4`}>
+            <span className="font-mono text-[13px] font-bold tracking-[0.04em] text-ink">{v.code}</span>
+            <span className="text-[13.5px] text-ink">{v.customer}</span>
+            <span>
+              <VoucherStatusPill status={v.status} />
+            </span>
+            <span className="text-[13px] text-subtle">{v.issued_label}</span>
+            <span className="text-[13px] text-subtle">{v.expires_label}</span>
+            <span className="flex items-center justify-between gap-2 text-[13px] text-subtle">
+              <span>{v.redeemed_by}</span>
+              {v.status === "active" && (
+                <button
+                  onClick={() => {
+                    setCancelId(v.id);
+                    setReason("");
+                  }}
+                  className="text-[12px] font-semibold text-danger"
+                >
+                  {t("cmp.biz.vouch.cancel")}
+                </button>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {cancelId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
+          role="dialog"
+          aria-modal
+          onClick={() => setCancelId(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-[18px] border border-line bg-card p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-display text-[16px] font-bold text-ink">{t("cmp.biz.vouch.cancelConfirm")}</h3>
+            <label className="mt-3 block">
+              <span className="text-[12px] font-bold text-subtle">{t("cmp.biz.vouch.cancelReason")}</span>
+              <input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                autoFocus
+                className="mt-1.5 w-full rounded-xl border-[1.5px] border-line bg-card px-3.5 py-3 text-sm font-semibold text-ink outline-none focus:border-brand"
+              />
+            </label>
+            {cancel.isError && (
+              <p className="mt-2 text-[12.5px] font-semibold text-danger">{t("common.error")}</p>
+            )}
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={() => setCancelId(null)}
+                className="rounded-xl border-[1.5px] border-line bg-card px-4 py-3 text-sm font-semibold text-ink"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={() =>
+                  cancel.mutate({ id: cancelId, reason: reason.trim() }, { onSuccess: () => setCancelId(null) })
+                }
+                disabled={!reason.trim() || cancel.isPending}
+                className="flex-1 rounded-xl bg-brand py-3 text-sm font-bold text-brand-fg shadow-glow disabled:opacity-60"
+              >
+                {t("cmp.biz.vouch.cancelConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* `id` retained for invalidation symmetry with the list route */}
+      <span hidden data-campaign-id={id} />
+    </div>
+  );
+}
+
+// ---- Analytics -------------------------------------------------------------
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-line bg-card p-4">
@@ -212,19 +432,19 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function OverviewTab({ campaign: c }: { campaign: BusinessCampaign }) {
+function AnalyticsTab({ tabs }: { tabs: CampaignDetailTabs }) {
   const t = useT();
-  // The campaign detail payload does not embed analytics, so c.analytics is all
-  // zeros. Fetch the real metrics from the dedicated analytics endpoint; fall
-  // back to the (zero) embedded block only while the request is in flight.
-  const analytics = useCampaignAnalytics(c.id);
-  const a = analytics.data ?? c.analytics;
+  const a = tabs.analytics;
+  const ts = a.type_stats;
   return (
     <>
-      <div className="mt-[22px] grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-        <Metric label={t("cmp.biz.metric.views")} value={String(a.views)} />
+      <div className="mt-[22px] grid grid-cols-3 gap-3.5">
+        <Metric label={ts.stat_a.label} value={String(ts.stat_a.value)} />
+        <Metric label={ts.stat_b.label} value={String(ts.stat_b.value)} />
+        <Metric label={ts.stat_c.label} value={String(ts.stat_c.value)} />
+      </div>
+      <div className="mt-3.5 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <Metric label={t("cmp.biz.metric.joined")} value={String(a.joined)} />
-        <Metric label={t("cmp.biz.metric.active")} value={String(a.active)} />
         <Metric label={t("cmp.biz.metric.completed")} value={String(a.completed)} />
         <Metric label={t("cmp.biz.metric.issued")} value={String(a.issued)} />
         <Metric label={t("cmp.biz.metric.redeemed")} value={String(a.redeemed)} />
@@ -234,213 +454,45 @@ function OverviewTab({ campaign: c }: { campaign: BusinessCampaign }) {
         />
         <Metric label={t("cmp.biz.metric.estCost")} value={a.estimated_cost} />
       </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div className={PANEL}>
-          <h3 className="font-display text-[15px] font-bold text-ink">
-            {t("cmp.biz.overview.reward")}
-          </h3>
-          <div className="mt-3 flex items-center gap-3">
-            <div
-              className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-xl bg-brand-muted text-xl"
-              aria-hidden
-            >
-              🎁
-            </div>
-            <div className="min-w-0">
-              <div className="text-[14.5px] font-bold text-ink">{c.reward.title}</div>
-              <div className="mt-0.5 truncate text-[12.5px] text-subtle">{c.reward.description}</div>
-            </div>
-          </div>
-          <p className="mt-3.5 text-[12.5px] leading-relaxed text-subtle">
-            {t("cmp.biz.overview.rewardMeta")
-              .replace("{days}", String(c.reward.expiry_days_after_unlock))
-              .replace("{max}", c.reward.max_redemptions == null ? "∞" : String(c.reward.max_redemptions))
-              .replace("{type}", t(`cmp.biz.wiz.rewardType.${rewardTypeKey(c.reward.type)}`))}
-          </p>
-        </div>
-
-        <div className={PANEL}>
-          <h3 className="font-display text-[15px] font-bold text-ink">
-            {t("cmp.biz.overview.rules")}
-          </h3>
-          <ul className="mt-3 flex flex-col gap-2">
-            {ruleLinesFor(t, c).map((line, i) => (
-              <li key={i} className="flex gap-2.5 text-[13px] leading-snug text-subtle">
-                <span className="font-bold text-brand" aria-hidden>
-                  ·
-                </span>
-                {line}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
     </>
   );
 }
 
-// Reward type may arrive as a backend code we don't have a label for; fall back to
-// "custom" so the i18n lookup never misses.
-function rewardTypeKey(type: string): "free_item" | "discount" | "upgrade" | "custom" {
-  return type === "free_item" || type === "discount" || type === "upgrade" ? type : "custom";
-}
+// ---- Settings --------------------------------------------------------------
 
-// ---- Participants ----------------------------------------------------------
-
-const PART_COLS = "grid grid-cols-[2fr_1fr_1.3fr_1.3fr_1.2fr] items-center";
-
-function ParticipantsTab({ id }: { id: string }) {
-  const t = useT();
-  const q = useCampaignParticipants(id);
+function SettingsRow({ label, value }: { label: string; value: string }) {
   return (
-    <QueryBoundary query={q} isEmpty={(rows) => rows.length === 0} emptyMessage={t("cmp.biz.part.empty")}>
-      {(rows) => (
-        <div className="mt-[22px] overflow-x-auto rounded-[18px] border border-line bg-card">
-          <div className="min-w-[640px]">
-            <div
-              className={`${PART_COLS} border-b border-line px-[22px] py-3.5 text-[11.5px] font-bold uppercase tracking-[0.04em] text-subtle`}
-            >
-              <span>{t("cmp.biz.part.col.customer")}</span>
-              <span>{t("cmp.biz.part.col.progress")}</span>
-              <span>{t("cmp.biz.part.col.status")}</span>
-              <span>{t("cmp.biz.part.col.last")}</span>
-              <span>{t("cmp.biz.part.col.reward")}</span>
-            </div>
-            {rows.map((p) => (
-              <div key={p.id} className={`${PART_COLS} border-b border-[#F4ECDF] px-[22px] py-4`}>
-                <span className="text-[13.5px] font-semibold text-ink">{p.name}</span>
-                <span className="text-[13.5px] font-bold text-ink">
-                  {p.progress}
-                  {p.goal != null ? ` / ${p.goal}` : ""}
-                </span>
-                <span>
-                  <Badge tone={p.status === "completed" || p.status === "redeemed" ? "ok" : "warn"}>
-                    {t(`cmp.biz.part.status.${p.status}`)}
-                  </Badge>
-                </span>
-                <span className="text-[13px] text-subtle">{p.last_visit_label}</span>
-                <span className="text-[13px] text-subtle">{p.reward_label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </QueryBoundary>
+    <div className="flex justify-between gap-3 bg-card px-4 py-3.5 text-[13.5px]">
+      <span className="text-subtle">{label}</span>
+      <span className="text-right font-semibold text-ink">{value}</span>
+    </div>
   );
 }
 
-// ---- Vouchers --------------------------------------------------------------
-
-const VOUCH_COLS = "grid grid-cols-[1.2fr_1.6fr_1fr_1fr_1fr_1.1fr] items-center";
-
-function VouchersTab({ id }: { id: string }) {
+function SettingsTab({ tabs }: { tabs: CampaignDetailTabs }) {
   const t = useT();
-  const q = useCampaignVouchers(id);
-  const cancel = useCancelCampaignVoucher();
-  const [cancelId, setCancelId] = useState<string | null>(null);
-  const [reason, setReason] = useState("");
-
+  const c = tabs.settings;
   return (
-    <QueryBoundary query={q} isEmpty={(rows) => rows.length === 0} emptyMessage={t("cmp.biz.vouch.empty")}>
-      {(rows) => (
-        <div className="mt-[22px] overflow-x-auto rounded-[18px] border border-line bg-card">
-          <div className="min-w-[680px]">
-            <div
-              className={`${VOUCH_COLS} border-b border-line px-[22px] py-3.5 text-[11.5px] font-bold uppercase tracking-[0.04em] text-subtle`}
-            >
-              <span>{t("cmp.biz.vouch.col.voucher")}</span>
-              <span>{t("cmp.biz.vouch.col.customer")}</span>
-              <span>{t("cmp.biz.vouch.col.status")}</span>
-              <span>{t("cmp.biz.vouch.col.issued")}</span>
-              <span>{t("cmp.biz.vouch.col.expires")}</span>
-              <span>{t("cmp.biz.vouch.col.redeemedBy")}</span>
-            </div>
-            {rows.map((v) => (
-              <div key={v.id} className={`${VOUCH_COLS} border-b border-[#F4ECDF] px-[22px] py-4`}>
-                <span className="font-mono text-[13px] font-bold tracking-[0.04em] text-ink">
-                  {v.code}
-                </span>
-                <span className="text-[13.5px] text-ink">{v.customer}</span>
-                <span>
-                  <VoucherStatusPill status={v.status} />
-                </span>
-                <span className="text-[13px] text-subtle">{v.issued_label}</span>
-                <span className="text-[13px] text-subtle">{v.expires_label}</span>
-                <span className="flex items-center justify-between gap-2 text-[13px] text-subtle">
-                  <span>{v.redeemed_by}</span>
-                  {v.status === "active" && (
-                    <button
-                      onClick={() => {
-                        setCancelId(v.id);
-                        setReason("");
-                      }}
-                      className="text-[12px] font-semibold text-danger"
-                    >
-                      {t("cmp.biz.vouch.cancel")}
-                    </button>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* cancel-voucher modal (manager-only; requires a reason — plan §1.2) */}
-          {cancelId && (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
-              role="dialog"
-              aria-modal
-              onClick={() => setCancelId(null)}
-            >
-              <div
-                className="w-full max-w-sm rounded-[18px] border border-line bg-card p-5"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <h3 className="font-display text-[16px] font-bold text-ink">
-                  {t("cmp.biz.vouch.cancelConfirm")}
-                </h3>
-                <label className="mt-3 block">
-                  <span className="text-[12px] font-bold text-subtle">
-                    {t("cmp.biz.vouch.cancelReason")}
-                  </span>
-                  <input
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    autoFocus
-                    className="mt-1.5 w-full rounded-xl border-[1.5px] border-line bg-card px-3.5 py-3 text-sm font-semibold text-ink outline-none focus:border-brand"
-                  />
-                </label>
-                {cancel.isError && (
-                  <p className="mt-2 text-[12.5px] font-semibold text-danger">
-                    {t("common.error")}
-                  </p>
-                )}
-                <div className="mt-4 flex gap-3">
-                  <button
-                    onClick={() => setCancelId(null)}
-                    className="rounded-xl border-[1.5px] border-line bg-card px-4 py-3 text-sm font-semibold text-ink"
-                  >
-                    {t("common.cancel")}
-                  </button>
-                  <button
-                    onClick={() =>
-                      cancel.mutate(
-                        { id: cancelId, reason: reason.trim() },
-                        { onSuccess: () => setCancelId(null) },
-                      )
-                    }
-                    disabled={!reason.trim() || cancel.isPending}
-                    className="flex-1 rounded-xl bg-brand py-3 text-sm font-bold text-brand-fg shadow-glow disabled:opacity-60"
-                  >
-                    {t("cmp.biz.vouch.cancelConfirm")}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </QueryBoundary>
+    <div className="mt-[22px] max-w-md">
+      <div className="mb-3 flex items-center gap-2">
+        <TypeBadge type={c.type} />
+        <StatusPill status={c.status} />
+      </div>
+      <div className="flex flex-col gap-px overflow-hidden rounded-2xl border border-line bg-line">
+        <SettingsRow label={t("cmp.biz.form.name")} value={c.name} />
+        <SettingsRow label={t("cmp.biz.form.reward")} value={c.reward.title || "—"} />
+        <SettingsRow
+          label={t("cmp.biz.form.maxParticipants")}
+          value={c.max_participants == null ? "∞" : String(c.max_participants)}
+        />
+        <SettingsRow
+          label={t("cmp.biz.form.repeat")}
+          value={t(c.repeat_policy === "repeatable" ? "cmp.rule.repeatable" : "cmp.rule.repeatOnce")}
+        />
+        {c.type === "social" && c.instagram_handle && (
+          <SettingsRow label={t("cmp.biz.form.instagram")} value={c.instagram_handle} />
+        )}
+      </div>
+    </div>
   );
 }

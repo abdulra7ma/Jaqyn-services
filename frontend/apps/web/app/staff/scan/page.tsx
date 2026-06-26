@@ -5,7 +5,6 @@ import {
   useConfirmVisitUnified,
   useRedeemCampaignVoucher,
   useResolveScan,
-  useStaffRedeem,
 } from "@jaqyn/api";
 import type {
   CampaignVoucherScanResult,
@@ -178,25 +177,20 @@ function VisitEligibilitySheet({
 
 // ─── sheet: combined visit (loyalty + campaign in one confirm) ──────────────────
 
-// One confirm advances both the regular loyalty card and the prioritized
-// campaign. Each leg renders its own row; a null leg shows a muted skipped line.
-// A completed campaign gets the celebratory amber/gift treatment (mirrors the
-// former visit_complete sheet); the green success flash + countdown are kept.
+// One confirm advances every stacking campaign and one prioritized default.
+// Each campaign renders its own row; a completed campaign gets the celebratory
+// amber/gift treatment; skipped candidates show a muted reason line. The green
+// success flash + countdown are kept.
 function VisitUnifiedSheet({
   result,
   onDismiss,
-  onGiveReward,
-  isGivingReward,
 }: {
   result: UnifiedScanResult;
   onDismiss: () => void;
-  onGiveReward?: (code: string, rewardTitle: string) => void;
-  isGivingReward?: boolean;
 }) {
   const t = useT();
-  const { loyalty, campaigns, skipped_campaigns } = result;
+  const { campaigns, skipped_campaigns } = result;
   const campaignComplete = campaigns.some((c) => c.state === "completed");
-  const rewardReady = loyalty?.state === "reward_ready";
 
   // A completed campaign warrants the longer, amber celebratory treatment.
   const flashColor = campaignComplete ? "var(--amber, #E7A23E)" : "var(--sage, #3F7355)";
@@ -206,8 +200,7 @@ function VisitUnifiedSheet({
     <SheetBackdrop dim="rgba(8,6,3,.5)" onDismiss={onDismiss}>
       <Flash color={flashColor} />
       <div style={{ ...SHEET_STYLE, paddingTop: 30, paddingRight: 26, paddingLeft: 26, paddingBottom: "calc(30px + env(safe-area-inset-bottom, 0px))" }} onClick={(e) => e.stopPropagation()}>
-        {/* Only auto-dismiss when no reward action is pending */}
-        {!rewardReady && <CountdownBar duration={duration} onDone={onDismiss} />}
+        <CountdownBar duration={duration} onDone={onDismiss} />
 
         <div style={{ textAlign: "center" }}>
           <div style={{
@@ -222,29 +215,6 @@ function VisitUnifiedSheet({
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
-          {/* Loyalty leg */}
-          <VisitLegRow
-            icon="🎟️"
-            title={t("cmp.staff.loyaltyTitle")}
-            heading={loyalty?.program.title ?? ""}
-            value={
-              loyalty
-                ? loyalty.state === "reward_ready"
-                  ? t("cmp.staff.rewardReady")
-                  : t("cmp.staff.stampAdded")
-                      .replace("{current}", String(loyalty.progress?.current_count ?? 0))
-                      .replace("{target}", String(loyalty.progress?.target_count ?? loyalty.program.required_count ?? 0))
-                : null
-            }
-            muted={
-              loyalty
-                ? null
-                : result.loyalty_skipped
-                  ? t("cmp.staff.noStampReason").replace("{reason}", result.loyalty_skipped)
-                  : t("cmp.staff.noStamp")
-            }
-          />
-
           {/* Campaign legs: empty-state, then each advanced campaign, then skipped */}
           {campaigns.length === 0 && skipped_campaigns.length === 0 && (
             <VisitLegRow
@@ -288,23 +258,6 @@ function VisitUnifiedSheet({
             />
           ))}
         </div>
-
-        {/* Give Reward button — only when loyalty reward is ready to hand out */}
-        {rewardReady && loyalty?.redemption?.code && (
-          <button
-            type="button"
-            onClick={() => onGiveReward?.(loyalty.redemption!.code, loyalty.reward?.title ?? "")}
-            disabled={isGivingReward}
-            style={{
-              width: "100%", marginTop: 18, padding: 18, border: "none", borderRadius: 16,
-              background: "var(--accent, #C25E3C)", color: "#fff",
-              font: "700 17px 'Hanken Grotesk',sans-serif", cursor: "pointer",
-              boxShadow: "0 12px 26px -8px rgba(160,73,42,.55)", opacity: isGivingReward ? 0.6 : 1,
-            }}
-          >
-            {isGivingReward ? "…" : t("staff.scan.confirmGive")}
-          </button>
-        )}
       </div>
     </SheetBackdrop>
   );
@@ -626,7 +579,6 @@ export default function StaffScanPage() {
   const resolveScan = useResolveScan();
   const confirmVisit = useConfirmVisitUnified();
   const redeemVoucher = useRedeemCampaignVoucher();
-  const redeemLoyalty = useStaffRedeem();
   const confirmGroup = useConfirmGroup();
 
   const [overlay, setOverlay] = useState<OverlayState>(null);
@@ -660,17 +612,7 @@ export default function StaffScanPage() {
     resolveScan.reset();
     confirmVisit.reset();
     redeemVoucher.reset();
-    redeemLoyalty.reset();
     confirmGroup.reset();
-  };
-
-  const handleGiveReward = (code: string, rewardTitle: string) => {
-    redeemLoyalty.mutate({ code }, {
-      onSuccess() {
-        setOverlay({ kind: "reward_redeemed", rewardTitle });
-      },
-      onError(error) { showError(error); },
-    });
   };
 
   // Map a thrown ApiClientError code to the design's invalid-voucher sheet. Falls
@@ -846,12 +788,7 @@ export default function StaffScanPage() {
           />
         )}
         {overlay?.kind === "visit_unified" && (
-          <VisitUnifiedSheet
-            result={overlay.result}
-            onDismiss={dismiss}
-            onGiveReward={handleGiveReward}
-            isGivingReward={redeemLoyalty.isPending}
-          />
+          <VisitUnifiedSheet result={overlay.result} onDismiss={dismiss} />
         )}
         {overlay?.kind === "group_eligible" && (
           <GroupEligibleSheet group={overlay.group} onConfirm={handleConfirmGroup} onDismiss={dismiss} isPending={confirmGroup.isPending} />

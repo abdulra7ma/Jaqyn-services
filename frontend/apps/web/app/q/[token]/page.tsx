@@ -1,11 +1,10 @@
 "use client";
 
-import { useCollect, useQrResolve, type QrResolve } from "@jaqyn/api";
+import { useQrResolve, type QrResolve } from "@jaqyn/api";
 import { LanguageSwitch, useT } from "@jaqyn/i18n";
-import { Button, Card, Input, Loading, ErrorState } from "@jaqyn/ui";
+import { Button, Loading, ErrorState } from "@jaqyn/ui";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
 import { useErrMessage } from "../../_lib/useErrMessage";
 import { useAuth } from "../../_lib/auth";
 
@@ -16,8 +15,6 @@ export default function QrLandingPage() {
   const { isAuthenticated, ready } = useAuth();
 
   const resolve = useQrResolve(token);
-  const collect = useCollect(token);
-  const [approvalCode, setApprovalCode] = useState("");
   const loginHref = `/login?return=${encodeURIComponent(`/q/${token}`)}`;
 
   return (
@@ -53,16 +50,11 @@ export default function QrLandingPage() {
           {resolve.data.reward_program && <RewardCard qr={resolve.data} />}
 
           {/* ---- action zone ---- */}
-          {collect.isSuccess ? (
-            <div className="mt-6 w-full text-center">
-              <p className="text-lg font-semibold text-ok">
-                {collect.data.status === "unlocked" ? t("qr.unlocked") : t("qr.collected")}
-              </p>
-              <Link href="/rewards" className="mt-4 block">
-                <Button className="w-full">{t("rewards.title")}</Button>
-              </Link>
-            </div>
-          ) : !ready ? null : !isAuthenticated ? (
+          {/* Stamps are now collected by staff scanning the customer's QR (the
+              approval-code self-collect flow was removed in the campaigns
+              restructure). First-scan visitors get a join/login CTA; signed-in
+              customers go to their personal QR to be scanned. */}
+          {!ready ? null : !isAuthenticated ? (
             <div className="mt-6 flex w-full flex-col gap-3">
               <Link href={loginHref}>
                 <Button className="w-full">{t("qr.joinCollect")}</Button>
@@ -74,32 +66,16 @@ export default function QrLandingPage() {
               </Link>
             </div>
           ) : (
-            <Card className="mt-6 w-full">
-              <form
-                className="flex flex-col gap-3"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  collect.mutate(approvalCode);
-                }}
-              >
-                <Input
-                  label={t("qr.approvalCode")}
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={approvalCode}
-                  onChange={(e) => setApprovalCode(e.target.value)}
-                  required
-                />
-                <p className="text-xs text-subtle">{t("qr.approvalHint")}</p>
-                {collect.isError && (
-                  <p className="text-sm text-danger">{errMessage(collect.error)}</p>
-                )}
-                <Button type="submit" disabled={collect.isPending || approvalCode.length < 4}>
-                  {collect.isPending ? t("common.loading") : t("qr.collect")}
+            <div className="mt-6 flex w-full flex-col gap-3">
+              <Link href="/qr">
+                <Button className="w-full">{t("home.myQr")}</Button>
+              </Link>
+              <Link href="/campaigns">
+                <Button variant="secondary" className="w-full border border-line bg-card text-brand">
+                  {t("nav.campaigns")}
                 </Button>
-              </form>
-            </Card>
+              </Link>
+            </div>
           )}
 
           <p className="mt-8 text-xs text-subtle">{t("qr.poweredBy")}</p>

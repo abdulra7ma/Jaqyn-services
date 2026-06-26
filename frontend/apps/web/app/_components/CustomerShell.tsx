@@ -7,7 +7,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "../_lib/auth";
 import { BottomNav, CUSTOMER_NAV } from "./BottomNav";
-import { ScanFab } from "./ScanFab";
 import { ScanIcon } from "./icons";
 import { UserAvatar } from "./kit";
 
@@ -117,13 +116,8 @@ export function CustomerShell({
         </main>
       </div>
 
-      {/* bottom nav + scan FAB — mobile, signed-in only */}
-      {mobileNav && (
-        <>
-          <ScanFab />
-          <BottomNav />
-        </>
-      )}
+      {/* bottom nav (scan is the raised center button) — mobile, signed-in only */}
+      {mobileNav && <BottomNav />}
     </div>
   );
 }

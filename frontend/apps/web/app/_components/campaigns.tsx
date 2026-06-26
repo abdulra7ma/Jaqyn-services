@@ -40,15 +40,16 @@ const VOUCHER_TONE: Record<CampaignVoucherStatus, "ok" | "neutral" | "danger"> =
   cancelled: "neutral",
 };
 
-/** Human "challenge" line per campaign type (design `cd.mission`). */
+/** Human "challenge" line per campaign type/mechanic (design `cd.mission`). */
 export function missionLine(t: Translate, c: Campaign): string {
   if (c.campaign_type === "group") {
     return t("cmp.mission.group").replace("{size}", String(c.rule.required_group_size ?? 0));
   }
-  if (c.campaign_type === "timewindow") {
-    return t("cmp.mission.timewindow")
-      .replace("{count}", String(c.rule.required_count ?? 0))
-      .replace("{time}", c.rule.window_before_time ?? "");
+  if (c.campaign_type === "social") {
+    return t("cmp.mission.social").replace("{handle}", c.instagram_handle ?? "");
+  }
+  if (c.rule.mechanic === "spend") {
+    return t("cmp.mission.spend").replace("{amount}", c.rule.required_spend ?? "");
   }
   return t("cmp.mission.visit").replace("{count}", String(c.rule.required_count ?? 0));
 }
@@ -82,18 +83,20 @@ export function ruleLines(t: Translate, c: Campaign): string[] {
       lines.push(t("cmp.rule.groupSize").replace("{size}", String(r.required_group_size)));
     if (r.group_checkin_window)
       lines.push(t("cmp.rule.checkin").replace("{window}", r.group_checkin_window));
-  } else {
-    if (r.required_count != null)
+  } else if (c.campaign_type === "individual") {
+    if (r.mechanic === "spend" && r.required_spend != null) {
+      lines.push(t("cmp.mission.spend").replace("{amount}", r.required_spend));
+    } else if (r.required_count != null) {
       lines.push(t("cmp.rule.visits").replace("{count}", String(r.required_count)));
+    }
     if (r.max_count_per_day != null)
       lines.push(t("cmp.rule.perDay").replace("{count}", String(r.max_count_per_day)));
     if (r.min_time_between) lines.push(t("cmp.rule.minGap").replace("{gap}", r.min_time_between));
-    if (r.window_before_time)
-      lines.push(t("cmp.rule.before").replace("{time}", r.window_before_time));
   }
-  lines.push(
-    t("cmp.rule.window").replace("{days}", c.active_days).replace("{hours}", c.active_hours),
-  );
+  if (c.active_days || c.active_hours)
+    lines.push(
+      t("cmp.rule.window").replace("{days}", c.active_days).replace("{hours}", c.active_hours),
+    );
   lines.push(t(c.repeat_policy === "repeatable" ? "cmp.rule.repeatable" : "cmp.rule.repeatOnce"));
   return lines;
 }
