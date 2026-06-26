@@ -446,6 +446,37 @@ class CampaignGroupService:
         )
 
     @staticmethod
+    def active_groups_for_customer(customer):
+        """Return the customer's non-terminal groups newest-first (queryset).
+
+        A group is "active" for the customer when they lead it, or are a member
+        whose own membership is still JOINED/CHECKED_IN, and its status is one of
+        FORMING / FULL / CHECKING_IN. Backs the customer feed "active group"
+        banner and the per-campaign active-group lookup (the create-vs-forming
+        branch). Prefetches campaign + business + members so the serializer has
+        no N+1.
+        """
+        from django.db.models import Q
+
+        active_status = [
+            Group.Status.FORMING,
+            Group.Status.FULL,
+            Group.Status.CHECKING_IN,
+        ]
+        active_member = [GroupMember.Status.JOINED, GroupMember.Status.CHECKED_IN]
+        return (
+            Group.objects.filter(status__in=active_status)
+            .filter(
+                Q(group_leader=customer)
+                | Q(members__customer=customer, members__status__in=active_member)
+            )
+            .select_related("campaign", "campaign__business", "group_leader")
+            .prefetch_related("members", "members__customer")
+            .distinct()
+            .order_by("-created_at")
+        )
+
+    @staticmethod
     def expire_old_groups(now: datetime | None = None) -> int:
         """Expire FORMING/FULL groups whose check-in window has closed (plan §1.4).
 
@@ -645,12 +676,21 @@ class CampaignGroupService:
             .exclude(id__in=member_ids)
             .order_by("id")[:needed]
         )
+        # DEV-only: if the seed doesn't have enough real customers, fabricate
+        # throwaway demo users so "simulate friends joining" always fills the
+        # group. Synthetic phone (uuid-based) keeps them unique; the view gates
+        # this whole path on settings.DEBUG so these never appear in prod.
         if len(fillers) < needed:
-            raise JaqynAPIException(
-                "VALIDATION_ERROR",
-                "Not enough other customer accounts to fill the group",
-                status.HTTP_409_CONFLICT,
-            )
+            import uuid
+
+            for _ in range(needed - len(fillers)):
+                fillers.append(
+                    User.objects.create(
+                        phone=f"+99{uuid.uuid4().hex[:12]}",
+                        role=User.Role.CUSTOMER,
+                        name="Demo friend",
+                    )
+                )
 
         for filler in fillers:
             # Reuse the real join path so full→checkin transitions exactly as a

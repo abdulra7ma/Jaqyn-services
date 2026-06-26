@@ -11,6 +11,7 @@ from apps.campaigns.views.customer_views import (
     GroupSessionDemoFillView,
     GroupSessionDetailView,
     GroupSessionInviteView,
+    GroupSessionListView,
     GroupSessionLeaveView,
     GroupSessionStartView,
 )
@@ -24,6 +25,7 @@ urlpatterns = [
     path("campaigns/<uuid:campaign_id>/", CampaignCustomerDetailView.as_view(), name="customer-campaign-detail"),
     path("campaigns/<uuid:campaign_id>/join/", CampaignJoinView.as_view(), name="customer-campaign-join"),
     path("campaigns/<uuid:campaign_id>/group/start/", GroupSessionStartView.as_view(), name="customer-campaign-group-start"),
+    path("campaign-groups/", GroupSessionListView.as_view(), name="customer-campaign-groups"),
     path("campaign-groups/<uuid:group_session_id>/", GroupSessionDetailView.as_view(), name="customer-campaign-group-detail"),
     path("campaign-groups/<uuid:group_session_id>/invite/", GroupSessionInviteView.as_view(), name="customer-campaign-group-invite"),
     path("campaign-groups/<uuid:group_session_id>/leave/", GroupSessionLeaveView.as_view(), name="customer-campaign-group-leave"),

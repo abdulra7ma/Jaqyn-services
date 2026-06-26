@@ -461,6 +461,24 @@ def test_demo_fill_reaches_full_and_creates_checkin_token():
     ).exists()
 
 
+def test_demo_fill_fabricates_users_when_too_few_real_customers():
+    """With no other real customers, demo_fill fabricates demo users to reach FULL."""
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=3)
+    leader = make_customer("954")
+    session = CampaignGroupService.start_group_session(campaign, leader)
+    # No other real customers exist — the demo aid must still fill the group.
+
+    filled = CampaignGroupService.demo_fill_group(session.id, leader)
+
+    assert filled.status == Group.Status.FULL
+    active = GroupMember.objects.filter(
+        group=filled,
+        status__in=[GroupMember.Status.JOINED, GroupMember.Status.CHECKED_IN],
+    ).count()
+    assert active == 3
+
+
 def test_demo_fill_endpoint_blocked_when_debug_false():
     """The demo-fill endpoint is a dev aid: refused (403) when DEBUG is off."""
     from django.test import override_settings

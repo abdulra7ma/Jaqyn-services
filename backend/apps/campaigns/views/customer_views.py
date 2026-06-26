@@ -215,6 +215,24 @@ class GroupSessionStartView(APIView):
         )
 
 
+class GroupSessionListView(APIView):
+    permission_classes = [IsCustomer]
+    serializer_class = GroupSerializer
+
+    def get(self, request):
+        """List the customer's active groups (feed banner + per-campaign lookup).
+
+        Returns non-terminal groups the customer leads or actively belongs to,
+        newest-first. The frontend reads ``campaign``/``campaign_name`` to render
+        the "Your active group" banner and to decide create-vs-forming.
+        """
+        groups = CampaignGroupService.active_groups_for_customer(request.user)
+        data = GroupSerializer(
+            groups, many=True, context={"request": request}
+        ).data
+        return success_response({"results": data})
+
+
 class GroupSessionDetailView(APIView):
     permission_classes = [IsCustomer]
     serializer_class = GroupSerializer
