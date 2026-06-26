@@ -138,20 +138,36 @@ export type ConfirmVisitResult = {
   expires_label: string | null;
 };
 
-// Unified scan (plan: one staff confirm advances BOTH the regular loyalty card
-// and the prioritized eligible campaign). The backend returns 200 even when one
-// leg is null; *_skipped carries a human reason (e.g. min-interval) for the gap.
+// One advanced-campaign leg (same shape as a confirm-visit outcome).
+export type UnifiedCampaignLeg = ConfirmVisitResult;
+
+// A campaign that was a candidate this scan but was blocked (min-gap, etc).
+export type SkippedCampaign = {
+  campaign_id: string;
+  name: string;
+  reason_code: string;
+};
+
+// Unified scan: one staff confirm advances the loyalty card + the campaign set
+// (all stacking campaigns + one prioritized default). The backend returns 200
+// even when a leg is empty; loyalty_skipped / skipped_campaigns carry reasons.
 export type UnifiedScanResult = {
   customer: { name: string; phone: string };
   // The regular loyalty-card leg — mirrors /api/staff/collect/. null when no
   // stamp was added; loyalty_skipped explains why.
   loyalty: StaffCollectResult | null;
   loyalty_skipped: string | null;
-  // The prioritized campaign leg — same shape as confirm-visit. null when no
-  // campaign was counted; campaign_skipped explains why.
-  campaign: ConfirmVisitResult | null;
-  campaign_skipped: string | null;
+  // Every campaign that advanced this scan (may be empty).
+  campaigns: UnifiedCampaignLeg[];
+  // Candidate campaigns that did not advance, with a reason each.
+  skipped_campaigns: SkippedCampaign[];
 };
+
+// Read-only resolve of a scanned token → which preview the screen should open.
+export type ScanDispatchResult =
+  | { kind: "customer"; customer: ScanCustomerResult; voucher: null; reason: null }
+  | { kind: "voucher"; customer: null; voucher: CampaignVoucherScanResult; reason: null }
+  | { kind: "invalid"; customer: null; voucher: null; reason: string | null };
 
 export type CampaignVoucherScanState = "valid" | "redeemed" | "expired" | "cancelled" | "not_found";
 
