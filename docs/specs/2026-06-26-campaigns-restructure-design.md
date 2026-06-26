@@ -100,6 +100,11 @@ GroupMember (N:1 Group)           # was GroupSessionMember + GroupMember
 
 The "Groups" detail tab is simply `Group WHERE campaign_id = ?`.
 
+**Reward cards are preserved, not removed.** A loyalty card becomes an INDIVIDUAL
+campaign; customer progress (`CampaignParticipant`) and history (`CampaignAction`)
+are retained. The per-business reward-card view in the customer wallet is kept,
+now backed by `CampaignParticipant` + `CampaignRewardVoucher`.
+
 ## 4. Service layer
 
 One service package `apps/campaigns/services/` (already exists, ~9 files). Changes:
@@ -137,16 +142,52 @@ drf-spectacular schema regenerated; CI stale-schema gate must pass.
 ## 6. Frontend
 
 **Business (`apps/web/app/business`, `OwnerShell`)**
-- Sidebar "Grow" group = **Campaigns only**. Remove "Loyalty program" and "Group Deals".
-- Delete/redirect `/business/rewards*` and `/business/offers*` → `/business/campaigns`.
+- Sidebar nav (flat, outcome-first): **Dashboard · Campaigns · Rewards / Redemptions · Customers · Analytics · QR Code · Staff · Settings**.
+  - No separate Groups tab — Groups live only inside a Group campaign's detail.
+  - "Rewards / Redemptions" = voucher redemption tracking + history (NOT a separate loyalty builder; loyalty is now an Individual campaign).
+  - Remove old "Loyalty program" and "Group Deals" items. Delete/redirect `/business/rewards*` (builder) and `/business/offers*` → `/business/campaigns`.
 - List: Type filter row + Status filter row; cards = type badge + status pill + 3 type-specific stats + reward.
-- Create: Step 1 type chooser → Step 2 single adaptive form (group size & window / required visits + mechanic / IG handle). Replaces the 5-step wizard.
+- Create flow (see §6a for outcome wording + templates): Step 1 outcome/type chooser → Step 2 single adaptive form (group size & window / required visits + mechanic / IG handle). Replaces the 5-step wizard.
 - Detail: tabs Overview · Participants · Groups (GROUP only) · Reward Usage · Analytics · Settings.
+
+### 6a. Business-facing language, templates, customer labels
+
+**Change 1 — outcome-based type chooser.** Business owners are non-technical. The
+type chooser leads with the *outcome*, with the technical type as a subtitle:
+
+| Outcome (primary label) | Technical type | One-liner |
+| --- | --- | --- |
+| **Reward repeat customers** | Individual Campaign | Customers earn a reward by coming back. |
+| **Bring friends together** | Group Campaign | Customers invite friends and unlock a shared reward. |
+| **Reward social sharing** | Social Campaign | Customers follow/tag you on Instagram for a bonus. |
+
+All copy goes through `@jaqyn/i18n` (namespaced keys, EN + RU), never hardcoded.
+
+**Change 2 — starter templates.** The create flow must not start empty. Step 1
+offers one-tap templates that prefill type + mechanic + sensible defaults
+(editable in Step 2):
+
+| Template | Type / mechanic | Prefill |
+| --- | --- | --- |
+| Visit 5 times, get 1 free | Individual / VISIT | required_count=5, reward=free item |
+| Bring 3 friends, get 20% off | Group / — | required_group_size=3, reward=20% discount |
+| Spend 1000 сом, get a gift | Individual / SPEND | required_spend=1000, reward=gift |
+| Post a story, get a bonus | Social / — | instagram_handle prompt, reward=bonus |
+
+Templates are config-only (a typed constant in the create flow), not new DB
+rows. "Start from scratch" remains available.
+
+**Change 3 — Campaigns vs Rewards labels (customer).** Two distinct concepts;
+labels must not blur them:
+- **Campaigns** (RU **Акции**) = things to *join* (available offers / the feed).
+- **Rewards** (RU **Награды**) = things already *earned* (vouchers in the wallet).
+
+Enforced via distinct i18n keys; the bottom-nav and screen titles use these.
 
 **Customer (`apps/web/app`)**
 - `/campaigns`: one feed — "From places you go" swipe row (in-progress, from feed.followed) + "Discover more" chips (All/Group/Neighborhood/Ended) over merged card list (feed.discover). Cards route into existing detail/group screens.
 - Group flow screens kept intact and verified: offer detail, create (pick time), your group (forming), invite (WA/TG/IG), full state, check-in, reward (QR), plus edge screens join-via-link and window-expired.
-- `BottomNav`: `Home · Rewards · [Scan] · Campaigns · Profile`. Remove Groups tab; scan FAB → raised center button; add Nearby shortcut to Home header; repoint old group entry points → `/campaigns`.
+- `BottomNav`: `Home · Rewards (Награды) · [Scan] · Campaigns (Акции) · Profile`. Remove Groups tab; scan FAB → raised center button; add Nearby shortcut to Home header; repoint old group entry points → `/campaigns`. Labels follow the Campaigns-vs-Rewards distinction in §6a (Change 3).
 
 **API client (`packages/api`)**
 - Collapse `business/offers` + `business/rewards` + `group-offers` hooks/keys into the campaigns query-key factory.
@@ -187,3 +228,18 @@ drf-spectacular schema regenerated; CI stale-schema gate must pass.
 - SOCIAL "reach" is self-reported and abusable by design (accepted; no IG API).
 - Dropping COUPON/WELCOME/BIRTHDAY is a deliberate feature cut (pre-launch).
 - Schema regen + drf-spectacular regen must land together to keep CI green.
+
+## 11. Guiding principles (business verdict)
+
+Positioning: *Jaqyn helps local businesses run smart reward campaigns — repeat
+visits, group visits, and social proof — all from one place.* Campaigns are the
+core product; Groups live inside Campaigns; Rewards are the earned result; the
+Wallet holds earned rewards.
+
+Constraints to respect during build:
+1. **Don't hide Group campaigns too deeply** — they must stay easy to discover in
+   both the business create flow and the customer feed.
+2. **Business/customer language, not technical** — outcome wording (§6a) is the
+   primary label everywhere a user sees a type.
+3. **Don't over-build before testing** — ship the phased slices and validate with
+   real businesses early rather than perfecting the whole restructure first.
