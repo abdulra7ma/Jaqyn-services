@@ -28,14 +28,17 @@ from apps.businesses.serializers import PublicBusinessSerializer
 # the TTL only bounds staleness if a signal is ever missed (e.g. a bulk update
 # that doesn't fire post_save).
 CACHE_TTL_SECONDS = 300
-# All discovery keys share this prefix so a single delete_pattern() clears them.
-_CACHE_PREFIX = "nearby:list:"
+# Every discovery key lives under "nearby:" so one delete_pattern() clears the
+# whole layer (list payloads + the category list).
+_LIST_PREFIX = "nearby:list:"
+_CATEGORY_KEY = "nearby:categories"
+_BUST_PATTERN = "nearby:*"
 
 
 def _cache_key(search: str, category: str, area: str) -> str:
     """Stable key for one filter combination (case-insensitive)."""
     raw = f"{search}|{category}|{area}".lower()
-    return _CACHE_PREFIX + hashlib.sha1(raw.encode()).hexdigest()
+    return _LIST_PREFIX + hashlib.sha1(raw.encode()).hexdigest()
 
 
 def public_business_payload(*, search: str, category: str, area: str) -> list[dict]:
@@ -54,6 +57,32 @@ def public_business_payload(*, search: str, category: str, area: str) -> list[di
     # Copy each row so a caller injecting distance_km can never mutate the cached
     # object (locmem returns the same reference; redis returns a fresh unpickle).
     return [dict(row) for row in cached]
+
+
+def active_category_payload() -> list[dict]:
+    """Return ``[{"value", "label"}]`` for only the ``Business.Category`` values that
+    have at least one discoverable (approved + published) business, in enum order.
+
+    So the customer's category filter never offers a chip that would return an
+    empty list. Cached and busted by the same signals as the discovery list.
+    """
+    cached = cache.get(_CATEGORY_KEY)
+    if cached is None:
+        active = set(
+            Business.objects.filter(
+                status=Business.Status.APPROVED,
+                visibility_status=Business.VisibilityStatus.PUBLISHED,
+            )
+            .exclude(category="")
+            .values_list("category", flat=True)
+        )
+        cached = [
+            {"value": value, "label": str(label)}
+            for value, label in Business.Category.choices
+            if value in active
+        ]
+        cache.set(_CATEGORY_KEY, cached, CACHE_TTL_SECONDS)
+    return cached
 
 
 def _serialize(*, search: str, category: str, area: str) -> list[dict]:
@@ -93,6 +122,6 @@ def clear_public_business_cache() -> None:
     """
     delete_pattern = getattr(cache, "delete_pattern", None)
     if delete_pattern is not None:
-        delete_pattern(_CACHE_PREFIX + "*")
+        delete_pattern(_BUST_PATTERN)
     else:
         cache.clear()

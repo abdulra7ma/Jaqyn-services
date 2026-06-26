@@ -17,7 +17,7 @@ from apps.businesses.serializers import (
     GalleryUploadSerializer,
     PublicBusinessSerializer,
 )
-from apps.businesses.discovery import public_business_payload
+from apps.businesses.discovery import active_category_payload, public_business_payload
 from apps.businesses.services import (
     BusinessLeadData,
     add_gallery_image,
@@ -63,17 +63,18 @@ class PublicBusinessListView(APIView):
 
 
 class PublicBusinessCategoriesView(APIView):
-    """Customer discovery filter options — the ``Business.Category`` enum (value + label).
+    """Customer discovery filter options — only ``Business.Category`` values that have
+    at least one discoverable (approved + published) business.
 
     The model is the single source of truth; clients render their category chips from this
-    response instead of hardcoding the list, so adding a category server-side surfaces it
-    everywhere without a frontend change.
+    response instead of hardcoding the list. Filtering to *active* categories means a chip
+    is never shown that would return an empty list. (Cached; see discovery.py.)
     """
 
     permission_classes = [AllowAny]
 
     def get(self, request):
-        categories = [{"value": value, "label": label} for value, label in Business.Category.choices]
+        categories = active_category_payload()
         return success_response({"results": BusinessCategorySerializer(categories, many=True).data})
 
 

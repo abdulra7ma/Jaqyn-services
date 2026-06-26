@@ -104,6 +104,7 @@ export default function NearbyPage() {
                   logoUrl: b.logo_url,
                   category: b.category,
                   reward: b.reward ?? undefined,
+                  open: isOpenNow(b.working_hours),
                 }))}
               />
 

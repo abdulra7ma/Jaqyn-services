@@ -159,6 +159,30 @@ def test_public_nearby_caches_db_work_and_busts_on_change(api_client, django_ass
     assert refreshed[0]["name"] == "Manas Coffee Roastery"
 
 
+def test_public_categories_only_returns_categories_with_active_businesses(api_client):
+    """The category filter offers only categories that have a discoverable business,
+    so a customer never taps a chip that returns nothing."""
+    from django.core.cache import cache
+
+    cache.clear()
+
+    def mk(name, category, *, status=Business.Status.APPROVED, vis=Business.VisibilityStatus.PUBLISHED):
+        payload = business_payload(name)
+        payload["category"] = category
+        Business.objects.create(**payload, status=status, visibility_status=vis)
+
+    mk("Pub Cafe", "cafe")
+    mk("Pub Barber", "barber")
+    mk("Draft Bakery", "bakery", vis=Business.VisibilityStatus.DRAFT)  # not published → excluded
+    mk("Pending Beauty", "beauty", status=Business.Status.PENDING)  # not approved → excluded
+
+    res = api_client.get("/api/businesses/categories/")
+    assert res.status_code == 200
+    values = [c["value"] for c in res.data["data"]["results"]]
+    # Only the two with an approved+published business, in Business.Category order.
+    assert values == ["cafe", "barber"]
+
+
 def test_public_business_detail_includes_catalog_rewards_and_group_offers(api_client):
     business = Business.objects.create(
         **business_payload("Manas Coffee"),

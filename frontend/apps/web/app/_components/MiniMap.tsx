@@ -2,7 +2,7 @@
 
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { useT } from "@jaqyn/i18n";
-import { cn } from "@jaqyn/ui";
+import { Badge, cn } from "@jaqyn/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export type MapPin = {
@@ -17,9 +17,11 @@ export type MapPin = {
   // Business logo (relative /media/... url) rendered inside the pin and cards when
   // present; falls back to the initial when null or the image fails to load.
   logoUrl?: string | null;
-  // Optional details surfaced in the hover tooltip.
+  // Optional details surfaced in the hover tooltip + the selected-business card.
   category?: string;
   reward?: string;
+  // Open/closed right now (null = hours unknown), shown as a status badge.
+  open?: boolean | null;
 };
 
 // Brand orange for the live "you are here" dot.
@@ -212,8 +214,22 @@ export function MiniMap({
         >
           <PinLogo logoUrl={selected.logoUrl} initial={selected.initial} size={40} />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-bold text-ink">{selected.name}</div>
-            <div className="text-xs font-semibold text-subtle">{selected.dist || t("nearby.title")}</div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="truncate text-sm font-bold text-ink">{selected.name}</span>
+              {selected.open != null && (
+                <Badge tone={selected.open ? "ok" : "neutral"}>
+                  {selected.open ? t("nearby.open") : t("nearby.closed")}
+                </Badge>
+              )}
+              {selected.closest && <Badge tone="brand">{t("nearby.nearest")}</Badge>}
+            </div>
+            <div className="mt-0.5 truncate text-xs font-semibold text-subtle">
+              {selected.category || t("nearby.title")}
+              {selected.dist ? ` · ${selected.dist}` : ""}
+            </div>
+            {selected.reward && (
+              <div className="mt-0.5 truncate text-xs font-semibold text-brand">{selected.reward}</div>
+            )}
           </div>
           <span className="flex-none text-subtle" aria-hidden>›</span>
         </button>
@@ -484,8 +500,22 @@ function DgisMapBody({
         >
           <PinLogo logoUrl={selected.logoUrl} initial={selected.initial} size={40} />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-bold text-ink">{selected.name}</div>
-            <div className="text-xs font-semibold text-subtle">{selected.dist || t("nearby.title")}</div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="truncate text-sm font-bold text-ink">{selected.name}</span>
+              {selected.open != null && (
+                <Badge tone={selected.open ? "ok" : "neutral"}>
+                  {selected.open ? t("nearby.open") : t("nearby.closed")}
+                </Badge>
+              )}
+              {selected.closest && <Badge tone="brand">{t("nearby.nearest")}</Badge>}
+            </div>
+            <div className="mt-0.5 truncate text-xs font-semibold text-subtle">
+              {selected.category || t("nearby.title")}
+              {selected.dist ? ` · ${selected.dist}` : ""}
+            </div>
+            {selected.reward && (
+              <div className="mt-0.5 truncate text-xs font-semibold text-brand">{selected.reward}</div>
+            )}
           </div>
           <span className="flex-none text-subtle" aria-hidden>›</span>
         </button>
@@ -706,8 +736,22 @@ function GoogleMapBody({
         >
           <PinLogo logoUrl={selected.logoUrl} initial={selected.initial} size={40} />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-bold text-ink">{selected.name}</div>
-            <div className="text-xs font-semibold text-subtle">{selected.dist || t("nearby.title")}</div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="truncate text-sm font-bold text-ink">{selected.name}</span>
+              {selected.open != null && (
+                <Badge tone={selected.open ? "ok" : "neutral"}>
+                  {selected.open ? t("nearby.open") : t("nearby.closed")}
+                </Badge>
+              )}
+              {selected.closest && <Badge tone="brand">{t("nearby.nearest")}</Badge>}
+            </div>
+            <div className="mt-0.5 truncate text-xs font-semibold text-subtle">
+              {selected.category || t("nearby.title")}
+              {selected.dist ? ` · ${selected.dist}` : ""}
+            </div>
+            {selected.reward && (
+              <div className="mt-0.5 truncate text-xs font-semibold text-brand">{selected.reward}</div>
+            )}
           </div>
           <span className="flex-none text-subtle" aria-hidden>›</span>
         </button>
