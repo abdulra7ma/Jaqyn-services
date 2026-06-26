@@ -8,6 +8,7 @@ import type {
   NearbyParams,
   ProfilePatch,
   RequestEmailOtpPayload,
+  StartGroupSessionInput,
 } from "./types";
 
 export const qk = {
@@ -25,6 +26,7 @@ export const qk = {
   campaignWallet: ["campaign-wallet"] as const,
   campaignVoucher: (id: string) => ["campaign-vouchers", id] as const,
   groupSession: (id: string) => ["group-sessions", id] as const,
+  myGroups: ["my-groups-list"] as const,
 };
 
 // ---- queries ----
@@ -106,6 +108,26 @@ export const useCampaignVoucher = (id: string, opts?: { refetchInterval?: number
     refetchInterval: opts?.refetchInterval,
   });
 
+// Poll the live group session so demo-fill / real joins reflect without a manual
+// refetch (mirrors the detail page's live polling).
+export const useGroupSession = (id: string, opts?: { refetchInterval?: number }) =>
+  useQuery({
+    queryKey: qk.groupSession(id),
+    queryFn: () => customerApi.getGroupSession(id),
+    enabled: !!id,
+    refetchInterval: opts?.refetchInterval,
+  });
+
+// The customer's own groups. Used to (a) surface the "Your active group" feed
+// banner and (b) find an existing active group for a campaign so the group route
+// renders the forming view instead of the create form.
+export const useMyGroups = (opts?: { refetchInterval?: number }) =>
+  useQuery({
+    queryKey: qk.myGroups,
+    queryFn: () => customerApi.listMyGroups(),
+    refetchInterval: opts?.refetchInterval,
+  });
+
 // ---- campaign mutations ----
 export const useJoinCampaign = () => {
   const qc = useQueryClient();
@@ -134,9 +156,11 @@ export const usePresentVoucher = () => {
 export const useStartGroupSession = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (campaignId: string) => customerApi.startGroupSession(campaignId),
+    mutationFn: (input: StartGroupSessionInput) => customerApi.startGroupSession(input),
     onSuccess: (session) => {
       qc.setQueryData(qk.groupSession(session.id), session);
+      // A new/updated group changes the my-groups list (feed banner + lookup).
+      qc.invalidateQueries({ queryKey: qk.myGroups });
     },
   });
 };
@@ -147,6 +171,29 @@ export const useInviteToGroupSession = () => {
     mutationFn: (id: string) => customerApi.inviteToGroupSession(id),
     onSuccess: (session) => {
       qc.setQueryData(qk.groupSession(session.id), session);
+    },
+  });
+};
+
+export const useLeaveGroupSession = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => customerApi.leaveGroupSession(id),
+    onSuccess: (_res, id) => {
+      qc.removeQueries({ queryKey: qk.groupSession(id) });
+      qc.invalidateQueries({ queryKey: qk.myGroups });
+    },
+  });
+};
+
+// DEV/testing aid: backend gates this on DEBUG and 403s in prod.
+export const useDemoFillGroup = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => customerApi.demoFillGroup(id),
+    onSuccess: (session) => {
+      qc.setQueryData(qk.groupSession(session.id), session);
+      qc.invalidateQueries({ queryKey: qk.myGroups });
     },
   });
 };

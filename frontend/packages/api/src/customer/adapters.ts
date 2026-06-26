@@ -15,6 +15,7 @@ import type {
   CampaignWallet,
   GroupSession,
   GroupSessionMember,
+  MyGroup,
   RewardProgram,
 } from "./types";
 
@@ -175,9 +176,10 @@ export function adaptCampaign(raw: Raw): Campaign {
     business: {
       id: biz?.id ?? raw.business,
       name: raw.business_name ?? biz?.name ?? "",
-      category: biz?.category ?? "other",
+      category: raw.business_category ?? biz?.category ?? "other",
       logo_url: raw.business_logo_url ?? biz?.logo_url ?? null,
       area: raw.business_area ?? biz?.area ?? "",
+      address: raw.business_address ?? biz?.address ?? "",
     },
     // No backend `glyph` field — fall through to empty string so GlyphTile
     // degrades to the logo/initial fallback without reading undefined.
@@ -197,6 +199,9 @@ export function adaptCampaign(raw: Raw): Campaign {
     // Backend emits separate active_start_time / active_end_time fields
     // (HH:MM:SS); derive a combined display string. No single active_hours field.
     active_hours: deriveActiveHours(raw.active_start_time, raw.active_end_time),
+    // Raw HH:MM window bounds — the group create screen builds visit slots from these.
+    active_start_time: (raw.active_start_time ?? "").slice(0, 5),
+    active_end_time: (raw.active_end_time ?? "").slice(0, 5),
     // Backend field is completion_limit_per_customer, not repeat_policy.
     // Fall back through both names so mock objects using the UI name still work.
     repeat_policy:
@@ -216,6 +221,9 @@ export function adaptCampaign(raw: Raw): Campaign {
         rule.group_checkin_window_minutes != null
           ? `${rule.group_checkin_window_minutes} min`
           : (rule.group_checkin_window ?? rule.checkin ?? null),
+      // GROUP per-member minimum spend (decimal string) — null when no minimum.
+      min_spend: rule.min_spend != null ? String(rule.min_spend) : (rule.minSpend ?? null),
+      group_checkin_window_minutes: rule.group_checkin_window_minutes ?? null,
     },
     reward: {
       // Backend serializes reward_type / reward_receiver_type (not type / receiver).
@@ -317,6 +325,7 @@ function adaptGroupSessionMember(raw: Raw, leaderId: string | null, uid: string 
     is_leader: raw.is_leader ?? (leaderId != null && customerId === leaderId),
     is_you: raw.is_you ?? (uid != null && customerId === uid),
     checked_in: raw.checked_in ?? raw.status === "checked_in",
+    status: raw.status ?? null,
   };
 }
 
@@ -331,20 +340,44 @@ export function adaptGroupSession(raw: Raw): GroupSession {
   return {
     id: raw.id,
     campaign: {
+      // Backend emits the campaign FK as a bare id plus a denormalized
+      // `campaign_name`. Fall through an embedded object for the typed mocks.
       id: camp?.id ?? raw.campaign ?? "",
       name: raw.campaign_name ?? camp?.name ?? "",
       glyph: raw.glyph ?? camp?.glyph ?? "",
     },
-    // Backend GroupSessionSerializer emits `invite_token`; the UI surfaces it as
-    // `invite_code` (the short code rendered into the jaqyn.kg/g/<code> link).
-    invite_code: raw.invite_token ?? raw.invite_code ?? raw.code ?? "",
+    business_name: raw.business_name ?? "",
+    business_logo_url: raw.business_logo_url ?? null,
+    group_leader: leaderId,
+    // Backend GroupSessionSerializer emits `invite_code` (and a full `invite_url`).
+    // Tolerate the legacy `invite_token` name for older mocks.
+    invite_code: raw.invite_code ?? raw.invite_token ?? raw.code ?? "",
+    invite_url: raw.invite_url ?? "",
     status: raw.status,
     required_size: raw.required_size ?? raw.size ?? members.length,
     joined_count: raw.joined_count ?? members.length,
     members,
-    // The group check-in QR token is not part of the session serializer yet
-    // (it's minted when the group fills); tolerate either `checkin_token` or a
-    // bare `token`, else null so the full-state QR simply doesn't render.
+    visit_time: raw.visit_time ?? null,
+    name: raw.name ?? null,
+    note: raw.note ?? null,
+    // The group check-in QR token is only present once the group is full
+    // (type GROUP_CHECKIN); else null so the full-state QR simply doesn't render.
     checkin_token: raw.checkin_token ?? raw.token ?? null,
+  };
+}
+
+// Maps a my-groups list row. Tolerates an embedded campaign object (mocks) or the
+// flat `campaign` id + `campaign_name` the backend list emits.
+export function adaptMyGroup(raw: Raw): MyGroup {
+  const camp = typeof raw.campaign === "object" ? raw.campaign : null;
+  return {
+    id: raw.id,
+    campaign_id: raw.campaign_id ?? camp?.id ?? raw.campaign ?? "",
+    campaign_name: raw.campaign_name ?? camp?.name ?? "",
+    business_name: raw.business_name ?? "",
+    business_logo_url: raw.business_logo_url ?? null,
+    status: raw.status,
+    required_size: raw.required_size ?? raw.size ?? 0,
+    joined_count: raw.joined_count ?? 0,
   };
 }

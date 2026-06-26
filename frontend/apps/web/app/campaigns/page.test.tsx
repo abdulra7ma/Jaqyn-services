@@ -13,7 +13,7 @@ const lastFilter: { value: CampaignFeedFilter | undefined } = { value: undefined
 function campaign(over: Partial<Campaign>): Campaign {
   return {
     id: "c",
-    business: { id: "b", name: "Manas", category: "cafe", logo_url: null, area: "" },
+    business: { id: "b", name: "Manas", category: "cafe", logo_url: null, area: "", address: "" },
     glyph: "",
     name: "Campaign",
     description: "",
@@ -25,6 +25,8 @@ function campaign(over: Partial<Campaign>): Campaign {
     days_left: 5,
     active_days: "",
     active_hours: "",
+    active_start_time: "",
+    active_end_time: "",
     repeat_policy: "once",
     max_participants: null,
     rule: {
@@ -35,6 +37,8 @@ function campaign(over: Partial<Campaign>): Campaign {
       min_time_between: null,
       required_group_size: null,
       group_checkin_window: null,
+      min_spend: null,
+      group_checkin_window_minutes: null,
     },
     reward: { type: "free_item", title: "Free", description: "Free coffee", expiry_days_after_unlock: 7, max_redemptions: null },
     my_progress: null,
@@ -53,6 +57,8 @@ vi.mock("@jaqyn/api", () => ({
     };
     return { data: feed, isLoading: false, isError: false };
   },
+  // No active group by default → the feed banner stays hidden.
+  useMyGroups: () => ({ data: [], isLoading: false, isError: false }),
 }));
 
 import CampaignsFeedPage from "./page";

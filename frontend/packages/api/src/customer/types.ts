@@ -234,6 +234,10 @@ export type CampaignRule = {
   // GROUP: required group size and the check-in window (e.g. "15 min").
   required_group_size: number | null;
   group_checkin_window: string | null;
+  // GROUP: per-member minimum spend (decimal string), null when no minimum.
+  min_spend: string | null;
+  // GROUP: check-in window in raw minutes (used to bound the last bookable slot).
+  group_checkin_window_minutes: number | null;
 };
 
 export type CampaignReward = {
@@ -259,7 +263,7 @@ export type CampaignProgress = {
 
 export type Campaign = {
   id: string;
-  business: Pick<Business, "id" | "name" | "category" | "logo_url" | "area">;
+  business: Pick<Business, "id" | "name" | "category" | "logo_url" | "area" | "address">;
   glyph: string;
   name: string;
   description: string;
@@ -273,6 +277,10 @@ export type Campaign = {
   days_left: number;
   active_days: string;
   active_hours: string;
+  // Raw active-window times (HH:MM, may be empty). The group create screen
+  // generates visit slots from these; active_hours is the combined display form.
+  active_start_time: string;
+  active_end_time: string;
   repeat_policy: CampaignRepeatPolicy;
   max_participants: number | null;
   rule: CampaignRule;
@@ -326,7 +334,16 @@ export type CampaignWallet = {
   expired: CampaignVoucher[];
 };
 
-export type GroupSessionStatus = "forming" | "full" | "checked_in" | "completed" | "expired";
+// Backend group-session lifecycle (campaigns-restructure backend contract):
+// forming → full → checking_in → completed; expired/cancelled are terminal.
+export type GroupSessionStatus =
+  | "forming"
+  | "full"
+  | "checking_in"
+  | "checked_in"
+  | "completed"
+  | "expired"
+  | "cancelled";
 
 export type GroupSessionMember = {
   id: string;
@@ -335,18 +352,52 @@ export type GroupSessionMember = {
   is_leader: boolean;
   is_you: boolean;
   checked_in: boolean;
+  // Backend member.status (e.g. joined / checked_in). Surfaced for the status tag.
+  status: string | null;
 };
 
 export type GroupSession = {
   id: string;
   campaign: { id: string; name: string; glyph: string };
+  // Denormalized business fields the group screens render (backend contract).
+  business_name: string;
+  business_logo_url: string | null;
+  // Customer id of the group leader (used to mark the leader row).
+  group_leader: string | null;
   invite_code: string;
+  // Full shareable invite URL (e.g. https://jaqyn.kg/g/<code>) from the backend.
+  invite_url: string;
   status: GroupSessionStatus;
   required_size: number;
   joined_count: number;
   members: GroupSessionMember[];
+  // Leader-chosen visit time (ISO 8601), optional group name + note to friends.
+  visit_time: string | null;
+  name: string | null;
+  note: string | null;
   // QR payload shown to staff once the group is full (type GROUP_CHECKIN).
   checkin_token: string | null;
+};
+
+// One of the customer's groups, from GET /api/customer/campaign-groups/ (my-groups).
+// Carries the campaign id so a screen can find the active group for a campaign.
+export type MyGroup = {
+  id: string;
+  campaign_id: string;
+  campaign_name: string;
+  business_name: string;
+  business_logo_url: string | null;
+  status: GroupSessionStatus;
+  required_size: number;
+  joined_count: number;
+};
+
+// Optional body for starting a group session (leader sets visit time / name / note).
+export type StartGroupSessionInput = {
+  campaignId: string;
+  visit_time?: string;
+  name?: string;
+  note?: string;
 };
 
 export type RequestEmailOtpPayload = {

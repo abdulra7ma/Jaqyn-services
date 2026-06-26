@@ -5,16 +5,50 @@
 // "Discover more" (feed.discover) with filter chips (All/Group/Neighborhood/Ended)
 // over the merged list. Cards route into the EXISTING detail/group screens.
 
-import { useCampaignFeed } from "@jaqyn/api";
-import type { CampaignFeedFilter } from "@jaqyn/api";
+import { useCampaignFeed, useMyGroups } from "@jaqyn/api";
+import type { CampaignFeedFilter, MyGroup } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { cn } from "@jaqyn/ui";
+import Link from "next/link";
 import { useState } from "react";
 import { CustomerShell } from "../_components/CustomerShell";
 import { QueryBoundary } from "../_components/QueryBoundary";
-import { CampaignCard, CampaignCarouselCard } from "../_components/campaigns";
+import { CampaignCard, CampaignCarouselCard, GlyphTile } from "../_components/campaigns";
 import { PageTitle } from "../_components/kit";
 import { useRequireAuth } from "../_lib/auth";
+
+// A group still in motion (not completed / expired / cancelled) is "active" and
+// drives the feed banner + the group route's forming view.
+const ACTIVE_GROUP_STATUSES: MyGroup["status"][] = ["forming", "full", "checking_in"];
+
+/** Top-of-feed banner linking to the customer's active group session. */
+function ActiveGroupBanner() {
+  const t = useT();
+  const myGroups = useMyGroups();
+  const group = myGroups.data?.find((g) => ACTIVE_GROUP_STATUSES.includes(g.status));
+  if (!group) return null;
+
+  return (
+    <Link
+      href={`/campaigns/${group.campaign_id}/group`}
+      className="flex items-center gap-3 rounded-2xl bg-[linear-gradient(135deg,#C25E3C,#E7A23E)] p-4 text-white shadow-glow transition active:scale-[.99]"
+    >
+      <GlyphTile glyph="👥" size={46} image={group.business_logo_url} />
+      <div className="min-w-0 flex-1">
+        <p className="font-display text-[15px] font-bold">{t("cmp.group.banner.title")}</p>
+        <p className="mt-0.5 truncate text-[12.5px] opacity-90">
+          {t("cmp.group.banner.subtitle")
+            .replace("{business}", group.business_name)
+            .replace("{joined}", String(group.joined_count))
+            .replace("{size}", String(group.required_size))}
+        </p>
+      </div>
+      <span className="flex-none text-xl opacity-90" aria-hidden>
+        ›
+      </span>
+    </Link>
+  );
+}
 
 // Discover chips map onto the backend feed `discover` filter (design §6).
 const FILTER_ORDER: CampaignFeedFilter[] = ["all", "group", "neighborhood", "ended"];
@@ -41,6 +75,9 @@ export default function CampaignsFeedPage() {
           <QueryBoundary query={feed}>
             {(data) => (
               <>
+                <div className="mt-6 empty:hidden">
+                  <ActiveGroupBanner />
+                </div>
                 {data.followed.length > 0 && (
                   <section className="mt-6">
                     <h2 className="font-display text-lg font-bold text-ink">{t("cmp.feed.followed")}</h2>

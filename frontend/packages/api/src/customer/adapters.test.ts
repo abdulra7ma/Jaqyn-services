@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { adaptCampaign, adaptCampaignFeed, adaptGroupSession } from "./adapters";
+import { adaptCampaign, adaptCampaignFeed, adaptGroupSession, adaptMyGroup } from "./adapters";
 
 // A campaign row shaped exactly like CampaignDetailSerializer, with `my_progress`
 // shaped like CampaignProgressSerializer (progress_count / required_count /
@@ -188,4 +188,48 @@ test("adaptGroupSession marks the leader and computes checked_in from member sta
   const leader = s.members.find((m) => m.is_leader);
   assert.equal(leader?.checked_in, true);
   assert.equal(s.joined_count, 2);
+});
+
+// New backend group contract: denormalized business + invite_url + visit_time/name/note.
+test("adaptGroupSession surfaces business fields, invite_url and visit/name/note", () => {
+  const s = adaptGroupSession({
+    id: "gs-1",
+    campaign: "c-1",
+    campaign_name: "Coffee Crew",
+    business_name: "Manas Coffee",
+    business_logo_url: "/media/logo.png",
+    group_leader: "u-leader",
+    status: "forming",
+    required_size: 4,
+    joined_count: 1,
+    invite_code: "AB12C",
+    invite_url: "https://jaqyn.kg/g/AB12C",
+    visit_time: "2026-06-27T09:00:00Z",
+    name: "Friday crew",
+    note: "see you there",
+    members: [{ id: "m-1", customer: "u-leader", status: "joined" }],
+  });
+  assert.equal(s.business_name, "Manas Coffee");
+  assert.equal(s.business_logo_url, "/media/logo.png");
+  assert.equal(s.invite_code, "AB12C");
+  assert.equal(s.invite_url, "https://jaqyn.kg/g/AB12C");
+  assert.equal(s.visit_time, "2026-06-27T09:00:00Z");
+  assert.equal(s.name, "Friday crew");
+  assert.equal(s.note, "see you there");
+});
+
+test("adaptMyGroup exposes campaign_id for the per-campaign active-group lookup", () => {
+  const g = adaptMyGroup({
+    id: "gs-1",
+    campaign_id: "c-1",
+    campaign_name: "Coffee Crew",
+    business_name: "Manas Coffee",
+    business_logo_url: null,
+    status: "forming",
+    required_size: 4,
+    joined_count: 2,
+  });
+  assert.equal(g.campaign_id, "c-1");
+  assert.equal(g.joined_count, 2);
+  assert.equal(g.status, "forming");
 });

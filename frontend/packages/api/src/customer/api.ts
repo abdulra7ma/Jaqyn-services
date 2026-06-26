@@ -14,6 +14,7 @@ import {
   adaptCampaignVoucher,
   adaptCampaignWallet,
   adaptGroupSession,
+  adaptMyGroup,
 } from "./adapters";
 import { session } from "./session";
 import { tokenStore } from "../tokens";
@@ -29,6 +30,7 @@ import type {
   EmailOtpResult,
   GroupSession,
   Me,
+  MyGroup,
   ProfilePatch,
   PasswordLoginResult,
   ResetPasswordResult,
@@ -36,6 +38,7 @@ import type {
   NearbyParams,
   RequestEmailOtpPayload,
   RequestOtpResult,
+  StartGroupSessionInput,
   VerifyOtpResult,
   QrResolve,
 } from "./types";
@@ -64,9 +67,16 @@ export interface CustomerApi {
   campaignWallet(): Promise<CampaignWallet>;
   getCampaignVoucher(id: string): Promise<CampaignVoucher>;
   presentCampaignVoucher(id: string): Promise<CampaignVoucher>;
-  startGroupSession(campaignId: string): Promise<GroupSession>;
+  // Leader starts (or idempotently re-fetches) a group session; the optional
+  // body sets visit time / name / note (backend contract).
+  startGroupSession(input: StartGroupSessionInput): Promise<GroupSession>;
   getGroupSession(id: string): Promise<GroupSession>;
   inviteToGroupSession(id: string): Promise<GroupSession>;
+  leaveGroupSession(id: string): Promise<{ success: boolean }>;
+  // DEV-only seeding aid; the backend 403s when DEBUG is off.
+  demoFillGroup(id: string): Promise<GroupSession>;
+  // The customer's own groups; used to find the active group for a campaign.
+  listMyGroups(): Promise<MyGroup[]>;
 }
 
 // ----------------------------------------------------------------------------
@@ -233,12 +243,22 @@ export const customerApi: CustomerApi = {
     api.get<any>(`/api/customer/campaign-vouchers/${id}/`).then(adaptCampaignVoucher),
   presentCampaignVoucher: (id) =>
     api.post<any>(`/api/customer/campaign-vouchers/${id}/present/`).then(adaptCampaignVoucher),
-  startGroupSession: (campaignId) =>
-    api.post<any>(`/api/customer/campaigns/${campaignId}/group/start/`).then(adaptGroupSession),
+  startGroupSession: ({ campaignId, visit_time, name, note }) =>
+    api
+      .post<any>(`/api/customer/campaigns/${campaignId}/group/start/`, { visit_time, name, note })
+      .then(adaptGroupSession),
   // Group sessions are mounted at /api/customer/campaign-groups/<id>/ (see
   // apps.campaigns.customer_urls), not /group-sessions/.
   getGroupSession: (id) =>
     api.get<any>(`/api/customer/campaign-groups/${id}/`).then(adaptGroupSession),
   inviteToGroupSession: (id) =>
     api.post<any>(`/api/customer/campaign-groups/${id}/invite/`).then(adaptGroupSession),
+  leaveGroupSession: (id) =>
+    api.post<{ success: boolean }>(`/api/customer/campaign-groups/${id}/leave/`),
+  demoFillGroup: (id) =>
+    api.post<any>(`/api/customer/campaign-groups/${id}/demo-fill/`).then(adaptGroupSession),
+  listMyGroups: () =>
+    api
+      .get<Paginated<any>>("/api/customer/campaign-groups/")
+      .then((d) => d.results.map(adaptMyGroup)),
 };
