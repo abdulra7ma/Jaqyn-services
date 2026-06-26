@@ -17,7 +17,6 @@ from apps.campaigns.serializers import (
     ConfirmGroupSerializer,
     CustomerScanResultSerializer,
     GroupConfirmResultSerializer,
-    ProgressResultSerializer,
     ScanCustomerSerializer,
     ScanDispatchSerializer,
     ScanVoucherSerializer,
