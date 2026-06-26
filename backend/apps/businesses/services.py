@@ -121,13 +121,17 @@ def add_business_note(
 def approve_business(business: Business, admin_user: Optional["User"] = None) -> Business:
     """Approve a PENDING business and schedule the owner invite email if applicable.
 
-    Sets status to APPROVED, records a STATUS_CHANGE note, emits events, then calls
-    _send_owner_invite_if_needed to idempotently mint an owner invite and
-    schedule the activation email via transaction.on_commit.
-    Returns the updated Business.
+    Sets status to APPROVED, starts the free trial (unless demo/paid), records a
+    STATUS_CHANGE note, emits events, then calls _send_owner_invite_if_needed to
+    idempotently mint an owner invite and schedule the activation email via
+    transaction.on_commit. Returns the updated Business.
     """
     business.status = Business.Status.APPROVED
     business.save(update_fields=["status", "updated_at"])
+    # Begin the free trial on approval (idempotent; no-op for demo/paid businesses).
+    from apps.businesses.trial_services import start_trial
+
+    start_trial(business)
     add_business_note(
         business, body="Business approved", kind=BusinessNote.Kind.STATUS_CHANGE, author=admin_user
     )

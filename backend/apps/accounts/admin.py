@@ -4,6 +4,7 @@ from unfold.admin import ModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 from apps.accounts.models import CustomerProfile, User
+from core.admin import image_thumb
 
 
 @admin.register(User)
@@ -12,7 +13,11 @@ class UserAdmin(DjangoUserAdmin, ModelAdmin):
     form = UserChangeForm
     add_form = UserCreationForm
     change_password_form = AdminPasswordChangeForm
-    list_display = ("phone", "name", "role", "is_phone_verified", "is_active", "is_staff", "created_at")
+    list_display = ("avatar_thumb", "phone", "name", "role", "is_phone_verified", "is_active", "is_staff", "created_at")
+
+    @admin.display(description="")
+    def avatar_thumb(self, obj: User):
+        return image_thumb(obj.avatar, size=28, radius=14)
     list_filter = ("role", "is_phone_verified", "is_active", "is_staff")
     search_fields = ("phone", "name", "email")
     ordering = ("-created_at",)
