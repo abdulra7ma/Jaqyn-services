@@ -3,15 +3,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { businessApi } from "./api";
 import type {
+  BusinessCampaignListParams,
   BusinessRegisterPayload,
   CampaignLifecycleAction,
   CampaignPayload,
   CatalogItemPayload,
-  GroupOfferPayload,
   OnboardingProfilePatch,
   ReportPeriod,
   ReportRange,
-  RewardProgramPayload,
   StaffInvitePayload,
   TeamRole,
 } from "./types";
@@ -20,9 +19,6 @@ export const bqk = {
   me: ["business", "me"] as const,
   dashboard: ["business", "dashboard"] as const,
   qr: ["business", "qr"] as const,
-  rewards: ["business", "rewards"] as const,
-  reward: (id: string) => ["business", "rewards", id] as const,
-  offers: ["business", "offers"] as const,
   reports: (period: ReportPeriod, range?: ReportRange) =>
     ["business", "reports", period, range?.date_from ?? null, range?.date_to ?? null] as const,
   customers: ["business", "customers"] as const,
@@ -32,7 +28,10 @@ export const bqk = {
   staffInvites: ["business", "staff-invites"] as const,
   team: ["business", "team"] as const,
   staffMember: (id: string) => ["business", "team", id] as const,
-  campaigns: ["business", "campaigns"] as const,
+  // List keyed by {type,status} so each filter combination caches independently
+  // (campaigns-restructure design §5).
+  campaigns: (params?: BusinessCampaignListParams) =>
+    ["business", "campaigns", params ?? {}] as const,
   campaign: (id: string) => ["business", "campaigns", id] as const,
   campaignParticipants: (id: string) => ["business", "campaigns", id, "participants"] as const,
   campaignVouchers: (id: string) => ["business", "campaigns", id, "vouchers"] as const,
@@ -47,14 +46,6 @@ export const useDashboard = (enabled = true) =>
   useQuery({ queryKey: bqk.dashboard, queryFn: () => businessApi.dashboard(), enabled, retry: false });
 export const useMerchantQr = (enabled = true) =>
   useQuery({ queryKey: bqk.qr, queryFn: () => businessApi.qr(), enabled });
-export const useBusinessRewards = () =>
-  useQuery({ queryKey: bqk.rewards, queryFn: () => businessApi.listRewards() });
-export const useBusinessReward = (id: string) =>
-  useQuery({ queryKey: bqk.reward(id), queryFn: () => businessApi.getReward(id), enabled: !!id });
-export const useBusinessOffers = () =>
-  useQuery({ queryKey: bqk.offers, queryFn: () => businessApi.listOffers() });
-export const useBusinessGroupDeals = (enabled = true) =>
-  useQuery({ queryKey: ["business", "group-deals"], queryFn: () => businessApi.listGroupDeals(), enabled });
 export const useBusinessReports = (period: ReportPeriod = "month", range?: ReportRange) =>
   useQuery({
     queryKey: bqk.reports(period, range),
@@ -112,65 +103,6 @@ export const useUploadBusinessCover = () => {
       qc.invalidateQueries({ queryKey: bqk.onboarding });
       qc.invalidateQueries({ queryKey: ["me"] });
     },
-  });
-};
-
-export const useCreateReward = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (p: RewardProgramPayload) => businessApi.createReward(p),
-    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.rewards }),
-  });
-};
-export const useToggleReward = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      active ? businessApi.activateReward(id) : businessApi.pauseReward(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.rewards }),
-  });
-};
-export const useUpdateReward = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<RewardProgramPayload> }) =>
-      businessApi.updateReward(id, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.rewards }),
-  });
-};
-
-export const useCreateOffer = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (p: GroupOfferPayload) => businessApi.createOffer(p),
-    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.offers }),
-  });
-};
-export const useUpdateOffer = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<GroupOfferPayload> }) =>
-      businessApi.updateOffer(id, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.offers }),
-  });
-};
-export const useDeleteOffer = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => businessApi.deleteOffer(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.offers }),
-  });
-};
-export const useOfferAction = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, action }: { id: string; action: "submit" | "pause" | "activate" }) =>
-      action === "submit"
-        ? businessApi.submitOffer(id)
-        : action === "pause"
-          ? businessApi.pauseOffer(id)
-          : businessApi.activateOffer(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.offers }),
   });
 };
 
@@ -318,8 +250,14 @@ export const useRemoveStaffMember = () => {
 
 // ---- campaigns (apps.campaigns — plan §1.3) ----
 
-export const useBusinessCampaigns = (enabled = true) =>
-  useQuery({ queryKey: bqk.campaigns, queryFn: () => businessApi.listCampaigns(), enabled });
+// `params` filters the list server-side (?type / ?status) and is folded into the
+// query key so each filter caches independently (campaigns-restructure design §5).
+export const useBusinessCampaigns = (params?: BusinessCampaignListParams, enabled = true) =>
+  useQuery({
+    queryKey: bqk.campaigns(params),
+    queryFn: () => businessApi.listCampaigns(params),
+    enabled,
+  });
 
 export const useBusinessCampaign = (id: string) =>
   useQuery({ queryKey: bqk.campaign(id), queryFn: () => businessApi.getCampaign(id), enabled: !!id });
@@ -349,7 +287,7 @@ export const useCreateCampaign = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (p: CampaignPayload) => businessApi.createCampaign(p),
-    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.campaigns }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["business", "campaigns"] }),
   });
 };
 
@@ -360,7 +298,7 @@ export const useUpdateCampaign = () => {
       businessApi.updateCampaign(id, patch),
     onSuccess: (c) => {
       qc.setQueryData(bqk.campaign(c.id), c);
-      qc.invalidateQueries({ queryKey: bqk.campaigns });
+      qc.invalidateQueries({ queryKey: ["business", "campaigns"] });
     },
   });
 };
@@ -372,7 +310,7 @@ export const useCampaignAction = () => {
       businessApi.campaignAction(id, action),
     onSuccess: (c) => {
       qc.setQueryData(bqk.campaign(c.id), c);
-      qc.invalidateQueries({ queryKey: bqk.campaigns });
+      qc.invalidateQueries({ queryKey: ["business", "campaigns"] });
     },
   });
 };
@@ -381,7 +319,7 @@ export const useDuplicateCampaign = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => businessApi.duplicateCampaign(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.campaigns }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["business", "campaigns"] }),
   });
 };
 
@@ -398,7 +336,7 @@ export const useUploadCampaignImage = (id: string) => {
     mutationFn: (file: File) => businessApi.uploadCampaignImage(id, file),
     onSuccess: (c) => {
       qc.setQueryData(bqk.campaign(c.id), c);
-      qc.invalidateQueries({ queryKey: bqk.campaigns });
+      qc.invalidateQueries({ queryKey: ["business", "campaigns"] });
       qc.invalidateQueries({ queryKey: bqk.campaignSocialPost(id) });
     },
   });

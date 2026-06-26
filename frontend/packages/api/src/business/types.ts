@@ -241,94 +241,6 @@ export type Dashboard = {
   metrics: DashboardMetrics;
 };
 
-export type RewardProgramFull = {
-  id: string;
-  business_name?: string;
-  type: string;
-  title: string;
-  description: string;
-  required_count: number | null;
-  required_spend?: string | null;
-  reward_description: string;
-  minimum_spend?: string | null;
-  expiry_days: number | null;
-  max_redemptions_per_customer?: number | null;
-  /** Max reward vouchers a customer may hold at once (banking). Null = unlimited. */
-  max_banked?: number | null;
-  terms: string | null;
-  is_active: boolean;
-  enrolled?: number;
-  redeemed_count?: number;
-  created_at?: string;
-};
-
-export type RewardProgramPayload = {
-  type: string;
-  title: string;
-  description: string;
-  required_count?: number | null;
-  required_spend?: string | null;
-  reward_description: string;
-  minimum_spend?: string | null;
-  expiry_days?: number | null;
-  max_redemptions_per_customer?: number | null;
-  /** Max reward vouchers a customer may hold at once (banking). Null = unlimited. */
-  max_banked?: number | null;
-  terms?: string;
-};
-
-export type BusinessGroupDeal = {
-  id: string;
-  offer_title: string;
-  leader_name: string | null;
-  visit_time: string;
-  status: string;
-  target_size: number;
-  joined: number;
-  checked_in: number;
-};
-
-export type GroupOfferFull = {
-  id: string;
-  business_name?: string;
-  title: string;
-  description: string;
-  category: string;
-  min_group_size: number;
-  max_group_size: number | null;
-  reward_type: string;
-  reward_description: string;
-  valid_from: string;
-  valid_to: string;
-  valid_days: string[];
-  time_start: string;
-  time_end: string;
-  checkin_window_minutes: number;
-  requires_staff_code: boolean;
-  requires_staff_approval: boolean;
-  terms: string | null;
-  status: string;
-};
-
-export type GroupOfferPayload = {
-  title: string;
-  description: string;
-  category: string;
-  min_group_size: number;
-  max_group_size?: number | null;
-  reward_type: string;
-  reward_description: string;
-  valid_from: string;
-  valid_to: string;
-  valid_days: string[];
-  time_start: string;
-  time_end: string;
-  checkin_window_minutes?: number;
-  requires_staff_code?: boolean;
-  requires_staff_approval?: boolean;
-  terms?: string;
-};
-
 export type MaskedCustomer = { id: string; phone: string; name: string | null };
 
 export type ApprovalCode = { code: string; valid_from: string; valid_to: string };
@@ -342,7 +254,12 @@ export type MerchantQr = { token: string; type: string; url: string; png: string
 // Voucher lifecycle is shared with the customer surface — single source of truth.
 import type { CampaignVoucherStatus } from "../customer/types";
 
-export type BusinessCampaignType = "visit" | "timewindow" | "group";
+// Reuse the customer discriminators — single source of truth for type + mechanic
+// (campaigns-restructure design §3).
+import type { CampaignMechanic, CampaignType } from "../customer/types";
+
+export type BusinessCampaignType = CampaignType;
+export type BusinessCampaignMechanic = CampaignMechanic;
 export type BusinessCampaignStatus =
   | "draft"
   | "scheduled"
@@ -351,18 +268,36 @@ export type BusinessCampaignStatus =
   | "ended"
   | "cancelled";
 
-// Row in the campaigns list table (status / participants / completed / redeemed).
+// One of the three type-specific headline stats on a list card. Each slot carries
+// its own label so the UI renders the triplet without re-deriving the meaning
+// (campaigns-restructure design §5 — backend type_stats serializer).
+export type CampaignTypeStat = { label: string; value: number };
+
+export type CampaignTypeStats = {
+  stat_a: CampaignTypeStat;
+  stat_b: CampaignTypeStat;
+  stat_c: CampaignTypeStat;
+};
+
+// Row in the campaigns list table. Carries the per-type stat triplet + reward so
+// the card renders type badge + status pill + 3 stats + reward without a second
+// round-trip (campaigns-restructure design §5).
 export type BusinessCampaignRow = {
   id: string;
   glyph: string;
   name: string;
   type: BusinessCampaignType;
   status: BusinessCampaignStatus;
-  participants: number;
-  completed: number;
-  redeemed: number;
+  type_stats: CampaignTypeStats;
+  reward_title: string;
   ends_label: string;
 };
+
+// Filters for the business campaign list (campaigns-restructure design §5).
+export type BusinessCampaignListParams = Partial<{
+  type: BusinessCampaignType;
+  status: "active" | "draft" | "completed";
+}>;
 
 // The four KPI cards above the table.
 export type BusinessCampaignSummary = {
@@ -399,10 +334,11 @@ export type BusinessCampaignReward = {
 };
 
 export type BusinessCampaignRule = {
+  mechanic: BusinessCampaignMechanic | null;
   required_count: number | null;
+  required_spend: string | null;
   max_count_per_day: number | null;
   min_time_between: string | null;
-  window_before_time: string | null;
   required_group_size: number | null;
   group_checkin_window: string | null;
 };
@@ -421,9 +357,35 @@ export type BusinessCampaign = {
   repeat_policy: "once" | "repeatable";
   max_participants: number | null;
   staff_approval_required: boolean;
+  instagram_handle: string | null;
   rule: BusinessCampaignRule;
   reward: BusinessCampaignReward;
   analytics: CampaignAnalytics;
+};
+
+// The tabbed business campaign-detail payload (campaigns-restructure design §5).
+// `groups` is populated only for GROUP campaigns. `overview`/`settings` are the
+// adapted campaign; participants + reward_usage feed their tabs directly.
+export type CampaignDetailGroupMember = {
+  id: string;
+  customer: string;
+  status: string;
+};
+
+export type CampaignDetailGroup = {
+  id: string;
+  status: string;
+  required_size: number;
+  members: CampaignDetailGroupMember[];
+};
+
+export type CampaignDetailTabs = {
+  overview: BusinessCampaign;
+  settings: BusinessCampaign;
+  participants: CampaignParticipantRow[];
+  reward_usage: CampaignVoucherRow[];
+  groups: CampaignDetailGroup[];
+  analytics: CampaignAnalytics & { type_stats: CampaignTypeStats };
 };
 
 export type CampaignParticipantRow = {
@@ -463,15 +425,20 @@ export type CampaignPayload = {
   active_start_time?: string;
   active_end_time?: string;
   // Rules (subset relevant to the chosen type).
+  // INDIVIDUAL completion mechanic (visit/stamp/spend) — campaigns-restructure §3.
+  mechanic?: BusinessCampaignMechanic;
   required_count?: number | null;
+  // INDIVIDUAL spend mechanic: total spend (decimal string) to complete.
+  required_spend?: string | null;
   max_count_per_day?: number | null;
   // minimum_time_between_actions: ISO 8601 duration string (e.g. "PT4H") accepted
   // by the backend DurationField. Null clears the constraint.
   minimum_time_between_actions?: string | null;
-  window_before_time?: string | null;
   required_group_size?: number | null;
   // group_checkin_window_minutes: integer minutes for the group check-in window.
   group_checkin_window_minutes?: number | null;
+  // SOCIAL only — the Instagram handle customers follow/tag for the bonus.
+  instagram_handle?: string | null;
   // Reward.
   reward_type?: string;
   reward_title?: string;

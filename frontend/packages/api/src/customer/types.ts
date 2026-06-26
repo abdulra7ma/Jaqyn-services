@@ -125,79 +125,6 @@ export type RewardProgram = {
   terms: string | null;
 };
 
-export type RewardProgressStatus = "active" | "unlocked" | "redeemed" | "expired";
-
-export type RewardProgress = {
-  id: string;
-  business: Pick<Business, "id" | "name" | "category" | "logo_url" | "area">;
-  reward_program: RewardProgram;
-  current_count: number;
-  target_count: number | null;
-  status: RewardProgressStatus;
-  unlocked_at: string | null;
-  expires_at: string | null;
-};
-
-export type RedemptionStatus = "pending" | "redeemed" | "expired" | "cancelled";
-
-export type Redemption = {
-  id: string;
-  code: string;
-  status: RedemptionStatus;
-  presented_at: string | null;
-  redeemed_at: string | null;
-  expires_at: string | null;
-  present_expires_at?: string;
-  reward_title?: string;
-  reward_description?: string;
-  business_name?: string;
-  created_at?: string;
-};
-
-export type WalletReward = {
-  business: { id: string; name: string; logo_url: string | null };
-  reward: { id: string; title: string; description: string };
-  count: number;
-  soonest_expiry: string | null;
-  redemption_ids: string[];
-};
-
-export type Wallet = {
-  available: WalletReward[];
-  in_progress: RewardProgress[];
-};
-
-export type BusinessRewardCard = {
-  business: { id: string; name: string; area: string; logo_url: string | null };
-  programs: Array<{
-    id: string;
-    type: string;
-    title: string;
-    reward_description: string;
-    current_count: number;
-    target_count: number | null;
-    current_spend: string;
-    required_spend: string | null;
-    completed_count: number;
-    available_count: number;
-    bank_full: boolean;
-  }>;
-  available: Array<{
-    id: string;
-    reward_title: string;
-    reward_description: string;
-    expires_at: string | null;
-    created_at: string;
-  }>;
-  history: Array<{
-    id: string;
-    reward_title: string;
-    status: string;
-    redeemed_at: string | null;
-    created_at: string;
-  }>;
-};
-
 // ---- QR resolve ----
 export type QrTokenType =
   | "merchant_collect"
@@ -213,7 +140,9 @@ export type QrResolve = {
   type: QrTokenType;
   business: Business | null;
   reward_program: RewardProgram | null;
-  progress: RewardProgress | null;
+  // The /q/<token> first-scan response carries no per-customer progress anymore
+  // (the customer-rewards endpoints were removed in the campaigns restructure).
+  progress: null;
 };
 
 // ---- Groups ----
@@ -259,45 +188,19 @@ export type PublicGroupOffer = Pick<
   | "status"
 >;
 
-export type GroupMemberStatus = "joined" | "checked_in" | "left" | "no_show" | "removed";
-
-export type GroupMember = {
-  id: string;
-  name: string;
-  status: GroupMemberStatus;
-  is_leader: boolean;
-};
-
-export type GroupDealStatus =
-  | "forming"
-  | "full"
-  | "scheduled"
-  | "checking_in"
-  | "completed"
-  | "expired"
-  | "cancelled"
-  | "failed";
-
-export type GroupDeal = {
-  id: string;
-  invite_token: string;
-  group_offer: GroupOffer;
-  visit_time: string;
-  status: GroupDealStatus;
-  reward_code: string | null;
-  members: GroupMember[];
-  is_member: boolean;
-  is_leader: boolean;
-  checked_in: boolean;
-};
-
 // ---- Campaigns (apps.campaigns — plan §2.1 / §3) -----------------------------
 // Temporary, dated challenges: complete a challenge → unlock a voucher → redeem.
 // Three types ship in MVP (plan D7): VISIT, TIME_WINDOW, GROUP. Mirrors only the
 // fields the campaign screens render; the API layer is the boundary, so raw
 // backend rows are coerced through ./adapters before reaching these types.
 
-export type CampaignType = "visit" | "timewindow" | "group";
+// Campaign type discriminator (campaigns-restructure design §3). Replaces the
+// legacy VISIT/TIME_WINDOW/GROUP enum: an Individual campaign carries a mechanic
+// (visit/stamp/spend), Group runs the group flow, Social is staff-verified proof.
+export type CampaignType = "individual" | "group" | "social";
+
+// Individual sub-discriminator (campaigns-restructure design §3 CampaignRule).
+export type CampaignMechanic = "visit" | "stamp" | "spend";
 
 // Lifecycle states (plan §1.1 Campaign.status). DRAFT/SCHEDULED/PAUSED are
 // business-side; customers mostly see ACTIVE/ENDED/CANCELLED.
@@ -318,14 +221,16 @@ export type CampaignRewardType = "free_item" | "discount" | "upgrade" | "custom"
 export type CampaignRewardReceiver = "leader" | "every_member" | "table";
 
 export type CampaignRule = {
-  // VISIT / TIME_WINDOW: number of verified visits required.
+  // INDIVIDUAL: the completion mechanic (visit / stamp / spend). Null for non-individual.
+  mechanic: CampaignMechanic | null;
+  // INDIVIDUAL visit/stamp: number of verified visits/stamps required.
   required_count: number | null;
-  // VISIT: cap on visits counted per calendar day.
+  // INDIVIDUAL spend: total spend (decimal string) needed to complete.
+  required_spend: string | null;
+  // INDIVIDUAL: cap on actions counted per calendar day.
   max_count_per_day: number | null;
-  // VISIT: human-readable minimum gap between counted visits (e.g. "4 hours").
+  // INDIVIDUAL: human-readable minimum gap between counted actions (e.g. "4 hours").
   min_time_between: string | null;
-  // TIME_WINDOW: visits only count before this wall-clock time (e.g. "12:00").
-  window_before_time: string | null;
   // GROUP: required group size and the check-in window (e.g. "15 min").
   required_group_size: number | null;
   group_checkin_window: string | null;
@@ -374,9 +279,22 @@ export type Campaign = {
   reward: CampaignReward;
   // Present on customer detail/discover responses; absent on business lists.
   my_progress: CampaignProgress | null;
+  // SOCIAL only — the Instagram handle customers follow/tag for the bonus.
+  instagram_handle?: string | null;
   // Auto-join acquisition link (plan D9) — e.g. "jaqyn.kg/c/<token>".
   auto_join_link?: string | null;
 };
+
+// The customer campaigns feed (campaigns-restructure design §6). `followed` is the
+// "From places you go" row (in-progress campaigns); `discover` is the filterable
+// "Discover more" list. Cards in both route into the existing detail/group screens.
+export type CampaignFeed = {
+  followed: Campaign[];
+  discover: Campaign[];
+};
+
+// Discover-list filter for the feed (campaigns-restructure design §6).
+export type CampaignFeedFilter = "all" | "group" | "neighborhood" | "ended";
 
 export type CampaignVoucherStatus = "active" | "redeemed" | "expired" | "cancelled";
 
@@ -453,10 +371,10 @@ export type NearbyParams = Partial<{
 }>;
 
 // Filters for the customer campaigns list. `type` mirrors the backend
-// campaign_type enum (underscored "time_window"); `joined=true` restricts to
-// the viewer's own enrolled / in-progress campaigns.
+// campaign_type enum; `joined=true` restricts to the viewer's own enrolled /
+// in-progress campaigns.
 export type CampaignListParams = Partial<{
-  type: "visit" | "time_window" | "group";
+  type: CampaignType;
   joined: boolean;
 }>;
 

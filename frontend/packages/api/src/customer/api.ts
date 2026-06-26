@@ -10,40 +10,34 @@ import { api, API_URL } from "../client";
 import {
   adaptBusiness,
   adaptCampaign,
+  adaptCampaignFeed,
   adaptCampaignVoucher,
   adaptCampaignWallet,
-  adaptDeal,
   adaptGroupSession,
-  adaptOffer,
-  adaptProgress,
 } from "./adapters";
 import { session } from "./session";
 import { tokenStore } from "../tokens";
 import type {
   Business,
-  BusinessRewardCard,
   Campaign,
+  CampaignFeed,
+  CampaignFeedFilter,
   CategoryOption,
   CampaignListParams,
   CampaignVoucher,
   CampaignWallet,
   EmailOtpResult,
-  GroupDeal,
-  GroupOffer,
   GroupSession,
   Me,
   ProfilePatch,
   PasswordLoginResult,
   ResetPasswordResult,
-  Redemption,
   CustomerQr,
   NearbyParams,
   RequestEmailOtpPayload,
   RequestOtpResult,
-  RewardProgress,
   VerifyOtpResult,
   QrResolve,
-  Wallet,
 } from "./types";
 
 export interface CustomerApi {
@@ -59,27 +53,12 @@ export interface CustomerApi {
   updateProfile(patch: ProfilePatch): Promise<Me>;
   uploadAvatar(file: File): Promise<Me>;
   resolveQr(token: string): Promise<QrResolve>;
-  collect(token: string, approvalCode: string): Promise<RewardProgress>;
-  listRewards(): Promise<RewardProgress[]>;
-  getReward(id: string): Promise<RewardProgress>;
-  generateRedemptionCode(id: string): Promise<Redemption>;
-  listGroupOffers(): Promise<GroupOffer[]>;
-  getGroupOffer(id: string): Promise<GroupOffer>;
-  createGroup(offerId: string, visitTime: string): Promise<GroupDeal>;
-  getGroup(inviteToken: string): Promise<GroupDeal>;
-  joinGroup(id: string): Promise<GroupDeal>;
-  leaveGroup(id: string): Promise<GroupDeal>;
-  cancelGroup(id: string): Promise<GroupDeal>;
-  checkInGroup(id: string, approvalCode?: string): Promise<GroupDeal>;
-  listMyGroups(): Promise<GroupDeal[]>;
   listNearby(params?: NearbyParams): Promise<Business[]>;
   listCategories(): Promise<CategoryOption[]>;
   getBusiness(id: string, params?: Pick<NearbyParams, "lat" | "lng">): Promise<Business>;
-  wallet(): Promise<Wallet>;
-  presentRedemption(id: string): Promise<Redemption>;
-  businessRewardCard(businessId: string): Promise<BusinessRewardCard>;
   // ---- campaigns (plan §3) ----
   listCampaigns(params?: CampaignListParams): Promise<Campaign[]>;
+  campaignFeed(filter?: CampaignFeedFilter): Promise<CampaignFeed>;
   getCampaign(id: string): Promise<Campaign>;
   joinCampaign(id: string): Promise<Campaign>;
   campaignWallet(): Promise<CampaignWallet>;
@@ -220,37 +199,6 @@ export const customerApi: CustomerApi = {
       progress: null,
     };
   },
-  collect: (token, approval_code) =>
-    api.post<any>(`/api/qr/${token}/collect/`, { approval_code }).then(adaptProgress),
-  listRewards: () =>
-    api.get<Paginated<any>>("/api/customer/rewards/").then((d) => d.results.map(adaptProgress)),
-  getReward: (id) => api.get<any>(`/api/customer/rewards/${id}/`).then(adaptProgress),
-  generateRedemptionCode: (id) =>
-    api
-      .post<any>(`/api/customer/rewards/${id}/generate-redemption-code/`)
-      .then((r) => ({
-        id: r.id,
-        code: r.code,
-        status: r.status,
-        presented_at: r.presented_at ?? null,
-        redeemed_at: r.redeemed_at ?? null,
-        expires_at: r.expires_at ?? null,
-      })),
-  listGroupOffers: () =>
-    api
-      .get<Paginated<any>>("/api/group-offers/", { auth: false })
-      .then((d) => d.results.map(adaptOffer)),
-  getGroupOffer: (id) => api.get<any>(`/api/group-offers/${id}/`, { auth: false }).then(adaptOffer),
-  createGroup: (group_offer, visit_time) =>
-    api.post<any>("/api/groups/", { group_offer, visit_time }).then(adaptDeal),
-  getGroup: (inviteToken) => api.get<any>(`/api/groups/${inviteToken}/`, { auth: false }).then(adaptDeal),
-  joinGroup: (id) => api.post<any>(`/api/groups/${id}/join/`).then(adaptDeal),
-  leaveGroup: (id) => api.post<any>(`/api/groups/${id}/leave/`).then(adaptDeal),
-  cancelGroup: (id) => api.post<any>(`/api/groups/${id}/cancel/`).then(adaptDeal),
-  checkInGroup: (id, approval_code) =>
-    api.post<any>(`/api/groups/${id}/check-in/`, { approval_code }).then(adaptDeal),
-  listMyGroups: () =>
-    api.get<Paginated<any>>("/api/customer/groups/").then((d) => d.results.map(adaptDeal)),
   listNearby: (params) =>
     api
       .get<Paginated<any>>(`/api/businesses/nearby/${queryString(params)}`, { auth: false })
@@ -261,14 +209,16 @@ export const customerApi: CustomerApi = {
       .then((d) => d.results),
   getBusiness: (id, params) =>
     api.get<any>(`/api/businesses/${id}/${queryString(params)}`, { auth: false }).then(adaptBusiness),
-  wallet: () => api.get<Wallet>("/api/customer/wallet/"),
-  presentRedemption: (id) => api.post<Redemption>(`/api/customer/redemptions/${id}/present/`),
-  businessRewardCard: (businessId) =>
-    api.get<BusinessRewardCard>(`/api/customer/businesses/${businessId}/rewards/`),
   listCampaigns: (params) =>
     api
       .get<Paginated<any>>(`/api/customer/campaigns/${queryString(params)}`)
       .then((d) => d.results.map(adaptCampaign)),
+  // The feed endpoint returns {followed, discover} directly (not paginated) —
+  // campaigns-restructure design §6. `discover` filters the discover list only.
+  campaignFeed: (filter) =>
+    api
+      .get<any>(`/api/customer/campaigns/feed/${queryString(filter ? { discover: filter } : undefined)}`)
+      .then(adaptCampaignFeed),
   getCampaign: (id) => api.get<any>(`/api/customer/campaigns/${id}/`).then(adaptCampaign),
   // The join endpoint returns the participant/progress row, not a campaign. Re-read
   // the campaign detail (which carries my_progress) so the hook caches a real

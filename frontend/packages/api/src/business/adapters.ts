@@ -4,35 +4,51 @@
 import type {
   BusinessCampaign,
   BusinessCampaignListResponse,
+  BusinessCampaignMechanic,
   BusinessCampaignType,
   CampaignAnalytics,
+  CampaignDetailGroup,
+  CampaignDetailTabs,
   CampaignParticipantRow,
   CampaignPayload,
   CampaignSocialPost,
+  CampaignTypeStats,
   CampaignVoucherRow,
   SocialPostCaptions,
 } from "./types";
 
 type Raw = Record<string, any>;
 
-// The backend campaign_type enum is "time_window" (underscored); the UI type is
-// "timewindow". Normalize on read so the screens' type checks match.
+// Normalize the backend campaign_type onto the UI discriminator (campaigns-
+// restructure design §3): individual/group/social. Legacy visit/time_window rows
+// degrade to INDIVIDUAL.
 export function fromBackendCampaignType(raw: string | undefined): BusinessCampaignType {
-  if (raw === "time_window" || raw === "timewindow") return "timewindow";
   if (raw === "group") return "group";
-  return "visit";
+  if (raw === "social") return "social";
+  return "individual";
 }
 
-// Inverse of fromBackendCampaignType for write payloads.
+// Inverse of fromBackendCampaignType for write payloads. The UI type maps 1:1 to
+// the backend enum now that both use individual/group/social.
 function toBackendCampaignType(type: BusinessCampaignType): string {
-  return type === "timewindow" ? "time_window" : type;
+  return type;
 }
 
-// The rule_type the backend stores for a given campaign type. Source: CampaignRule
-// .RuleType (visit_count / time_window / group_checkin) in apps.campaigns.models.
-function ruleTypeFor(type: BusinessCampaignType): string {
+// Normalize the INDIVIDUAL completion mechanic (campaigns-restructure design §3).
+function fromBackendMechanic(raw: string | undefined): BusinessCampaignMechanic | null {
+  if (raw === "stamp") return "stamp";
+  if (raw === "spend") return "spend";
+  if (raw === "visit") return "visit";
+  return null;
+}
+
+// The rule_type the backend stores for a given campaign type/mechanic. Source:
+// CampaignRule.RuleType in apps.campaigns.models. INDIVIDUAL maps by mechanic;
+// GROUP is group_checkin; SOCIAL has no rule_type constraint (defaults to visit).
+function ruleTypeFor(type: BusinessCampaignType, mechanic?: BusinessCampaignMechanic): string {
   if (type === "group") return "group_checkin";
-  if (type === "timewindow") return "time_window";
+  if (mechanic === "spend") return "spend";
+  if (mechanic === "stamp") return "stamp";
   return "visit_count";
 }
 
@@ -68,16 +84,16 @@ export function adaptBusinessCampaign(raw: Raw): BusinessCampaign {
     repeat_policy: raw.repeat_policy ?? raw.completion_limit_per_customer ?? raw.repeat ?? "once",
     max_participants: raw.max_participants ?? null,
     staff_approval_required: raw.staff_approval_required ?? true,
+    instagram_handle: raw.instagram_handle ?? null,
     rule: {
-      // Backend keys: minimum_time_between_actions (ISO duration string),
-      // group_checkin_window_minutes (int), window_before_time (HH:MM:SS).
+      // Backend keys: mechanic (visit/stamp/spend), required_spend (decimal),
+      // minimum_time_between_actions (ISO duration), group_checkin_window_minutes.
+      mechanic: fromBackendMechanic(rule.mechanic),
       required_count: rule.required_count ?? rule.visits ?? null,
+      required_spend:
+        rule.required_spend != null ? String(rule.required_spend) : (rule.requiredSpend ?? null),
       max_count_per_day: rule.max_count_per_day ?? rule.perDay ?? null,
       min_time_between: rule.minimum_time_between_actions ?? rule.min_time_between ?? rule.minGap ?? null,
-      window_before_time:
-        (rule.window_before_time ?? rule.windowBefore ?? null)?.slice?.(0, 5) ??
-        rule.window_before_time ??
-        null,
       required_group_size: rule.required_group_size ?? rule.groupSize ?? null,
       group_checkin_window:
         rule.group_checkin_window_minutes != null
@@ -97,6 +113,23 @@ export function adaptBusinessCampaign(raw: Raw): BusinessCampaign {
   };
 }
 
+// One stat slot from the backend type_stats payload ({label, value}); defaults
+// keep the triplet well-formed when a slot is missing.
+function adaptStat(raw: Raw | null | undefined): { label: string; value: number } {
+  return { label: raw?.label ?? "", value: Number(raw?.value ?? 0) };
+}
+
+// The per-type headline stat triplet (campaigns-restructure design §5). Reads the
+// backend list serializer's `type_stats` ({stat_a, stat_b, stat_c}).
+export function adaptTypeStats(raw: Raw | null | undefined): CampaignTypeStats {
+  const s = raw ?? {};
+  return {
+    stat_a: adaptStat(s.stat_a),
+    stat_b: adaptStat(s.stat_b),
+    stat_c: adaptStat(s.stat_c),
+  };
+}
+
 export function adaptCampaignList(raw: Raw): BusinessCampaignListResponse {
   return {
     summary: {
@@ -111,11 +144,42 @@ export function adaptCampaignList(raw: Raw): BusinessCampaignListResponse {
       name: c.name,
       type: fromBackendCampaignType(c.campaign_type ?? c.type),
       status: c.status,
-      participants: c.participants ?? c.joined ?? 0,
-      completed: c.completed ?? 0,
-      redeemed: c.redeemed ?? 0,
+      type_stats: adaptTypeStats(c.type_stats),
+      reward_title: c.reward_title ?? c.reward?.title ?? "",
       ends_label: c.ends_label ?? c.ends ?? c.end_label ?? "",
     })),
+  };
+}
+
+// One group row in the tabbed detail's Groups tab (GROUP campaigns only).
+function adaptDetailGroup(raw: Raw): CampaignDetailGroup {
+  return {
+    id: raw.id,
+    status: raw.status,
+    required_size: raw.required_size ?? 0,
+    members: (raw.members ?? []).map((m: Raw) => ({
+      id: m.id,
+      customer: m.customer ?? "",
+      status: m.status ?? "",
+    })),
+  };
+}
+
+// The tabbed business campaign-detail payload (campaigns-restructure design §5).
+// `groups` is empty for non-GROUP campaigns. Each tab is adapted with the matching
+// row adapter so the detail screen reads UI-domain shapes.
+export function adaptCampaignDetailTabs(raw: Raw): CampaignDetailTabs {
+  const analytics = raw.analytics ?? {};
+  return {
+    overview: adaptBusinessCampaign(raw.overview ?? {}),
+    settings: adaptBusinessCampaign(raw.settings ?? raw.overview ?? {}),
+    participants: (raw.participants ?? []).map(adaptParticipant),
+    reward_usage: (raw.reward_usage ?? []).map(adaptVoucherRow),
+    groups: (raw.groups ?? []).map(adaptDetailGroup),
+    analytics: {
+      ...adaptAnalytics(analytics),
+      type_stats: adaptTypeStats(analytics.type_stats),
+    },
   };
 }
 
@@ -156,7 +220,8 @@ export function adaptVoucherRow(raw: Raw): CampaignVoucherRow {
 // keeps its schedule and constraints. Unparseable input is omitted (CampaignPayload
 // leaves it undefined) rather than sent as garbage.
 export function toCampaignWritePayload(payload: Partial<CampaignPayload>): Raw {
-  const type = (payload.type ?? "visit") as BusinessCampaignType;
+  const type = (payload.type ?? "individual") as BusinessCampaignType;
+  const mechanic = payload.mechanic;
   const body: Raw = {};
 
   if (payload.name !== undefined) body.name = payload.name;
@@ -167,6 +232,8 @@ export function toCampaignWritePayload(payload: Partial<CampaignPayload>): Raw {
   if (payload.repeat_policy !== undefined) {
     body.completion_limit_per_customer = payload.repeat_policy;
   }
+  // SOCIAL only — the Instagram handle (campaign-level field).
+  if (payload.instagram_handle !== undefined) body.instagram_handle = payload.instagram_handle;
 
   // Campaign-level schedule (CampaignWriteSerializer accepts these directly).
   if (payload.start_at !== undefined) body.start_at = payload.start_at;
@@ -175,19 +242,25 @@ export function toCampaignWritePayload(payload: Partial<CampaignPayload>): Raw {
   if (payload.active_start_time !== undefined) body.active_start_time = payload.active_start_time;
   if (payload.active_end_time !== undefined) body.active_end_time = payload.active_end_time;
 
-  // Nested rule — only the fields the chosen type uses, keyed as the serializer expects.
-  const rule: Raw = { rule_type: ruleTypeFor(type) };
+  // Nested rule — only the fields the chosen type/mechanic uses, keyed as the
+  // serializer expects (campaigns-restructure design §3 CampaignRule).
+  const rule: Raw = { rule_type: ruleTypeFor(type, mechanic) };
   if (type === "group") {
     if (payload.required_group_size != null) rule.required_group_size = payload.required_group_size;
     if (payload.group_checkin_window_minutes != null)
       rule.group_checkin_window_minutes = payload.group_checkin_window_minutes;
-  } else {
-    if (payload.required_count != null) rule.required_count = payload.required_count;
+  } else if (type === "individual") {
+    if (mechanic != null) rule.mechanic = mechanic;
+    if (mechanic === "spend") {
+      if (payload.required_spend != null) rule.required_spend = payload.required_spend;
+    } else if (payload.required_count != null) {
+      rule.required_count = payload.required_count;
+    }
     if (payload.max_count_per_day != null) rule.max_count_per_day = payload.max_count_per_day;
     if (payload.minimum_time_between_actions != null)
       rule.minimum_time_between_actions = payload.minimum_time_between_actions;
-    if (payload.window_before_time != null) rule.window_before_time = payload.window_before_time;
   }
+  // SOCIAL has no extra rule fields (completion = staff verify).
   body.rule = rule;
 
   // Nested reward.

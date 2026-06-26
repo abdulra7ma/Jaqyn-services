@@ -9,16 +9,13 @@ import { session } from "./session";
 import type {
   Business,
   Campaign,
+  CampaignFeed,
   CampaignProgress,
   CampaignVoucher,
   CampaignWallet,
-  GroupDeal,
-  GroupMember,
-  GroupOffer,
   GroupSession,
   GroupSessionMember,
   RewardProgram,
-  RewardProgress,
 } from "./types";
 
 type Raw = Record<string, any>;
@@ -78,6 +75,9 @@ export function adaptBusiness(raw: Raw): Business {
   };
 }
 
+// The public business profile embeds its reward programs as a read-only catalog
+// (distinct from the removed customer-progress endpoints). Kept for the public
+// /businesses/{id}/ card.
 export function adaptProgram(raw: Raw): RewardProgram {
   return {
     id: raw.id,
@@ -90,94 +90,27 @@ export function adaptProgram(raw: Raw): RewardProgram {
   };
 }
 
-export function adaptProgress(raw: Raw): RewardProgress {
-  const program = adaptProgram(raw.reward_program ?? {});
-  return {
-    id: raw.id,
-    business: {
-      id: typeof raw.business === "string" ? raw.business : raw.business?.id,
-      name: raw.business_name ?? (typeof raw.business === "object" ? raw.business?.name : "") ?? "",
-      category: "other",
-      logo_url: null,
-      area: raw.business_area ?? "",
-    },
-    reward_program: program,
-    current_count: raw.current_count ?? 0,
-    target_count: raw.target_count ?? program.required_count ?? null,
-    status: raw.status,
-    unlocked_at: raw.unlocked_at ?? null,
-    expires_at: raw.expires_at ?? null,
-  };
-}
-
-export function adaptOffer(raw: Raw): GroupOffer {
-  const biz = typeof raw.business === "object" ? raw.business : null;
-  return {
-    id: raw.id,
-    business: {
-      id: biz?.id ?? raw.business,
-      name: raw.business_name ?? biz?.name ?? "",
-      category: "other",
-      area: raw.business_area ?? biz?.area ?? "",
-      logo_url: null,
-    },
-    title: raw.title,
-    description: raw.description ?? "",
-    reward_type: raw.reward_type,
-    reward_description: raw.reward_description ?? "",
-    min_group_size: raw.min_group_size,
-    max_group_size: raw.max_group_size ?? null,
-    valid_from: raw.valid_from,
-    valid_to: raw.valid_to,
-    time_start: (raw.time_start ?? "").slice(0, 5),
-    time_end: (raw.time_end ?? "").slice(0, 5),
-    checkin_window_minutes: raw.checkin_window_minutes ?? 30,
-    requires_staff_code: raw.requires_staff_code ?? true,
-    terms: raw.terms ?? null,
-    status: raw.status,
-  };
-}
-
-function adaptMember(raw: Raw, leaderId: string | null): GroupMember {
-  const customerId: string = raw.customer ?? raw.id;
-  return {
-    id: raw.id,
-    name: raw.customer_name || raw.name || `#${String(customerId).slice(0, 6)}`,
-    status: raw.status,
-    is_leader: leaderId != null && customerId === leaderId,
-  };
-}
-
-export function adaptDeal(raw: Raw): GroupDeal {
-  const uid = session.getUserId();
-  const leaderId: string | null = raw.leader ?? null;
-  const members = (raw.members ?? []).map((m: Raw) => adaptMember(m, leaderId));
-  const selfRaw = (raw.members ?? []).find((m: Raw) => (m.customer ?? m.id) === uid);
-  return {
-    id: raw.id,
-    invite_token: raw.invite_token,
-    group_offer: adaptOffer(raw.group_offer ?? {}),
-    visit_time: raw.visit_time,
-    status: raw.status,
-    reward_code: raw.reward_code ?? null,
-    members,
-    is_member: !!selfRaw,
-    is_leader: uid != null && leaderId === uid,
-    checked_in: selfRaw?.status === "checked_in",
-  };
-}
-
 // ---- Campaigns ---------------------------------------------------------------
 // Boundary validation for campaign payloads. The backend may send `business` as
 // a bare UUID (like rewards/offers) — businessRef fills a placeholder the cards
 // tolerate. Progress is relative to the authenticated user.
 
-// The backend campaign_type enum is "time_window" (underscored); the UI type is
-// "timewindow". Normalize so the screens' type checks match.
+// Normalize the backend campaign_type onto the UI discriminator. The backend now
+// emits individual/group/social (campaigns-restructure design §3); the legacy
+// visit/time_window values map onto INDIVIDUAL so old rows degrade gracefully.
 function normalizeCampaignType(raw: string | undefined): Campaign["campaign_type"] {
-  if (raw === "time_window" || raw === "timewindow") return "timewindow";
   if (raw === "group") return "group";
-  return "visit";
+  if (raw === "social") return "social";
+  return "individual";
+}
+
+// Normalize the INDIVIDUAL completion mechanic (campaigns-restructure design §3).
+// Null for non-individual campaigns (group/social have no mechanic).
+function normalizeMechanic(raw: string | undefined): Campaign["rule"]["mechanic"] {
+  if (raw === "stamp") return "stamp";
+  if (raw === "spend") return "spend";
+  if (raw === "visit") return "visit";
+  return null;
 }
 
 function adaptCampaignProgress(raw: Raw | null | undefined): CampaignProgress | null {
@@ -270,15 +203,14 @@ export function adaptCampaign(raw: Raw): Campaign {
       raw.repeat_policy ?? raw.completion_limit_per_customer ?? raw.repeat ?? "once",
     max_participants: raw.max_participants ?? null,
     rule: {
-      // Backend keys: minimum_time_between_actions (ISO duration string),
-      // group_checkin_window_minutes (int), window_before_time (HH:MM:SS).
+      // Backend keys: mechanic (visit/stamp/spend), required_spend (decimal),
+      // minimum_time_between_actions (ISO duration), group_checkin_window_minutes.
+      mechanic: normalizeMechanic(rule.mechanic),
       required_count: rule.required_count ?? rule.visits ?? null,
+      required_spend:
+        rule.required_spend != null ? String(rule.required_spend) : (rule.requiredSpend ?? null),
       max_count_per_day: rule.max_count_per_day ?? rule.perDay ?? null,
       min_time_between: rule.minimum_time_between_actions ?? rule.min_time_between ?? rule.minGap ?? null,
-      window_before_time:
-        (rule.window_before_time ?? rule.windowBefore ?? null)?.slice?.(0, 5) ??
-        rule.window_before_time ??
-        null,
       required_group_size: rule.required_group_size ?? rule.groupSize ?? null,
       group_checkin_window:
         rule.group_checkin_window_minutes != null
@@ -295,7 +227,17 @@ export function adaptCampaign(raw: Raw): Campaign {
       receiver: reward.reward_receiver_type ?? reward.receiver ?? undefined,
     },
     my_progress: adaptCampaignProgress(raw.my_progress),
+    instagram_handle: raw.instagram_handle ?? null,
     auto_join_link: raw.auto_join_link ?? null,
+  };
+}
+
+// Maps the {followed, discover} feed payload (campaigns-restructure design §6) into
+// two adapted Campaign lists. Tolerates missing arrays so an empty feed is safe.
+export function adaptCampaignFeed(raw: Raw): CampaignFeed {
+  return {
+    followed: (raw.followed ?? []).map(adaptCampaign),
+    discover: (raw.discover ?? []).map(adaptCampaign),
   };
 }
 

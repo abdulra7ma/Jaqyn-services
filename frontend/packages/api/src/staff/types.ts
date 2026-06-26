@@ -42,64 +42,6 @@ export type RecentActivity = {
   redemptions: { id: string; code: string; status: string; created_at: string }[];
 };
 
-export type StaffGroupMember = {
-  id: string;
-  customer: string;
-  customer_name?: string;
-  status: string;
-  checked_in_at: string | null;
-};
-
-export type StaffGroup = {
-  id: string;
-  invite_token: string;
-  visit_time: string;
-  status: string;
-  reward_code: string | null;
-  group_offer: { id: string; title: string; business_name?: string; min_group_size: number };
-  members: StaffGroupMember[];
-};
-
-export type StaffProgram = {
-  id: string;
-  type: "stamp" | "spend" | string;
-  title: string;
-  required_count: number | null;
-  required_spend: string | null;
-  reward_description: string;
-};
-
-export type StaffCollectState =
-  | "awarded"
-  | "needs_amount"
-  | "already_counted"
-  | "reward_ready";
-
-export type StaffCollectResult = {
-  state: StaffCollectState;
-  customer: { name: string };
-  program: {
-    id: string;
-    type: string;
-    title: string;
-    required_count: number | null;
-    required_spend: string | null;
-  };
-  progress: {
-    current_count: number;
-    target_count: number | null;
-    current_spend: string;
-    required_spend: string | null;
-    status: string;
-  } | null;
-  reward: { title: string; reward_description: string } | null;
-  redemption: { id: string; code: string } | null;
-  /** Number of reward vouchers minted this scan (only present on `awarded` state). */
-  rewards_earned?: number;
-  /** True when the customer's bank is full and no new voucher was minted (only present on `awarded` state). */
-  bank_full?: boolean;
-};
-
 // ---- Campaign-aware scan (apps.campaigns — plan §1.3 / §3 staff surface) -----
 // Staff scans the customer's personal QR; the result lists campaigns the visit
 // is eligible to count toward, plus loyalty (plan D3). Then confirm a visit, or
@@ -141,6 +83,10 @@ export type ConfirmVisitResult = {
 // One advanced-campaign leg (same shape as a confirm-visit outcome).
 export type UnifiedCampaignLeg = ConfirmVisitResult;
 
+// Confirming a SOCIAL proof returns the same ProgressResult shape as a visit
+// confirm (campaign + voucher) — campaigns-restructure design §5.
+export type ConfirmSocialResult = ConfirmVisitResult;
+
 // A campaign that was a candidate this scan but was blocked (min-gap, etc).
 export type SkippedCampaign = {
   campaign_id: string;
@@ -148,15 +94,13 @@ export type SkippedCampaign = {
   reason_code: string;
 };
 
-// Unified scan: one staff confirm advances the loyalty card + the campaign set
-// (all stacking campaigns + one prioritized default). The backend returns 200
-// even when a leg is empty; loyalty_skipped / skipped_campaigns carry reasons.
+// Unified scan: one staff confirm advances the campaign set (all stacking
+// campaigns + one prioritized default). Post-restructure there is no separate
+// loyalty leg — a loyalty card is now an INDIVIDUAL campaign and advances through
+// `campaigns` like any other (campaigns-restructure design §5). The backend
+// returns 200 even when no campaign advanced; skipped_campaigns carries reasons.
 export type UnifiedScanResult = {
   customer: { name: string; phone: string };
-  // The regular loyalty-card leg — mirrors /api/staff/collect/. null when no
-  // stamp was added; loyalty_skipped explains why.
-  loyalty: StaffCollectResult | null;
-  loyalty_skipped: string | null;
   // Every campaign that advanced this scan (may be empty).
   campaigns: UnifiedCampaignLeg[];
   // Candidate campaigns that did not advance, with a reason each.
