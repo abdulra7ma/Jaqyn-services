@@ -328,6 +328,247 @@ def test_leader_redeems_the_group_voucher_once():
     assert exc.value.code == "VOUCHER_ALREADY_REDEEMED"
 
 
+# --- visit_time / name / note on start --------------------------------------
+
+
+def test_start_group_session_persists_visit_time_name_note():
+    """The leader's chosen visit slot, group name, and note are persisted."""
+    from datetime import datetime, timezone as dt_timezone
+
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=3)
+    leader = make_customer("901")
+    visit = datetime(2026, 7, 1, 20, 0, tzinfo=dt_timezone.utc)
+
+    session = CampaignGroupService.start_group_session(
+        campaign, leader, visit_time=visit, name="Birthday dinner", note="meet at door"
+    )
+
+    session.refresh_from_db()
+    assert session.visit_time == visit
+    assert session.name == "Birthday dinner"
+    assert session.note == "meet at door"
+
+
+def test_start_group_session_is_idempotent_for_leader_and_updates_fields():
+    """A leader re-starting returns the same forming group and applies new fields."""
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=3)
+    leader = make_customer("902")
+
+    first = CampaignGroupService.start_group_session(campaign, leader, name="Round 1")
+    second = CampaignGroupService.start_group_session(campaign, leader, name="Round 2")
+
+    assert first.id == second.id
+    assert Group.objects.filter(campaign=campaign, group_leader=leader).count() == 1
+    second.refresh_from_db()
+    assert second.name == "Round 2"
+
+
+# --- leave / cancel ----------------------------------------------------------
+
+
+def test_leave_as_leader_cancels_forming_group():
+    """A leader leaving a still-forming group cancels it and marks members LEFT."""
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=4)
+    leader = make_customer("911")
+    session = CampaignGroupService.start_group_session(campaign, leader)
+    member = make_customer("912")
+    CampaignGroupService.join_group_session(session.invite_token, member)
+
+    CampaignGroupService.leave_group_session(session.id, leader)
+
+    session.refresh_from_db()
+    assert session.status == Group.Status.CANCELLED
+    assert GroupMember.objects.get(group=session, customer=leader).status == GroupMember.Status.LEFT
+    assert GroupMember.objects.get(group=session, customer=member).status == GroupMember.Status.LEFT
+
+
+def test_leave_as_member_removes_them_and_reopens_full_group():
+    """A non-leader member leaving is marked LEFT; a FULL group reopens to FORMING."""
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=2)
+    leader = make_customer("921")
+    session = CampaignGroupService.start_group_session(campaign, leader)
+    member = make_customer("922")
+    CampaignGroupService.join_group_session(session.invite_token, member)
+    session.refresh_from_db()
+    assert session.status == Group.Status.FULL
+
+    CampaignGroupService.leave_group_session(session.id, member)
+
+    session.refresh_from_db()
+    assert session.status == Group.Status.FORMING
+    assert GroupMember.objects.get(group=session, customer=member).status == GroupMember.Status.LEFT
+    # The group still exists and the leader is unaffected.
+    assert GroupMember.objects.get(group=session, customer=leader).status == GroupMember.Status.CHECKED_IN
+
+
+def test_leave_by_non_member_is_not_found():
+    """A customer who is neither leader nor member cannot leave (or probe) a group."""
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=3)
+    leader = make_customer("931")
+    session = CampaignGroupService.start_group_session(campaign, leader)
+    stranger = make_customer("932")
+
+    with pytest.raises(JaqynAPIException) as exc:
+        CampaignGroupService.leave_group_session(session.id, stranger)
+    assert exc.value.code == "GROUP_SESSION_NOT_FOUND"
+
+
+def test_leave_completed_group_is_rejected():
+    """A settled (completed) group cannot be left."""
+    business = make_business()
+    staff = make_staff(business)
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=2)
+    leader = make_customer("941")
+    session = CampaignGroupService.start_group_session(campaign, leader)
+    member = make_customer("942")
+    CampaignGroupService.join_group_session(session.invite_token, member)
+    StaffScannerService.confirm_group_visit(staff, session.id)
+
+    with pytest.raises(JaqynAPIException) as exc:
+        CampaignGroupService.leave_group_session(session.id, member)
+    assert exc.value.code == "GROUP_SESSION_INVALID_STATE"
+
+
+# --- demo fill --------------------------------------------------------------
+
+
+def test_demo_fill_reaches_full_and_creates_checkin_token():
+    """demo_fill_group joins other customers until FULL via the real join path."""
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=3)
+    leader = make_customer("951")
+    session = CampaignGroupService.start_group_session(campaign, leader)
+    # Other customer accounts available to be auto-joined.
+    make_customer("952")
+    make_customer("953")
+
+    filled = CampaignGroupService.demo_fill_group(session.id, leader)
+
+    assert filled.status == Group.Status.FULL
+    active = GroupMember.objects.filter(
+        group=filled,
+        status__in=[GroupMember.Status.JOINED, GroupMember.Status.CHECKED_IN],
+    ).count()
+    assert active == 3
+    # The check-in token is the GROUP_INVITE token minted at start (reused at FULL).
+    assert QRCodeToken.objects.filter(
+        token=filled.invite_token, type=QRCodeToken.Type.GROUP_INVITE
+    ).exists()
+
+
+def test_demo_fill_endpoint_blocked_when_debug_false():
+    """The demo-fill endpoint is a dev aid: refused (403) when DEBUG is off."""
+    from django.test import override_settings
+
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=3)
+    leader = make_customer("961")
+    session = CampaignGroupService.start_group_session(campaign, leader)
+    make_customer("962")
+    make_customer("963")
+
+    with override_settings(DEBUG=False):
+        response = _auth(leader).post(
+            f"/api/customer/campaign-groups/{session.id}/demo-fill/"
+        )
+    assert response.status_code == 403
+    assert response.data["error"]["code"] == "PERMISSION_DENIED"
+
+
+def test_demo_fill_endpoint_fills_when_debug_true():
+    """With DEBUG on, the endpoint fills the group and returns it FULL."""
+    from django.test import override_settings
+
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=3)
+    leader = make_customer("971")
+    session = CampaignGroupService.start_group_session(campaign, leader)
+    make_customer("972")
+    make_customer("973")
+
+    with override_settings(DEBUG=True):
+        response = _auth(leader).post(
+            f"/api/customer/campaign-groups/{session.id}/demo-fill/"
+        )
+    assert response.status_code == 200
+    assert response.data["data"]["status"] == Group.Status.FULL
+
+
+# --- leave / detail HTTP surface --------------------------------------------
+
+
+def test_leave_endpoint_returns_success_envelope():
+    """POST /leave/ returns the {success: true} envelope and cancels the group."""
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=4)
+    leader = make_customer("981")
+    session = CampaignGroupService.start_group_session(campaign, leader)
+
+    response = _auth(leader).post(
+        f"/api/customer/campaign-groups/{session.id}/leave/"
+    )
+    assert response.status_code == 200
+    assert response.data["data"]["success"] is True
+    session.refresh_from_db()
+    assert session.status == Group.Status.CANCELLED
+
+
+def test_group_detail_serializer_exposes_new_group_fields():
+    """The group-detail payload carries visit_time/name/note/joined_count/members."""
+    from datetime import datetime, timezone as dt_timezone
+
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=3)
+    leader = make_customer("991")
+    visit = datetime(2026, 7, 2, 19, 30, tzinfo=dt_timezone.utc)
+    session = CampaignGroupService.start_group_session(
+        campaign, leader, visit_time=visit, name="Squad", note="see you there"
+    )
+
+    response = _auth(leader).get(f"/api/customer/campaign-groups/{session.id}/")
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert data["name"] == "Squad"
+    assert data["note"] == "see you there"
+    assert data["visit_time"] is not None
+    assert data["joined_count"] == 1
+    assert data["invite_code"] == session.invite_token
+    assert data["campaign_name"] == campaign.name
+    assert data["business_name"] == business.name
+    member = data["members"][0]
+    assert member["is_leader"] is True
+    assert "name" in member
+
+
+def test_customer_detail_serializer_exposes_group_offer_fields():
+    """The customer campaign detail exposes the GROUP offer-detail grid fields."""
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=3)
+    customer = make_customer("995")
+
+    response = _auth(customer).get(f"/api/customer/campaigns/{campaign.id}/")
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert data["campaign_type"] == Campaign.CampaignType.GROUP
+    assert data["reward"]["title"] == "Free dessert for the table"
+    assert data["reward"]["reward_receiver_type"] == CampaignReward.ReceiverType.LEADER
+    assert data["rule"]["required_group_size"] == 3
+    assert data["rule"]["group_checkin_window_minutes"] == 30
+    assert "min_spend" in data["rule"]
+    assert data["business_name"] == business.name
+    assert data["business_category"] == business.category
+    assert data["business_area"] == business.area
+    assert data["active_days"] == []
+    assert "active_start_time" in data
+    assert "active_end_time" in data
+    assert data["business_logo_url"] is None
+
+
 # --- end-to-end via the HTTP API --------------------------------------------
 
 

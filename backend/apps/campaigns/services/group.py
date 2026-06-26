@@ -115,6 +115,9 @@ class CampaignGroupService:
         campaign: Campaign,
         leader,
         now: datetime | None = None,
+        visit_time: datetime | None = None,
+        name: str = "",
+        note: str = "",
     ) -> Group:
         """Start a group session for a leader, minting the GROUP_INVITE token (§11).
 
@@ -127,6 +130,13 @@ class CampaignGroupService:
         leader is present by definition). The leader is also auto-joined as a
         :class:`CampaignParticipant` so the reward can attach to their row on
         completion. Runs in one atomic block.
+
+        The optional ``visit_time`` (leader-chosen slot), ``name`` (group label),
+        and ``note`` (message to invited friends) are persisted on the group when
+        supplied. **Idempotent for the leader:** if the leader already leads a
+        non-terminal (FORMING/FULL/CHECKING_IN) group for this campaign, that group
+        is returned instead of creating a second one, and any supplied
+        ``visit_time``/``name``/``note`` updates it in place.
         """
         now = now or timezone.now()
         if campaign.campaign_type != Campaign.CampaignType.GROUP:
@@ -139,6 +149,39 @@ class CampaignGroupService:
             raise JaqynAPIException(
                 "CAMPAIGN_NOT_ACTIVE", status_code=status.HTTP_409_CONFLICT
             )
+
+        # Non-terminal statuses: a leader still actively running a group should not
+        # spawn a duplicate. Terminal (COMPLETED/EXPIRED/CANCELLED) groups do not
+        # block a fresh start.
+        active_statuses = {
+            Group.Status.FORMING,
+            Group.Status.FULL,
+            Group.Status.CHECKING_IN,
+        }
+        existing = (
+            Group.objects.filter(
+                campaign=campaign,
+                group_leader=leader,
+                status__in=active_statuses,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if existing is not None:
+            updated_fields: list[str] = []
+            if visit_time is not None:
+                existing.visit_time = visit_time
+                updated_fields.append("visit_time")
+            if name:
+                existing.name = name
+                updated_fields.append("name")
+            if note:
+                existing.note = note
+                updated_fields.append("note")
+            if updated_fields:
+                updated_fields.append("updated_at")
+                existing.save(update_fields=updated_fields)
+            return existing
 
         required_size = cls._required_group_size(campaign)
         window = cls._checkin_window_minutes(campaign)
@@ -156,6 +199,9 @@ class CampaignGroupService:
                 status=Group.Status.FORMING,
                 required_size=required_size,
                 invite_token=token.token,
+                visit_time=visit_time,
+                name=name,
+                note=note,
                 expires_at=now + timedelta(minutes=window),
             )
             # The leader is a participant so the reward attaches to a real row on
@@ -463,4 +509,153 @@ class CampaignGroupService:
             raise JaqynAPIException(
                 "GROUP_SESSION_INVALID_STATE", status_code=status.HTTP_409_CONFLICT
             )
+        return session
+
+    @classmethod
+    def leave_group_session(cls, group_id, customer, now: datetime | None = None) -> Group:
+        """Leave (or, as leader, cancel) a group the customer belongs to (group flow).
+
+        Looks up the group by id and asserts the customer is a member or the leader
+        (``GROUP_SESSION_NOT_FOUND`` otherwise — indistinguishable from a missing
+        group so a customer cannot probe foreign group ids). The group row is locked
+        ``select_for_update`` for the whole mutation so a leave cannot race a join.
+
+        Rules:
+
+        * A terminal group (COMPLETED/EXPIRED/CANCELLED) cannot be left
+          (``GROUP_SESSION_INVALID_STATE``) — the membership is already settled.
+        * **Leader of a still-FORMING group** → the whole group is CANCELLED and
+          every still-active (JOINED/CHECKED_IN) member is marked LEFT; the group is
+          torn down because it has no leader to complete it.
+        * **Leader of a FULL/CHECKING_IN group** → rejected
+          (``GROUP_SESSION_INVALID_STATE``): the group has reached size and is
+          awaiting staff confirmation, so the leader cannot pull it apart.
+        * **Non-leader member** → that member's row is marked LEFT. If the group was
+          FULL it drops back to FORMING so the freed slot can be filled again.
+
+        Returns the updated :class:`Group`. Runs in one atomic block.
+        """
+        now = now or timezone.now()
+        with transaction.atomic():
+            session = (
+                Group.objects.select_for_update()
+                .select_related("campaign")
+                .filter(id=group_id)
+                .first()
+            )
+            is_leader = session is not None and session.group_leader_id == customer.id
+            member = (
+                GroupMember.objects.filter(group=session, customer=customer).first()
+                if session is not None
+                else None
+            )
+            if session is None or not (is_leader or member is not None):
+                raise JaqynAPIException(
+                    "GROUP_SESSION_NOT_FOUND",
+                    status_code=status.HTTP_404_NOT_FOUND,
+                )
+            if session.status not in {Group.Status.FORMING, Group.Status.FULL}:
+                raise JaqynAPIException(
+                    "GROUP_SESSION_INVALID_STATE",
+                    "This group can no longer be left",
+                    status.HTTP_409_CONFLICT,
+                )
+
+            if is_leader:
+                if session.status != Group.Status.FORMING:
+                    # A FULL group is awaiting staff confirmation; the leader cannot
+                    # dissolve it from under the members who already arrived.
+                    raise JaqynAPIException(
+                        "GROUP_SESSION_INVALID_STATE",
+                        "A full group cannot be cancelled by its leader",
+                        status.HTTP_409_CONFLICT,
+                    )
+                GroupMember.objects.filter(
+                    group=session,
+                    status__in=[
+                        GroupMember.Status.JOINED,
+                        GroupMember.Status.CHECKED_IN,
+                    ],
+                ).update(status=GroupMember.Status.LEFT, updated_at=now)
+                session.status = Group.Status.CANCELLED
+                session.save(update_fields=["status", "updated_at"])
+            else:
+                # member is not None here (non-leader branch).
+                member.status = GroupMember.Status.LEFT  # type: ignore[union-attr]
+                member.save(update_fields=["status", "updated_at"])  # type: ignore[union-attr]
+                # A member leaving frees a slot, so a FULL group reopens for joins.
+                if session.status == Group.Status.FULL:
+                    session.status = Group.Status.FORMING
+                    session.save(update_fields=["status", "updated_at"])
+
+        emit_event(
+            "campaign_group_left",
+            business_id=str(session.campaign.business_id),
+            campaign_id=str(session.campaign_id),
+            customer_id=str(customer.id),
+            group_id=str(session.id),
+            as_leader=is_leader,
+        )
+        return session
+
+    @classmethod
+    def demo_fill_group(cls, group_id, requester, now: datetime | None = None) -> Group:
+        """DEV-only: auto-join real customer users until the group is FULL (demo aid).
+
+        A demo/testing convenience to simulate friends joining without driving a
+        second device per friend. Resolves the group the ``requester`` belongs to
+        (``get_session_for_customer`` — ``GROUP_SESSION_NOT_FOUND`` if they are not
+        a member/leader). Picks other ``CUSTOMER``-role users who are not already
+        members and not the leader, then joins each one through the **real**
+        :meth:`join_group_session` path so the state machine (member count, the
+        flip to FULL when ``required_size`` is reached, the check-in token already
+        minted at start) is byte-for-byte identical to genuine joins.
+
+        Raises ``GROUP_SESSION_INVALID_STATE`` if the group is not FORMING, or
+        ``VALIDATION_ERROR`` if there are not enough other customer users to fill it.
+        This method performs no gating itself — the **view** must restrict it to
+        non-production (``settings.DEBUG``); see ``GroupSessionDemoFillView``.
+        Returns the (now usually FULL) group.
+        """
+        from apps.accounts.models import User
+
+        now = now or timezone.now()
+        session = cls.get_session_for_customer(group_id, requester)
+        if session.status != Group.Status.FORMING:
+            raise JaqynAPIException(
+                "GROUP_SESSION_INVALID_STATE",
+                "Only a forming group can be demo-filled",
+                status.HTTP_409_CONFLICT,
+            )
+
+        member_ids = set(
+            GroupMember.objects.filter(group=session).values_list(
+                "customer_id", flat=True
+            )
+        )
+        member_ids.add(session.group_leader_id)
+        needed = session.required_size - GroupMember.objects.filter(
+            group=session
+        ).count()
+        if needed <= 0:
+            return session
+
+        fillers = list(
+            User.objects.filter(role=User.Role.CUSTOMER)
+            .exclude(id__in=member_ids)
+            .order_by("id")[:needed]
+        )
+        if len(fillers) < needed:
+            raise JaqynAPIException(
+                "VALIDATION_ERROR",
+                "Not enough other customer accounts to fill the group",
+                status.HTTP_409_CONFLICT,
+            )
+
+        for filler in fillers:
+            # Reuse the real join path so full→checkin transitions exactly as a
+            # genuine join would; never replicate the state machine here.
+            cls.join_group_session(session.invite_token, filler, now=now)
+
+        session.refresh_from_db()
         return session

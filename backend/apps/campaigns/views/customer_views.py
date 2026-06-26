@@ -9,6 +9,7 @@ single leader voucher. Views hold zero logic.
 
 from __future__ import annotations
 
+from django.conf import settings
 from rest_framework.views import APIView
 
 from apps.campaigns.serializers import (
@@ -19,7 +20,9 @@ from apps.campaigns.serializers import (
     CampaignRewardVoucherSerializer,
     CampaignSerializer,
     GroupSerializer,
+    GroupSessionStartSerializer,
 )
+from core.exceptions import JaqynAPIException
 from apps.campaigns.services import (
     CampaignGroupService,
     CampaignProgressService,
@@ -195,10 +198,20 @@ class GroupSessionStartView(APIView):
         return [ScopedRateThrottle()]
 
     def post(self, request, campaign_id):
+        # Shape-validate the optional visit_time / name / note; the service owns
+        # the rules (idempotency, persistence). Empty body is a bare start.
+        params = GroupSessionStartSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
         campaign = CampaignService.get_discoverable(campaign_id)
-        session = CampaignGroupService.start_group_session(campaign, request.user)
+        session = CampaignGroupService.start_group_session(
+            campaign,
+            request.user,
+            visit_time=params.validated_data.get("visit_time"),
+            name=params.validated_data.get("name", ""),
+            note=params.validated_data.get("note", ""),
+        )
         return success_response(
-            GroupSerializer(session).data, status=201
+            GroupSerializer(session, context={"request": request}).data, status=201
         )
 
 
@@ -210,7 +223,9 @@ class GroupSessionDetailView(APIView):
         session = CampaignGroupService.get_session_for_customer(
             group_session_id, request.user
         )
-        return success_response(GroupSerializer(session).data)
+        return success_response(
+            GroupSerializer(session, context={"request": request}).data
+        )
 
 
 class GroupSessionInviteView(APIView):
@@ -227,6 +242,57 @@ class GroupSessionInviteView(APIView):
         session = CampaignGroupService.invite_link_for_session(
             group_session_id, request.user
         )
-        data = dict(GroupSerializer(session).data)
+        data = dict(GroupSerializer(session, context={"request": request}).data)
         data["invite_url"] = _invite_url(request, session)
         return success_response(data)
+
+
+class GroupSessionLeaveView(APIView):
+    permission_classes = [IsCustomer]
+    serializer_class = GroupSerializer
+    throttle_scope = "campaign_join"
+
+    def get_throttles(self):
+        from rest_framework.throttling import ScopedRateThrottle
+
+        return [ScopedRateThrottle()]
+
+    def post(self, request, group_session_id):
+        CampaignGroupService.leave_group_session(group_session_id, request.user)
+        return success_response({"success": True})
+
+
+class GroupSessionDemoFillView(APIView):
+    """DEV-only: simulate friends joining a group so it reaches FULL (demo aid).
+
+    Gated on ``settings.DEBUG``: this auto-joins *other* real customer accounts to
+    the leader's group to make the full→check-in flow demonstrable on one device.
+    It must never be reachable in production — there it raises ``PERMISSION_DENIED``
+    (403) so the route exists but does nothing. The fill itself goes through the
+    real join path so the resulting state is identical to genuine joins.
+    """
+
+    permission_classes = [IsCustomer]
+    serializer_class = GroupSerializer
+    throttle_scope = "campaign_join"
+
+    def get_throttles(self):
+        from rest_framework.throttling import ScopedRateThrottle
+
+        return [ScopedRateThrottle()]
+
+    def post(self, request, group_session_id):
+        from rest_framework import status as http_status
+
+        if not settings.DEBUG:
+            # Demo/testing aid only — never a production capability. Refuse outside
+            # DEBUG so the endpoint cannot be abused to stuff groups in prod.
+            raise JaqynAPIException(
+                "PERMISSION_DENIED",
+                "Demo fill is only available in development",
+                http_status.HTTP_403_FORBIDDEN,
+            )
+        session = CampaignGroupService.demo_fill_group(group_session_id, request.user)
+        return success_response(
+            GroupSerializer(session, context={"request": request}).data
+        )

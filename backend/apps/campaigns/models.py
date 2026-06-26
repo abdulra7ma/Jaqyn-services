@@ -266,6 +266,17 @@ class Group(TimeStampedModel):
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.FORMING)
     required_size = models.PositiveIntegerField()
     invite_token = models.CharField(max_length=128, unique=True)
+    # Leader-chosen visit slot for the group ("we'll come Friday 8pm"). Optional —
+    # a group can form without a fixed time. Source: richer customer GROUP flow
+    # (leader picks a visit time when creating the group).
+    visit_time = models.DateTimeField(blank=True, null=True)
+    # Optional leader-given group name surfaced to invited friends ("Birthday
+    # dinner"). max_length 80 keeps it a short label, not free text. Source:
+    # richer customer GROUP flow (name the group).
+    name = models.CharField(max_length=80, blank=True, default="")
+    # Optional note from the leader to invited friends ("meet at the door").
+    # Source: richer customer GROUP flow (note to friends).
+    note = models.TextField(blank=True, default="")
     expires_at = models.DateTimeField(blank=True, null=True)
     completed_at = models.DateTimeField(blank=True, null=True)
 

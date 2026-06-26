@@ -19,6 +19,7 @@ from apps.campaigns.models import (
     CampaignRewardVoucher,
     CampaignRule,
     Group,
+    GroupMember,
 )
 from core.frontend import frontend_base_url
 
@@ -337,6 +338,14 @@ class CampaignDetailSerializer(CampaignSerializer):
     """
 
     my_progress = serializers.SerializerMethodField()
+    # Flattened owning-business fields the customer offer-detail header binds to
+    # (campaigns-restructure offer-detail grid). ``business_name``/
+    # ``business_logo_url`` come from the base serializer; these add the category
+    # and location so a GROUP/SOCIAL offer card shows where to go. Empty string
+    # when the business has not set the field.
+    business_category = serializers.CharField(source="business.category", read_only=True)
+    business_address = serializers.CharField(source="business.address", read_only=True)
+    business_area = serializers.CharField(source="business.area", read_only=True)
 
     class Meta:
         model = Campaign
@@ -348,6 +357,9 @@ class CampaignDetailSerializer(CampaignSerializer):
             "business",
             "business_name",
             "business_logo_url",
+            "business_category",
+            "business_address",
+            "business_area",
             "created_by",
             "name",
             "description",
@@ -539,19 +551,52 @@ class CampaignRewardVoucherSerializer(serializers.ModelSerializer):
 
 
 class GroupSerializer(serializers.ModelSerializer):
-    """A group session with its members flattened for the group screen (read-only)."""
+    """A group session flattened for the customer group screen (read-only).
+
+    Emits everything the group-detail UI binds to: the owning campaign (flattened
+    to ``campaign`` id + ``campaign_name`` + ``business_name`` + ``business_logo_url``
+    so the card renders the brand without a second round-trip), the lifecycle
+    ``status``, ``required_size`` and the live ``joined_count`` (members still
+    JOINED/CHECKED_IN), the member roster (each with ``name``, ``is_leader`` and
+    their ``status``), the invite token surfaced both as ``invite_token`` (legacy
+    key) and ``invite_code`` plus the scannable ``invite_url``, the ``checkin_token``
+    the leader shows once the group is FULL, and the leader-chosen ``visit_time`` /
+    group ``name`` / ``note``. All fields are read-only.
+    """
 
     members = serializers.SerializerMethodField()
+    joined_count = serializers.SerializerMethodField()
+    # The invite token is the canonical short code; surface it under both keys so
+    # the FE can read either. `invite_code` is the alias the group screen binds to.
+    invite_code = serializers.CharField(source="invite_token", read_only=True)
+    invite_url = serializers.SerializerMethodField()
+    # The QR the leader presents for the coordinated check-in once the group fills.
+    # There is no separate check-in token in the model — the GROUP_INVITE token is
+    # reused at check-in — so this exposes `invite_token` only while FULL, else null.
+    checkin_token = serializers.SerializerMethodField()
+    campaign_name = serializers.CharField(source="campaign.name", read_only=True)
+    business_name = serializers.CharField(source="campaign.business.name", read_only=True)
+    business_logo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
         fields = (
             "id",
             "campaign",
+            "campaign_name",
+            "business_name",
+            "business_logo_url",
             "group_leader",
             "status",
             "required_size",
+            "joined_count",
             "invite_token",
+            "invite_code",
+            "invite_url",
+            "checkin_token",
+            "visit_time",
+            "name",
+            "note",
             "expires_at",
             "completed_at",
             "members",
@@ -560,16 +605,42 @@ class GroupSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_members(self, obj: Group) -> list[dict]:
+        leader_id = obj.group_leader_id
         return [
             {
                 "id": str(member.id),
                 "customer": str(member.customer_id),
+                "name": getattr(member.customer, "name", "") or "",
+                "is_leader": member.customer_id == leader_id,
                 "status": member.status,
                 "joined_at": member.joined_at,
                 "checked_in_at": member.checked_in_at,
             }
             for member in obj.members.all()
         ]
+
+    def get_joined_count(self, obj: Group) -> int:
+        """Count members still in the group (JOINED/CHECKED_IN); LEFT/NO_SHOW excluded."""
+        active = {GroupMember.Status.JOINED, GroupMember.Status.CHECKED_IN}
+        return sum(1 for member in obj.members.all() if member.status in active)
+
+    def get_invite_url(self, obj: Group) -> str | None:
+        """The scannable invite URL, built against the requesting origin when present."""
+        request = self.context.get("request")
+        if request is None:
+            return None
+        return f"{frontend_base_url(request)}/q/{obj.invite_token}"
+
+    def get_checkin_token(self, obj: Group) -> str | None:
+        """The GROUP_INVITE token to present at check-in, only once the group is FULL."""
+        if obj.status == Group.Status.FULL:
+            return obj.invite_token
+        return None
+
+    def get_business_logo_url(self, obj: Group) -> str | None:
+        business = getattr(obj.campaign, "business", None)
+        logo = getattr(business, "logo", None)
+        return logo.url if logo else None
 
 
 class CampaignTypeStatsSerializer(serializers.Serializer):
@@ -620,6 +691,19 @@ class CampaignMetricsSerializer(serializers.Serializer):
 
 
 # --- Write input serializers (action endpoints) -----------------------------
+
+
+class GroupSessionStartSerializer(serializers.Serializer):
+    """Leader's group-start input — all optional (richer customer GROUP flow).
+
+    Shape-only validation of the optional ``visit_time`` (ISO 8601 datetime slot),
+    ``name`` (group label, max 80 to match ``Group.name``), and ``note`` (message
+    to invited friends). Any business rules about the values live in the service.
+    """
+
+    visit_time = serializers.DateTimeField(required=False, allow_null=True)
+    name = serializers.CharField(required=False, allow_blank=True, max_length=80)
+    note = serializers.CharField(required=False, allow_blank=True)
 
 
 class CancelVoucherSerializer(serializers.Serializer):
