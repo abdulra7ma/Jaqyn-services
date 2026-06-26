@@ -828,3 +828,53 @@ def test_confirm_group_unknown_session_is_not_found():
     )
     assert response.status_code == 404
     assert response.data["error"]["code"] == "GROUP_SESSION_NOT_FOUND"
+
+
+def test_scan_dispatch_requires_auth():
+    response = APIClient().post("/api/staff/campaigns/scan/", {"token": "x"}, format="json")
+    assert response.status_code == 401
+
+
+def test_scan_dispatch_rejects_customer():
+    customer = make_customer()
+    response = customer_client(customer).post(
+        "/api/staff/campaigns/scan/", {"token": "x"}, format="json"
+    )
+    assert response.status_code == 403
+
+
+def test_scan_dispatch_customer_token_happy_path():
+    business = make_business()
+    customer = make_customer()
+    staff = make_staff(business)
+    make_campaign(business, required_count=3)
+    token = get_or_create_customer_profile_token(customer)
+
+    response = staff_client(staff).post(
+        "/api/staff/campaigns/scan/", {"token": token.token}, format="json"
+    )
+
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert data["kind"] == "customer"
+    assert data["customer"]["customer"]["id"] == str(customer.id)
+    assert data["voucher"] is None
+
+
+def test_scan_dispatch_voucher_token_happy_path():
+    business = make_business()
+    customer = make_customer()
+    staff = make_staff(business)
+    campaign = make_campaign(business, required_count=1)
+    voucher = CampaignProgressService.record_campaign_action(
+        campaign=campaign, customer=customer, staff=staff
+    ).voucher
+
+    response = staff_client(staff).post(
+        "/api/staff/campaigns/scan/", {"token": voucher.qr_token.token}, format="json"
+    )
+
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert data["kind"] == "voucher"
+    assert data["voucher"]["id"] == str(voucher.id)

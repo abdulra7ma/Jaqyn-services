@@ -4,6 +4,7 @@ from apps.campaigns.views.staff_views import (
     ConfirmGroupView,
     RedeemVoucherView,
     ScanCustomerView,
+    ScanDispatchView,
     ScanVoucherView,
     UnifiedConfirmVisitView,
 )
@@ -11,6 +12,7 @@ from apps.campaigns.views.staff_views import (
 # Mounted at /api/staff/campaigns/ (see config/urls.py). Mirrors plan §1.3 staff
 # routes. Sits alongside the existing loyalty staff scanner at /api/staff/.
 urlpatterns = [
+    path("scan/", ScanDispatchView.as_view(), name="staff-campaign-scan"),
     path("scan-customer/", ScanCustomerView.as_view(), name="staff-campaign-scan-customer"),
     path("visit/", UnifiedConfirmVisitView.as_view(), name="staff-campaign-unified-visit"),
     path("scan-voucher/", ScanVoucherView.as_view(), name="staff-campaign-scan-voucher"),
