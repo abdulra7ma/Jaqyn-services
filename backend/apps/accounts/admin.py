@@ -1,11 +1,17 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from unfold.admin import ModelAdmin
+from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 from apps.accounts.models import CustomerProfile, User
 
 
 @admin.register(User)
-class UserAdmin(DjangoUserAdmin):
+class UserAdmin(DjangoUserAdmin, ModelAdmin):
+    # Unfold-styled auth forms so the add/password screens match the themed admin.
+    form = UserChangeForm
+    add_form = UserCreationForm
+    change_password_form = AdminPasswordChangeForm
     list_display = ("phone", "name", "role", "is_phone_verified", "is_active", "is_staff", "created_at")
     list_filter = ("role", "is_phone_verified", "is_active", "is_staff")
     search_fields = ("phone", "name", "email")
@@ -25,7 +31,8 @@ class UserAdmin(DjangoUserAdmin):
 
 
 @admin.register(CustomerProfile)
-class CustomerProfileAdmin(admin.ModelAdmin):
+class CustomerProfileAdmin(ModelAdmin):
     list_display = ("user", "birthday", "language", "marketing_opt_in", "created_at")
     list_filter = ("language", "marketing_opt_in")
     search_fields = ("user__phone", "user__name", "user__email")
+    list_select_related = ("user",)

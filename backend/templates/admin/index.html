@@ -1,0 +1,170 @@
+{% extends 'admin/base.html' %}
+
+{% load i18n %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; flex-direction:column; gap:16px;">
+
+    {# Row 1: hero signups chart + businesses-by-status doughnut #}
+    <div style="display:grid; grid-template-columns:1.7fr 1fr; gap:16px;">
+        <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
+            <p style="margin:0; font-size:13px; color:rgb(var(--color-base-500));">{{ signup_headline_label }}</p>
+            <p class="text-font-important-light dark:text-font-important-dark" style="margin:4px 0 12px; font-size:26px; font-weight:600;">{{ signup_headline }}</p>
+            <div style="position:relative; width:100%; height:170px;">
+                <canvas class="chart" data-type="line" data-value="{{ signup_chart_data }}" data-options="{{ signup_chart_options }}" role="img" aria-label="{% trans 'New customers and businesses per month' %}"></canvas>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:14px;">
+                {% for stat in mini_stats %}
+                    <a href="{{ stat.url }}" style="display:flex; align-items:center; gap:8px; text-decoration:none;">
+                        <span style="width:30px; height:30px; border-radius:50%; background:rgb(var(--color-primary-100)); color:rgb(var(--color-primary-700)); display:flex; align-items:center; justify-content:center;">
+                            <span class="material-symbols-outlined" style="font-size:18px;" aria-hidden="true">{{ stat.icon }}</span>
+                        </span>
+                        <span>
+                            <span style="display:block; font-size:11px; color:rgb(var(--color-base-500));">{{ stat.label }}</span>
+                            <span class="text-font-important-light dark:text-font-important-dark" style="display:block; font-size:14px; font-weight:500;">{{ stat.value }}</span>
+                        </span>
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
+            <p style="margin:0 0 8px; font-size:13px; color:rgb(var(--color-base-500));">{% trans "Businesses by status" %}</p>
+            <div style="position:relative; width:100%; height:150px;">
+                <canvas class="chart" data-type="doughnut" data-value="{{ status_chart_data }}" data-options="{{ status_chart_options }}" role="img" aria-label="{% trans 'Businesses by status' %}"></canvas>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:12px; font-size:12px;">
+                {% for item in status_legend %}
+                    <span style="display:flex; align-items:center; gap:6px; color:rgb(var(--color-base-600));">
+                        <span style="width:10px; height:10px; border-radius:2px; background:{{ item.color }};"></span>
+                        {{ item.label }}
+                        <span class="text-font-important-light dark:text-font-important-dark" style="margin-left:auto; font-weight:500;">{{ item.value }}</span>
+                    </span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    {# Row 2: gradient KPI tiles #}
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px;">
+        {% for card in kpi_cards %}
+            <a href="{{ card.url }}" style="background:{{ card.gradient }}; border-radius:8px; padding:18px 20px; color:#fff; text-decoration:none; display:block;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span class="material-symbols-outlined" style="font-size:24px; opacity:.85;" aria-hidden="true">{{ card.icon }}</span>
+                    <span style="font-size:11px; opacity:.85;">{{ card.sub }}</span>
+                </div>
+                <p style="margin:14px 0 0; font-size:24px; font-weight:600;">{{ card.value }}</p>
+                <p style="margin:2px 0 0; font-size:12px; opacity:.9;">{{ card.label }}</p>
+            </a>
+        {% endfor %}
+    </div>
+
+    {# Row 3: pending application review queue + onboarding pipeline, both actionable #}
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
+            <p class="text-font-important-light dark:text-font-important-dark" style="margin:0 0 4px; font-size:14px; font-weight:500;">{% trans "Pending review queue" %}</p>
+            <p style="margin:0 0 8px; font-size:12px; color:rgb(var(--color-base-500));">{% trans "New applications awaiting accept / reject." %}</p>
+            {% if review_queue %}
+                {% for biz in review_queue %}
+                    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 0; border-top:1px solid rgb(var(--color-base-200));">
+                        <div style="flex:1; min-width:160px;">
+                            <a class="text-font-important-light dark:text-font-important-dark" style="font-weight:500; font-size:13px; text-decoration:none;" href="{% url 'admin:businesses_business_change' biz.pk %}">{{ biz.name }}</a>
+                            <p style="margin:1px 0 0; font-size:12px; color:rgb(var(--color-base-500));">{{ biz.get_category_display|default:"—" }} · {{ biz.area|default:"—" }} · {{ biz.created_at|timesince }} {% trans "ago" %}</p>
+                        </div>
+                        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;">
+                            <form method="post" action="{% url 'admin:businesses_business_dashboard_action' biz.pk %}" style="display:inline;">{% csrf_token %}<input type="hidden" name="action" value="approve"><button type="submit" style="border:0; background:#C25E3C; color:#fff; font-size:12px; padding:5px 11px; border-radius:6px; cursor:pointer;">{% trans "Approve" %}</button></form>
+                            <form method="post" action="{% url 'admin:businesses_business_dashboard_action' biz.pk %}" style="display:inline;">{% csrf_token %}<input type="hidden" name="action" value="reject"><button type="submit" style="border:1px solid #C99; background:transparent; color:#9E3D52; font-size:12px; padding:5px 11px; border-radius:6px; cursor:pointer;">{% trans "Reject" %}</button></form>
+                            <form method="post" action="{% url 'admin:businesses_business_dashboard_action' biz.pk %}" style="display:flex; gap:4px; align-items:center;">{% csrf_token %}<input type="hidden" name="action" value="comment"><input type="text" name="text" placeholder="{% trans 'Comment…' %}" aria-label="{% trans 'Comment' %}" style="font-size:12px; padding:4px 8px; border:1px solid rgb(var(--color-base-300)); border-radius:6px; width:120px; background:rgb(var(--color-base-50)); color:rgb(var(--color-base-700));"><button type="submit" style="border:0; background:rgb(var(--color-base-200)); color:rgb(var(--color-base-700)); font-size:12px; padding:5px 9px; border-radius:6px; cursor:pointer;">{% trans "Add" %}</button></form>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p style="margin:8px 0 0; font-size:13px; color:rgb(var(--color-base-500));">{% trans "Nothing awaiting review." %}</p>
+            {% endif %}
+        </div>
+
+        <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
+            <p class="text-font-important-light dark:text-font-important-dark" style="margin:0 0 4px; font-size:14px; font-weight:500;">{% trans "Onboarding pipeline" %}</p>
+            <p style="margin:0 0 8px; font-size:12px; color:rgb(var(--color-base-500));">{% trans "Profiles being completed; verify or send back." %}</p>
+            {% if onboarding_queue %}
+                {% for biz in onboarding_queue %}
+                    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 0; border-top:1px solid rgb(var(--color-base-200));">
+                        <div style="flex:1; min-width:160px;">
+                            <a class="text-font-important-light dark:text-font-important-dark" style="font-weight:500; font-size:13px; text-decoration:none;" href="{% url 'admin:businesses_business_change' biz.pk %}">{{ biz.name }}</a>
+                            <p style="margin:2px 0 0;">
+                                {% if biz.onboarding_status == 'submitted' %}
+                                    <span style="font-size:11px; background:rgb(var(--color-primary-100)); color:rgb(var(--color-primary-700)); border-radius:10px; padding:1px 8px;">{{ biz.get_onboarding_status_display }}</span>
+                                {% elif biz.onboarding_status == 'changes_requested' %}
+                                    <span style="font-size:11px; background:#FBEAF0; color:#993556; border-radius:10px; padding:1px 8px;">{{ biz.get_onboarding_status_display }}</span>
+                                {% else %}
+                                    <span style="font-size:11px; background:rgb(var(--color-base-200)); color:rgb(var(--color-base-600)); border-radius:10px; padding:1px 8px;">{{ biz.get_onboarding_status_display }}</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;">
+                            {% if biz.onboarding_status == 'submitted' %}
+                                <form method="post" action="{% url 'admin:businesses_business_dashboard_action' biz.pk %}" style="display:inline;">{% csrf_token %}<input type="hidden" name="action" value="verify"><button type="submit" style="border:0; background:#C25E3C; color:#fff; font-size:12px; padding:5px 11px; border-radius:6px; cursor:pointer;">{% trans "Verify" %}</button></form>
+                            {% endif %}
+                            <form method="post" action="{% url 'admin:businesses_business_dashboard_action' biz.pk %}" style="display:flex; gap:4px; align-items:center;">{% csrf_token %}<input type="hidden" name="action" value="request_changes"><input type="text" name="text" placeholder="{% trans 'What to fix…' %}" aria-label="{% trans 'Change request' %}" style="font-size:12px; padding:4px 8px; border:1px solid rgb(var(--color-base-300)); border-radius:6px; width:120px; background:rgb(var(--color-base-50)); color:rgb(var(--color-base-700));"><button type="submit" style="border:1px solid rgb(var(--color-base-300)); background:transparent; color:rgb(var(--color-base-700)); font-size:12px; padding:5px 9px; border-radius:6px; cursor:pointer;">{% trans "Send back" %}</button></form>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p style="margin:8px 0 0; font-size:13px; color:rgb(var(--color-base-500));">{% trans "No profiles in onboarding." %}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Row 4: recent admin activity #}
+    <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
+        <p class="text-font-important-light dark:text-font-important-dark" style="margin:0 0 14px; font-size:14px; font-weight:500;">{% trans "Recent admin activity" %}</p>
+        {% if dashboard_recent %}
+            <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:14px;">
+                {% for row in dashboard_recent %}
+                    <div style="display:flex; gap:10px;">
+                        <span style="width:28px; height:28px; border-radius:50%; background:rgb(var(--color-primary-100)); color:rgb(var(--color-primary-700)); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <span class="material-symbols-outlined" style="font-size:16px;" aria-hidden="true">history</span>
+                        </span>
+                        <div>
+                            <p class="text-font-important-light dark:text-font-important-dark" style="margin:0; font-size:13px; font-weight:500;">{{ row.action }}</p>
+                            <p style="margin:1px 0 0; font-size:12px; color:rgb(var(--color-base-500));">{{ row.target_type }} {{ row.target_id }} · {{ row.created_at }}</p>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p style="margin:0; font-size:13px; color:rgb(var(--color-base-500));">{% trans "No recorded activity yet." %}</p>
+        {% endif %}
+    </div>
+
+    {# Curated quick-access sections — only the models a regular admin operates #}
+    <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin-top:8px;">
+        {% for section in nav_sections %}
+            <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; overflow:hidden;">
+                <p class="text-font-important-light dark:text-font-important-dark" style="margin:0; padding:12px 16px; font-size:13px; font-weight:500; background:rgb(var(--color-base-100)); border-bottom:1px solid rgb(var(--color-base-200));">{{ section.title }}</p>
+                {% for item in section.items %}
+                    <div style="display:flex; align-items:center; gap:8px; padding:10px 16px; {% if not forloop.last %}border-bottom:1px solid rgb(var(--color-base-200));{% endif %}">
+                        <a href="{{ item.url }}" style="flex:1; text-decoration:none; color:rgb(var(--color-base-700)); font-size:13px;">{{ item.label }}</a>
+                        {% if item.count is not None %}
+                            <span style="font-size:12px; font-weight:500; color:rgb(var(--color-primary-700)); background:rgb(var(--color-primary-100)); border-radius:10px; padding:1px 9px;">{{ item.count }}</span>
+                        {% endif %}
+                        {% if item.add_url %}
+                            <a href="{{ item.add_url }}" title="{% trans 'Add' %}" aria-label="{% trans 'Add' %}" style="color:rgb(var(--color-base-400)); text-decoration:none; display:flex;">
+                                <span class="material-symbols-outlined" style="font-size:18px;" aria-hidden="true">add</span>
+                            </a>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

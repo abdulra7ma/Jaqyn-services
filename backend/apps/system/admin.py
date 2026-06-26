@@ -1,10 +1,11 @@
 from django.contrib import admin
+from unfold.admin import ModelAdmin
 
 from apps.system.models import SystemConfiguration
 
 
 @admin.register(SystemConfiguration)
-class SystemConfigurationAdmin(admin.ModelAdmin):
+class SystemConfigurationAdmin(ModelAdmin):
     list_display = ("__str__", "max_active_groups_per_user", "updated_at")
     readonly_fields = ("updated_at",)
 
