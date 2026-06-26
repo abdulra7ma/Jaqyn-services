@@ -176,12 +176,15 @@ def test_unified_visit_endpoint_returns_shape():
         "customer",
         "loyalty",
         "loyalty_skipped",
-        "campaign",
-        "campaign_skipped",
+        "campaigns",
+        "skipped_campaigns",
     }
     assert set(data["customer"].keys()) == {"name", "phone"}
     assert data["loyalty"]["state"] == "awarded"
-    assert data["campaign"]["progress_count"] == 1
+    assert isinstance(data["campaigns"], list)
+    assert len(data["campaigns"]) == 1
+    assert data["campaigns"][0]["progress_count"] == 1
+    assert data["skipped_campaigns"] == []
 
 
 def test_unified_visit_endpoint_requires_auth():

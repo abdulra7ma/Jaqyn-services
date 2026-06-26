@@ -667,16 +667,18 @@ class UnifiedScanResultSerializer(serializers.Serializer):
 
     Emits exactly: ``customer`` (name + masked phone), the passthrough
     ``staff_collect`` ``loyalty`` dict (or ``null``) with its
-    ``loyalty_skipped`` reason code, and the campaign ``ProgressResult`` shape
-    (or ``null``) with its ``campaign_skipped`` reason code. The two legs are
-    independent — either may be present while the other is skipped.
+    ``loyalty_skipped`` reason code, the list of advanced campaign
+    ``ProgressResult`` shapes (``campaigns``), and the list of
+    ``skipped_campaigns`` (each ``campaign_id`` + ``name`` + ``reason_code``).
+    The legs are independent — the loyalty leg may be present while every
+    campaign is skipped, or vice versa.
     """
 
     customer = serializers.SerializerMethodField()
     loyalty = serializers.SerializerMethodField()
     loyalty_skipped = serializers.SerializerMethodField()
-    campaign = serializers.SerializerMethodField()
-    campaign_skipped = serializers.SerializerMethodField()
+    campaigns = serializers.SerializerMethodField()
+    skipped_campaigns = serializers.SerializerMethodField()
 
     def get_customer(self, obj) -> dict:
         return {
@@ -691,13 +693,43 @@ class UnifiedScanResultSerializer(serializers.Serializer):
     def get_loyalty_skipped(self, obj) -> str | None:
         return obj.loyalty_skipped_reason
 
-    def get_campaign(self, obj) -> ReturnDict | None:
-        if obj.campaign is None:
-            return None
-        return ProgressResultSerializer(obj.campaign, context=self.context).data
+    def get_campaigns(self, obj) -> list:
+        return ProgressResultSerializer(
+            obj.campaigns, many=True, context=self.context
+        ).data
 
-    def get_campaign_skipped(self, obj) -> str | None:
-        return obj.campaign_skipped_reason
+    def get_skipped_campaigns(self, obj) -> list:
+        return [
+            {"campaign_id": str(sc.campaign_id), "name": sc.name, "reason_code": sc.reason_code}
+            for sc in obj.skipped_campaigns
+        ]
+
+
+class ScanDispatchSerializer(serializers.Serializer):
+    """Shape of a :class:`StaffScannerService.ScanDispatch` (unified resolve).
+
+    Emits the routing ``kind`` plus exactly the payload for that kind: the
+    customer scan result for ``"customer"``, the voucher for ``"voucher"``, or a
+    ``reason`` code for ``"invalid"``. The other fields are ``null``.
+    """
+
+    kind = serializers.CharField()
+    customer = serializers.SerializerMethodField()
+    voucher = serializers.SerializerMethodField()
+    reason = serializers.SerializerMethodField()
+
+    def get_customer(self, obj) -> dict | None:
+        if obj.customer_result is None:
+            return None
+        return CustomerScanResultSerializer(obj.customer_result).data
+
+    def get_voucher(self, obj) -> dict | None:
+        if obj.voucher is None:
+            return None
+        return CampaignRewardVoucherSerializer(obj.voucher, context=self.context).data
+
+    def get_reason(self, obj) -> str | None:
+        return obj.reason_code
 
 
 class GroupConfirmResultSerializer(serializers.Serializer):
