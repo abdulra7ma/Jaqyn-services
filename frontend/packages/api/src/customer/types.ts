@@ -188,11 +188,11 @@ export type PublicGroupOffer = Pick<
   | "status"
 >;
 
-// ---- Campaigns (apps.campaigns — plan §2.1 / §3) -----------------------------
-// Temporary, dated challenges: complete a challenge → unlock a voucher → redeem.
-// Three types ship in MVP (plan D7): VISIT, TIME_WINDOW, GROUP. Mirrors only the
-// fields the campaign screens render; the API layer is the boundary, so raw
-// backend rows are coerced through ./adapters before reaching these types.
+// ---- Campaigns (apps.campaigns — campaigns-restructure design §3) -------------
+// Every offer is a Campaign of one type: Individual (with a visit/stamp/spend
+// mechanic), Group, or Social. Complete the challenge → unlock a voucher → redeem.
+// Mirrors only the fields the campaign screens render; the API layer is the
+// boundary, so raw backend rows are coerced through ./adapters before reaching here.
 
 // Campaign type discriminator (campaigns-restructure design §3). Replaces the
 // legacy VISIT/TIME_WINDOW/GROUP enum: an Individual campaign carries a mechanic
