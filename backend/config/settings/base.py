@@ -8,6 +8,18 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parents[3]
 load_dotenv(BASE_DIR.parent / ".env")
 
+
+# Truthy env values. Operators commonly write "on"/"1"/"yes" for booleans; a
+# strict `== "true"` check silently reads those as False — which is how a prod
+# EMAIL_USE_TLS="on" disabled STARTTLS and hung the SMTP connect. Accept the
+# common spellings instead. Mirrors django-environ's bool casting.
+_TRUTHY = {"true", "1", "yes", "on", "y", "t"}
+
+
+def _env_bool(name: str, default: str = "false") -> bool:
+    """Return the env var `name` parsed as a boolean against `_TRUTHY`."""
+    return os.getenv(name, default).strip().lower() in _TRUTHY
+
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-dev-secret")
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = [host.strip() for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host.strip()]
@@ -210,9 +222,15 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "1025"))
-EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "false").lower() == "true"
+EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS")
+EMAIL_USE_SSL = _env_bool("EMAIL_USE_SSL")
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+# Socket timeout (seconds) for the SMTP connection. Without it a slow/unreachable
+# mail host blocks the worker indefinitely — under CELERY_TASK_ALWAYS_EAGER the
+# send runs inside the request, so a hung connect triggers a gunicorn WORKER
+# TIMEOUT and kills the worker. A bounded timeout fails fast instead.
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "15"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Jaqyn <noreply@jaqyn.local>")
 
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
