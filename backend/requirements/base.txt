@@ -7,6 +7,10 @@ redis>=5.0,<5.1
 django-redis>=5.4,<5.5
 django-cors-headers>=4.4,<4.5
 django-filter>=24.3,<24.4
+# Modern Tailwind-based Django admin theme (dashboard widgets, sidebar nav,
+# warm-palette theming to match the Jaqyn frontend). Must load before
+# django.contrib.admin in INSTALLED_APPS.
+django-unfold>=0.49,<0.50
 pillow>=10.4,<10.5
 qrcode[pil]>=7.4,<7.5
 sentry-sdk>=2.13,<2.14

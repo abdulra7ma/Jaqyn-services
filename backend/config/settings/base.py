@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 
 import sentry_sdk
+from django.urls import reverse_lazy
+from django.utils.translation import gettext_lazy as _
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[3]
@@ -13,6 +15,11 @@ DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = [host.strip() for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host.strip()]
 
 INSTALLED_APPS = [
+    # Unfold and its contrib modules MUST precede django.contrib.admin so their
+    # template overrides and AdminSite theming win template resolution.
+    "unfold",
+    "unfold.contrib.filters",
+    "unfold.contrib.forms",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -35,6 +42,98 @@ INSTALLED_APPS = [
     "apps.system",
 ]
 
+# --- Django admin theming (django-unfold) ---
+# Warm terracotta palette mirrors the Jaqyn frontend design tokens (accent
+# #C25E3C). COLORS["primary"] is a 50→950 Tailwind scale; values are
+# space-separated RGB channels as unfold requires. Sidebar navigation groups the
+# models by operational workflow rather than the default flat per-app list.
+UNFOLD = {
+    "SITE_TITLE": "Jaqyn Admin",
+    "SITE_HEADER": "Jaqyn",
+    "SITE_SUBHEADER": "Loyalty & rewards control panel",
+    # Material Symbols glyph shown next to the site header.
+    "SITE_SYMBOL": "loyalty",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": False,
+    "DASHBOARD_CALLBACK": "apps.reporting.dashboard.dashboard_callback",
+    "COLORS": {
+        "primary": {
+            "50": "251 243 239",
+            "100": "246 229 220",
+            "200": "236 200 181",
+            "300": "224 165 137",
+            "400": "210 128 92",
+            "500": "194 94 60",  # base accent #C25E3C
+            "600": "168 75 47",
+            "700": "138 60 38",
+            "800": "110 49 32",
+            "900": "90 42 29",
+            "950": "49 20 16",
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        # False: show ONLY the curated navigation groups below, not every
+        # registered model. Internal models stay reachable by URL / FK drill-in.
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": _("Dashboard"),
+                "items": [
+                    {"title": _("Overview"), "icon": "dashboard", "link": reverse_lazy("admin:index")},
+                ],
+            },
+            {
+                "title": _("Onboarding & Businesses"),
+                "items": [
+                    {
+                        "title": _("Businesses"),
+                        "icon": "store",
+                        "link": reverse_lazy("admin:businesses_business_changelist"),
+                        # Live count of businesses awaiting review, surfaced on the nav item.
+                        "badge": "apps.reporting.dashboard.pending_businesses_badge",
+                    },
+                    {"title": _("Onboarding notes"), "icon": "forum", "link": reverse_lazy("admin:businesses_businessnote_changelist")},
+                    {"title": _("Business types"), "icon": "category", "link": reverse_lazy("admin:businesses_businesstype_changelist")},
+                    {"title": _("Owner invites"), "icon": "mail", "link": reverse_lazy("admin:businesses_businessownerinvite_changelist")},
+                    {"title": _("Staff invites"), "icon": "group_add", "link": reverse_lazy("admin:businesses_staffinvite_changelist")},
+                    {"title": _("Catalog items"), "icon": "list_alt", "link": reverse_lazy("admin:businesses_catalogitem_changelist")},
+                ],
+            },
+            {
+                "title": _("Customers & Staff"),
+                "items": [
+                    {"title": _("Users"), "icon": "person", "link": reverse_lazy("admin:accounts_user_changelist")},
+                    {"title": _("Customer profiles"), "icon": "badge", "link": reverse_lazy("admin:accounts_customerprofile_changelist")},
+                    {"title": _("Staff members"), "icon": "support_agent", "link": reverse_lazy("admin:staff_staffmember_changelist")},
+                ],
+            },
+            {
+                "title": _("Loyalty & Campaigns"),
+                "items": [
+                    {"title": _("Reward programs"), "icon": "redeem", "link": reverse_lazy("admin:loyalty_rewardprogram_changelist")},
+                    {"title": _("Reward progress"), "icon": "trending_up", "link": reverse_lazy("admin:loyalty_customerrewardprogress_changelist")},
+                    {"title": _("Redemptions"), "icon": "card_giftcard", "link": reverse_lazy("admin:loyalty_rewardredemption_changelist")},
+                    {"title": _("Campaigns"), "icon": "campaign", "link": reverse_lazy("admin:campaigns_campaign_changelist")},
+                    {"title": _("Campaign vouchers"), "icon": "confirmation_number", "link": reverse_lazy("admin:campaigns_campaignrewardvoucher_changelist")},
+                    {"title": _("Group offers"), "icon": "groups", "link": reverse_lazy("admin:groups_groupoffer_changelist")},
+                    {"title": _("Group deals"), "icon": "diversity_3", "link": reverse_lazy("admin:groups_groupdeal_changelist")},
+                ],
+            },
+            {
+                "title": _("QR, Notifications & Audit"),
+                "items": [
+                    {"title": _("QR tokens"), "icon": "qr_code_2", "link": reverse_lazy("admin:qr_qrcodetoken_changelist")},
+                    {"title": _("Scan log"), "icon": "barcode_scanner", "link": reverse_lazy("admin:qr_scanlog_changelist")},
+                    {"title": _("Notification log"), "icon": "notifications", "link": reverse_lazy("admin:notifications_notificationlog_changelist")},
+                    {"title": _("Admin audit log"), "icon": "history", "link": reverse_lazy("admin:reporting_adminauditlog_changelist")},
+                    {"title": _("System config"), "icon": "settings", "link": reverse_lazy("admin:system_systemconfiguration_changelist")},
+                ],
+            },
+        ],
+    },
+}
+
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -53,7 +152,9 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # Project-level templates win over app templates (incl. unfold), so our
+        # admin/index.html dashboard override is resolved ahead of unfold's.
+        "DIRS": [Path(__file__).resolve().parents[2] / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

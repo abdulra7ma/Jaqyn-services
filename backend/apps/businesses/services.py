@@ -6,7 +6,7 @@ from django.db import models, transaction
 from rest_framework import status
 
 from apps.accounts.models import User
-from apps.businesses.models import Business, BusinessImage, BusinessOwnerInvite, CatalogItem
+from apps.businesses.models import Business, BusinessImage, BusinessNote, BusinessOwnerInvite, CatalogItem
 from core.exceptions import JaqynAPIException
 from core.images import COVER_MAX_DIM, GALLERY_MAX_DIM, LOGO_MAX_DIM, PRODUCT_MAX_DIM, compress_image
 from core.logging import emit_event
@@ -96,17 +96,41 @@ def register_business_lead(data: BusinessLeadData) -> Business:
     return business
 
 
+def add_business_note(
+    business: Business,
+    *,
+    body: str,
+    kind: str = BusinessNote.Kind.INTERNAL,
+    author: Optional["User"] = None,
+) -> BusinessNote:
+    """Append one note to a business's onboarding/review thread.
+
+    Snapshots the business's current ``status`` into ``status_at_note`` so the
+    trail stays readable after later transitions. Returns the created note.
+    """
+    return BusinessNote.objects.create(
+        business=business,
+        author=author,
+        kind=kind,
+        body=body,
+        status_at_note=business.status,
+    )
+
+
 @transaction.atomic
 def approve_business(business: Business, admin_user: Optional["User"] = None) -> Business:
     """Approve a PENDING business and schedule the owner invite email if applicable.
 
-    Sets status to APPROVED, emits events, then calls
+    Sets status to APPROVED, records a STATUS_CHANGE note, emits events, then calls
     _send_owner_invite_if_needed to idempotently mint an owner invite and
     schedule the activation email via transaction.on_commit.
     Returns the updated Business.
     """
     business.status = Business.Status.APPROVED
     business.save(update_fields=["status", "updated_at"])
+    add_business_note(
+        business, body="Business approved", kind=BusinessNote.Kind.STATUS_CHANGE, author=admin_user
+    )
     emit_event("business_approved", business_id=str(business.id))
     if admin_user:
         emit_event("admin_approved_business", business_id=str(business.id), admin_id=str(admin_user.id))
@@ -142,18 +166,63 @@ def _send_owner_invite_if_needed(business: Business) -> None:
     )
 
 
-def reject_business(business, admin_user=None, reason=None):
+@transaction.atomic
+def reject_business(
+    business: Business, admin_user: Optional["User"] = None, reason: Optional[str] = None
+) -> Business:
+    """Reject a business and record the reason on the review thread.
+
+    Sets status to REJECTED and writes a STATUS_CHANGE note carrying the
+    reviewer's reason (falls back to a generic line). Returns the business.
+    """
     business.status = Business.Status.REJECTED
     business.save(update_fields=["status", "updated_at"])
+    add_business_note(
+        business,
+        body=f"Business rejected: {reason}" if reason else "Business rejected",
+        kind=BusinessNote.Kind.STATUS_CHANGE,
+        author=admin_user,
+    )
     emit_event("admin_rejected_business", business_id=str(business.id), admin_id=str(getattr(admin_user, "id", "")), reason=reason)
     return business
 
 
-def disable_business(business, admin_user=None):
+@transaction.atomic
+def disable_business(business: Business, admin_user: Optional["User"] = None) -> Business:
+    """Disable a business, deactivate its QR tokens, and log the transition.
+
+    Sets status to DISABLED, deactivates every active QR token, and writes a
+    STATUS_CHANGE note. Returns the business.
+    """
     business.status = Business.Status.DISABLED
     business.save(update_fields=["status", "updated_at"])
     business.qr_tokens.filter(is_active=True).update(is_active=False)
+    add_business_note(
+        business, body="Business disabled", kind=BusinessNote.Kind.STATUS_CHANGE, author=admin_user
+    )
     emit_event("admin_disabled_business", business_id=str(business.id), admin_id=str(getattr(admin_user, "id", "")))
+    return business
+
+
+@transaction.atomic
+def request_business_changes(
+    business: Business, admin_user: Optional["User"] = None, reason: str = ""
+) -> Business:
+    """Send an onboarding submission back to the owner for edits.
+
+    Sets ``onboarding_status`` to CHANGES_REQUESTED and writes a
+    CHANGES_REQUESTED note carrying the reviewer's feedback (the note kind owners
+    are allowed to see). Emits ``admin_requested_changes``. Returns the business.
+    """
+    business.onboarding_status = Business.OnboardingStatus.CHANGES_REQUESTED
+    business.save(update_fields=["onboarding_status", "updated_at"])
+    add_business_note(
+        business,
+        body=reason or "Changes requested",
+        kind=BusinessNote.Kind.CHANGES_REQUESTED,
+        author=admin_user,
+    )
+    emit_event("admin_requested_changes", business_id=str(business.id), admin_id=str(getattr(admin_user, "id", "")))
     return business
 
 

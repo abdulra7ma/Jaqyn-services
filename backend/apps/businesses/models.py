@@ -118,6 +118,11 @@ class Business(TimeStampedModel):
     verified_at = models.DateTimeField(blank=True, null=True)
     published_at = models.DateTimeField(blank=True, null=True)
 
+    class Meta:
+        # Default Django pluralisation gives "Businesss"; set it explicitly.
+        verbose_name = "Business"
+        verbose_name_plural = "Businesses"
+
     def __str__(self):
         return self.name
 
@@ -132,6 +137,45 @@ class Business(TimeStampedModel):
                 code = get_random_string(8).upper()
             self.business_code = code
         super().save(*args, **kwargs)
+
+
+class BusinessNote(TimeStampedModel):
+    """Append-only comment thread on a business's onboarding/review.
+
+    Replaces the single overwritable ``Business.change_note`` field with a
+    timeline so reviewers keep the full back-and-forth history. Three kinds:
+
+    - ``INTERNAL`` — staff-only note, never shown to the owner.
+    - ``CHANGES_REQUESTED`` — feedback intended for the owner when sending an
+      onboarding submission back for edits.
+    - ``STATUS_CHANGE`` — system-written audit line recorded by the service layer
+      whenever a status transition occurs (approve/reject/disable/request-changes).
+
+    Notes are ordered newest-first. ``author`` is nullable so a system-written
+    ``STATUS_CHANGE`` (no acting admin) and notes whose admin account was later
+    deleted both remain. ``status_at_note`` snapshots ``Business.status`` at write
+    time so the trail is readable even after later transitions.
+    """
+
+    class Kind(models.TextChoices):
+        INTERNAL = "internal", "Internal note"
+        CHANGES_REQUESTED = "changes_requested", "Changes requested"
+        STATUS_CHANGE = "status_change", "Status change"
+
+    business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name="notes")
+    author = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, related_name="business_notes", null=True, blank=True
+    )
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.INTERNAL)
+    body = models.TextField()
+    # Snapshot of Business.status when the note was written, for an auditable trail.
+    status_at_note = models.CharField(max_length=32, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()} on {self.business_id} ({self.created_at:%Y-%m-%d})"
 
 
 class CatalogItem(TimeStampedModel):
