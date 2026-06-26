@@ -385,6 +385,21 @@ class CampaignGroupService:
         )
 
     @staticmethod
+    def groups_for_campaign(campaign: Campaign):
+        """Return a GROUP campaign's groups newest-first for the detail tab (queryset).
+
+        Prefetches members so the serializer flattens them without an N+1. Backs
+        the business detail "Groups" tab (campaigns-restructure design §5), which
+        is ``Group WHERE campaign = ?``.
+        """
+        return (
+            Group.objects.filter(campaign=campaign)
+            .select_related("group_leader")
+            .prefetch_related("members")
+            .order_by("-created_at")
+        )
+
+    @staticmethod
     def expire_old_groups(now: datetime | None = None) -> int:
         """Expire FORMING/FULL groups whose check-in window has closed (plan §1.4).
 

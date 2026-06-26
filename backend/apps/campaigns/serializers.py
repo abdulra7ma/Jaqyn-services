@@ -135,6 +135,10 @@ class CampaignSerializer(serializers.ModelSerializer):
     completed = serializers.SerializerMethodField()
     redeemed = serializers.SerializerMethodField()
     ends_label = serializers.SerializerMethodField()
+    # The three type-specific headline stats for the business list card
+    # (campaigns-restructure design §5). Read from the business-list annotations;
+    # defaults to zeros on non-business paths.
+    type_stats = serializers.SerializerMethodField()
 
     class Meta:
         model = Campaign
@@ -169,10 +173,40 @@ class CampaignSerializer(serializers.ModelSerializer):
             "completed",
             "redeemed",
             "ends_label",
+            "type_stats",
             "created_at",
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_type_stats(self, obj: Campaign) -> dict:
+        """Return the three type-specific headline stats for the list card (§5).
+
+        Branches on ``campaign_type`` and reads the business-list annotations
+        (``_participants``/``_redeemed``/``_groups``/``_members``/``_reach``/
+        ``_close``); each defaults to 0 when the annotation is absent (non-business
+        paths). Each slot carries a label so the UI renders the triplet without
+        re-deriving the meaning.
+        """
+        redeemed = getattr(obj, "_redeemed", 0) or 0
+        participants = getattr(obj, "_participants", 0) or 0
+        if obj.campaign_type == Campaign.CampaignType.GROUP:
+            return {
+                "stat_a": {"label": "Groups created", "value": getattr(obj, "_groups", 0) or 0},
+                "stat_b": {"label": "Customers joined", "value": getattr(obj, "_members", 0) or 0},
+                "stat_c": {"label": "Redeemed", "value": redeemed},
+            }
+        if obj.campaign_type == Campaign.CampaignType.SOCIAL:
+            return {
+                "stat_a": {"label": "Joined", "value": participants},
+                "stat_b": {"label": "Redeemed", "value": redeemed},
+                "stat_c": {"label": "Reach", "value": getattr(obj, "_reach", 0) or 0},
+            }
+        return {
+            "stat_a": {"label": "Enrolled", "value": participants},
+            "stat_b": {"label": "Redeemed", "value": redeemed},
+            "stat_c": {"label": "Close to reward", "value": getattr(obj, "_close", 0) or 0},
+        }
 
     def get_business_logo_url(self, obj: Campaign) -> str | None:
         business = getattr(obj, "business", None)
@@ -366,6 +400,29 @@ class CampaignDiscoverQuerySerializer(serializers.Serializer):
     joined = serializers.BooleanField(required=False, default=False)
 
 
+class CampaignFeedQuerySerializer(serializers.Serializer):
+    """Query params for the customer campaigns feed (campaigns-restructure §6).
+
+    ``discover`` selects the discover-list filter
+    (``all``/``group``/``neighborhood``/``ended``); the service degrades an
+    unknown value to ``all``. Shape-only validation here.
+    """
+
+    discover = serializers.CharField(required=False, allow_blank=True, max_length=32)
+
+
+class CampaignListQuerySerializer(serializers.Serializer):
+    """Query params for the business campaign list (campaigns-restructure §5).
+
+    Validates only the *shape* of the optional filters; the service owns the rules
+    and ignores any value that is not a real type/status token so a bad param
+    degrades to "no filter" rather than 400-ing the list.
+    """
+
+    type = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    status = serializers.CharField(required=False, allow_blank=True, max_length=32)
+
+
 class CampaignParticipantSerializer(serializers.ModelSerializer):
     """A participant row for the business-side participants list (read-only).
 
@@ -515,6 +572,35 @@ class GroupSerializer(serializers.ModelSerializer):
         ]
 
 
+class CampaignTypeStatsSerializer(serializers.Serializer):
+    """Shape of the :class:`CampaignAnalyticsService.CampaignTypeStats` triplet."""
+
+    campaign_id = serializers.CharField()
+    campaign_type = serializers.CharField()
+    stat_a = serializers.IntegerField()
+    stat_b = serializers.IntegerField()
+    stat_c = serializers.IntegerField()
+    labels = serializers.DictField(child=serializers.CharField())
+
+
+class CampaignDetailTabsSerializer(serializers.Serializer):
+    """Tabbed business campaign-detail payload (campaigns-restructure design §5).
+
+    Pass-through of pre-serialized tab payloads assembled in the view:
+    ``overview`` + ``settings`` (the campaign), ``participants``,
+    ``reward_usage`` (vouchers), ``groups`` (GROUP only; empty otherwise), and
+    ``analytics`` (metrics + the per-type stat triplet). Listed explicitly so the
+    response is a documented contract, not an ad-hoc dict.
+    """
+
+    overview = serializers.DictField()
+    settings = serializers.DictField()
+    participants = serializers.ListField(child=serializers.DictField())
+    reward_usage = serializers.ListField(child=serializers.DictField())
+    groups = serializers.ListField(child=serializers.DictField())
+    analytics = serializers.DictField()
+
+
 class CampaignMetricsSerializer(serializers.Serializer):
     """Shape of the :class:`CampaignAnalyticsService.CampaignMetrics` dataclass."""
 
@@ -603,6 +689,17 @@ class ConfirmGroupSerializer(serializers.Serializer):
     """Staff confirm-group input — the group session to confirm (§11)."""
 
     group_session_id = serializers.UUIDField()
+
+
+class ConfirmSocialSerializer(serializers.Serializer):
+    """Staff confirm-social input — the customer QR token + target campaign (§5/§7).
+
+    The staff scans the customer's personal QR (``token``) and selects the SOCIAL
+    campaign (``campaign_id``) to verify the follow/tag proof against.
+    """
+
+    token = serializers.CharField(max_length=128)
+    campaign_id = serializers.UUIDField()
 
 
 # --- Read serializers for service dataclasses (staff scan results) -----------

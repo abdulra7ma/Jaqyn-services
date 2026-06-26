@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 from apps.campaigns.serializers import (
     CampaignDetailSerializer,
     CampaignDiscoverQuerySerializer,
+    CampaignFeedQuerySerializer,
     CampaignProgressSerializer,
     CampaignRewardVoucherSerializer,
     CampaignSerializer,
@@ -56,6 +57,39 @@ class CampaignDiscoverView(APIView):
             CampaignSerializer(
                 page, many=True, context={"progress_context": progress_context}
             ).data
+        )
+
+
+class CampaignFeedView(APIView):
+    """The customer campaigns feed: ``{followed, discover}`` (design §6).
+
+    ``followed`` is the customer's in-progress campaigns ("From places you go"
+    row); ``discover`` is the discoverable set, filterable via ``?discover=``
+    (``all``/``group``/``neighborhood``/``ended``). Both lists carry each row's
+    ``my_progress`` via a shared prefetched progress context so the whole response
+    is N+1-free. Not paginated — the feed is a small curated set surfaced together.
+    """
+
+    permission_classes = [IsCustomer]
+    serializer_class = CampaignSerializer
+
+    def get(self, request):
+        params = CampaignFeedQuerySerializer(data=request.query_params)
+        params.is_valid(raise_exception=True)
+        followed, discover = CampaignService.feed_for_customer(
+            request.user,
+            discover_filter=params.validated_data.get("discover", "all"),
+        )
+        # One progress context over both lists keeps my_progress off the N+1 path.
+        progress_context = CampaignService.progress_context_for(
+            request.user, followed + discover
+        )
+        ctx = {"progress_context": progress_context}
+        return success_response(
+            {
+                "followed": CampaignSerializer(followed, many=True, context=ctx).data,
+                "discover": CampaignSerializer(discover, many=True, context=ctx).data,
+            }
         )
 
 

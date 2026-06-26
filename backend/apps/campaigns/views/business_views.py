@@ -12,24 +12,29 @@ service, not in the view.
 
 from __future__ import annotations
 
-from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.db.models import Count, F, Q, Sum
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.campaigns.models import CampaignParticipant, CampaignRewardVoucher
 from apps.campaigns.serializers import (
+    CampaignDetailTabsSerializer,
     CampaignImageUploadSerializer,
+    CampaignListQuerySerializer,
     CampaignMetricsSerializer,
     CampaignParticipantSerializer,
     CampaignRewardVoucherSerializer,
     CampaignSerializer,
+    CampaignTypeStatsSerializer,
     CampaignWriteSerializer,
     CancelVoucherSerializer,
+    GroupSerializer,
     SocialPostSerializer,
 )
 from apps.campaigns.services import (
     CampaignAnalyticsService,
+    CampaignGroupService,
     CampaignRewardService,
     CampaignService,
     build_social_post,
@@ -44,12 +49,20 @@ from core.response import success_response
 def _annotate_list_queryset(qs):
     """Add per-row aggregate annotations to a campaign list queryset.
 
-    Attaches ``_participants`` (distinct participant count), ``_completed``
-    (participants in COMPLETED or REDEEMED status), and ``_redeemed`` (vouchers
-    in REDEEMED status) to every row using subquery-free conditional COUNT so
-    the full list serialises in a fixed number of queries regardless of page
-    size. Called only on the business list path so the annotations are absent
-    (and the serializer defaults to 0) on all other list paths.
+    Attaches the counts the business list table and the per-type stat triplet
+    read, all via subquery-free conditional COUNT/SUM so the full list serialises
+    in a fixed number of queries regardless of page size (the N+1 invariant):
+
+    * ``_participants`` — distinct participant count (Individual "enrolled" /
+      Social "joined").
+    * ``_completed`` — participants in COMPLETED/REDEEMED status.
+    * ``_redeemed`` — vouchers in REDEEMED status (every type's "redeemed").
+    * ``_groups`` — distinct group count (GROUP "groups created").
+    * ``_members`` — distinct group-member count (GROUP "customers joined").
+    * ``_reach`` — sum of participant ``follower_count`` (SOCIAL "reach").
+
+    Called only on the business list path so the annotations are absent (and the
+    serializer defaults to 0) on all other list paths.
     """
     completed_statuses = [CampaignParticipant.Status.COMPLETED, CampaignParticipant.Status.REDEEMED]
     return qs.annotate(
@@ -62,6 +75,24 @@ def _annotate_list_queryset(qs):
         _redeemed=Count(
             "vouchers",
             filter=Q(vouchers__status=CampaignRewardVoucher.Status.REDEEMED),
+            distinct=True,
+        ),
+        _groups=Count("groups", distinct=True),
+        _members=Count("groups__members", distinct=True),
+        _reach=Sum("participants__follower_count"),
+        # Individual "close to reward": active participants at ≥80% of the rule's
+        # required_count. F-expression compares the joined participant row to the
+        # 1:1 rule's required_count, all inside the same conditional COUNT so it
+        # stays on the no-N+1 list path.
+        _close=Count(
+            "participants",
+            filter=Q(
+                participants__status__in=[
+                    CampaignParticipant.Status.JOINED,
+                    CampaignParticipant.Status.IN_PROGRESS,
+                ],
+                participants__progress_count__gte=F("rule__required_count") * 0.8,
+            ),
             distinct=True,
         ),
     )
@@ -94,11 +125,20 @@ class CampaignListCreateView(_OwnerMixin, APIView):
 
     def get(self, request):
         business = self._business(request)
+        # Optional ?type= / ?status= filters (campaigns-restructure design §5).
+        # Shape-validated by the query serializer; the service owns the filtering
+        # rules and ignores unknown values gracefully.
+        params = CampaignListQuerySerializer(data=request.query_params)
+        params.is_valid(raise_exception=True)
         # Annotate with per-row aggregate counts for the business list table.
         # The summary KPIs are computed from the same annotated queryset so the
         # whole response is covered in a fixed number of queries (no N+1).
         campaigns = _annotate_list_queryset(
-            CampaignService.list_for_business(business)
+            CampaignService.list_for_business(
+                business,
+                campaign_type=params.validated_data.get("type"),
+                status_filter=params.validated_data.get("status"),
+            )
         )
         # Summary KPI block — field names match what adaptCampaignList (adapters.ts:
         # 103-108) reads from raw.summary. Computed with aggregate queries over
@@ -148,8 +188,34 @@ class CampaignDetailView(_OwnerMixin, APIView):
         return super().get_throttles()
 
     def get(self, request, campaign_id):
-        campaign = CampaignService.get_for_business(campaign_id, self._business(request))
-        return success_response(CampaignSerializer(campaign).data)
+        business = self._business(request)
+        campaign = CampaignService.get_for_business(campaign_id, business)
+        # Tabbed detail payload (campaigns-restructure design §5). The groups tab
+        # is only populated for GROUP campaigns. Each tab is shaped by its own
+        # serializer so the response is a stable, documented contract.
+        participants = CampaignService.participants_for(campaign)
+        vouchers = CampaignRewardService.vouchers_for_campaign(campaign)
+        metrics = CampaignAnalyticsService.campaign_metrics(campaign)
+        type_stats = CampaignAnalyticsService.type_stats(campaign)
+        groups = (
+            CampaignGroupService.groups_for_campaign(campaign)
+            if campaign.campaign_type == campaign.CampaignType.GROUP
+            else []
+        )
+        payload = {
+            "overview": CampaignSerializer(campaign).data,
+            "settings": CampaignSerializer(campaign).data,
+            "participants": CampaignParticipantSerializer(participants, many=True).data,
+            "reward_usage": CampaignRewardVoucherSerializer(
+                vouchers, many=True, context={"request": request}
+            ).data,
+            "groups": GroupSerializer(groups, many=True).data,
+            "analytics": {
+                **CampaignMetricsSerializer(metrics).data,
+                "type_stats": CampaignTypeStatsSerializer(type_stats).data,
+            },
+        }
+        return success_response(CampaignDetailTabsSerializer(payload).data)
 
     def put(self, request, campaign_id):
         business = self._business(request)

@@ -82,10 +82,9 @@ def test_campaign_list_happy_path_and_query_count(django_assert_num_queries):
         make_campaign(business)
     client = owner_client(business)
     # The count is fixed regardless of how many campaigns exist — the service
-    # select_related's rule/reward so the page does not grow a query per row
-    # (that is the N+1 gate). Auth (user), owned_business, count, the page
-    # query, and the single KPI-summary aggregate make up the constant total.
-    with django_assert_num_queries(8):
+    # select_related's rule/reward/business so the annotated page does not grow a
+    # query per row (that is the N+1 gate).
+    with django_assert_num_queries(5):
         response = client.get("/api/business/campaigns/")
     assert response.status_code == 200
     assert response.data["data"]["count"] == 3
@@ -134,7 +133,20 @@ def test_campaign_detail_and_edit():
 
     detail = client.get(f"/api/business/campaigns/{campaign.id}/")
     assert detail.status_code == 200
-    assert detail.data["data"]["id"] == str(campaign.id)
+    # Detail is now a tabbed payload (design §5).
+    data = detail.data["data"]
+    assert set(data.keys()) == {
+        "overview",
+        "settings",
+        "participants",
+        "reward_usage",
+        "groups",
+        "analytics",
+    }
+    assert data["overview"]["id"] == str(campaign.id)
+    # Non-group campaign → empty groups tab.
+    assert data["groups"] == []
+    assert "type_stats" in data["analytics"]
 
     edit = client.put(
         f"/api/business/campaigns/{campaign.id}/",

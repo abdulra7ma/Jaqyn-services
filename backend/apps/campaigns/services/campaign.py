@@ -355,14 +355,41 @@ class CampaignService:
             "campaign_cancelled",
         )
 
-    @staticmethod
-    def list_for_business(business: Business):
-        """Return all of a business's campaigns, newest first (queryset)."""
-        return (
+    # Maps the business-list ``?status=`` filter token to the underlying
+    # ``Campaign.Status`` set. "active" is the live ACTIVE status; "draft" covers
+    # the pre-publish DRAFT/SCHEDULED states; "completed" covers the terminal
+    # ENDED/CANCELLED states. Source: campaigns-restructure design §5.
+    _STATUS_FILTERS = {
+        "active": [Campaign.Status.ACTIVE],
+        "draft": [Campaign.Status.DRAFT, Campaign.Status.SCHEDULED],
+        "completed": [Campaign.Status.ENDED, Campaign.Status.CANCELLED],
+    }
+
+    @classmethod
+    def list_for_business(
+        cls,
+        business: Business,
+        campaign_type: str | None = None,
+        status_filter: str | None = None,
+    ):
+        """Return a business's campaigns, newest first, optionally filtered (§5).
+
+        ``campaign_type`` (``individual``/``group``/``social``) restricts to that
+        type; an unknown/absent value applies no type filter. ``status_filter``
+        (``active``/``draft``/``completed``) maps to the underlying status set via
+        :attr:`_STATUS_FILTERS`; an unknown/absent value applies no status filter.
+        Both degrade gracefully so a bad query param never 400s the list.
+        """
+        qs = (
             Campaign.objects.filter(business=business)
-            .select_related("rule", "reward")
+            .select_related("rule", "reward", "business")
             .order_by("-created_at")
         )
+        if campaign_type in Campaign.CampaignType.values:
+            qs = qs.filter(campaign_type=campaign_type)
+        if status_filter in cls._STATUS_FILTERS:
+            qs = qs.filter(status__in=cls._STATUS_FILTERS[status_filter])
+        return qs
 
     @staticmethod
     def get_for_business(campaign_id, business: Business) -> Campaign:
@@ -481,6 +508,55 @@ class CampaignService:
                 participants__status__in=cls._JOINED_FILTER_STATUSES,
             )
         return qs
+
+    # Discover-filter tokens for the customer feed (campaigns-restructure §6).
+    # "group" → GROUP campaigns; "neighborhood" → all (geo filtering is a later
+    # phase, so it currently behaves like "all"); "ended" → recently ENDED
+    # campaigns; "all"/unknown → the default active discover set.
+    @classmethod
+    def feed_for_customer(
+        cls,
+        customer,
+        discover_filter: str = "all",
+        now: datetime | None = None,
+    ) -> tuple[list[Campaign], list[Campaign]]:
+        """Return the ``(followed, discover)`` split for the customer feed (§6).
+
+        ``followed`` is the customer's in-progress campaigns (JOINED/IN_PROGRESS
+        participant) — the "From places you go" row. ``discover`` is the
+        discoverable set, filtered by ``discover_filter``:
+
+        * ``group`` — only GROUP campaigns from the active discover set.
+        * ``neighborhood`` — same as ``all`` for now (geo filtering is a later
+          phase); kept as a distinct token so the contract is stable.
+        * ``ended`` — recently ENDED campaigns (so the feed can show "missed it").
+        * ``all`` / unknown — the full active discover set.
+
+        ``discover`` excludes campaigns already in ``followed`` so a row never
+        appears twice. Both are materialised lists (the view paginates/serialises
+        them) with rule/reward/business selected to avoid N+1.
+        """
+        now = now or timezone.now()
+        followed = list(
+            cls.discover_for_customer(customer, now=now, joined_only=True)
+        )
+        followed_ids = {c.id for c in followed}
+
+        if discover_filter == "ended":
+            discover_qs = (
+                Campaign.objects.filter(status=Campaign.Status.ENDED)
+                .select_related("rule", "reward", "business")
+                .order_by("-updated_at")
+            )
+        else:
+            campaign_type = (
+                Campaign.CampaignType.GROUP if discover_filter == "group" else None
+            )
+            discover_qs = cls.discover_for_customer(
+                customer, now=now, campaign_type=campaign_type
+            )
+        discover = [c for c in discover_qs if c.id not in followed_ids]
+        return followed, discover
 
     @staticmethod
     def progress_context_for(customer, campaigns) -> CustomerProgressContext:

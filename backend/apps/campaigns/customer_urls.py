@@ -3,6 +3,7 @@ from django.urls import path
 from apps.campaigns.views.customer_views import (
     CampaignCustomerDetailView,
     CampaignDiscoverView,
+    CampaignFeedView,
     CampaignJoinView,
     CampaignVoucherDetailView,
     CampaignVoucherPresentView,
@@ -17,6 +18,7 @@ from apps.campaigns.views.customer_views import (
 # campaigns collection so a voucher id never collides with a campaign id.
 urlpatterns = [
     path("campaigns/", CampaignDiscoverView.as_view(), name="customer-campaigns"),
+    path("campaigns/feed/", CampaignFeedView.as_view(), name="customer-campaign-feed"),
     path("campaigns/<uuid:campaign_id>/", CampaignCustomerDetailView.as_view(), name="customer-campaign-detail"),
     path("campaigns/<uuid:campaign_id>/join/", CampaignJoinView.as_view(), name="customer-campaign-join"),
     path("campaigns/<uuid:campaign_id>/group/start/", GroupSessionStartView.as_view(), name="customer-campaign-group-start"),

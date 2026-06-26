@@ -469,6 +469,58 @@ class StaffScannerService:
         )
 
     @staticmethod
+    def confirm_social(
+        staff: StaffMember,
+        raw_token: str,
+        campaign_id: UUID,
+        request=None,
+        now: datetime | None = None,
+    ) -> ProgressResult:
+        """Confirm staff-verified social proof for a SOCIAL campaign (design §5/§7).
+
+        Resolves the customer's ``CUSTOMER_PROFILE`` token (``INVALID_QR_TOKEN`` for
+        a non-customer token), loads the campaign and asserts it belongs to the
+        staff member's business (``WRONG_BUSINESS``), then delegates to
+        ``CampaignProgressService.confirm_social_proof`` (which validates the
+        campaign is SOCIAL, completes the participant idempotently, and mints the
+        voucher). Logs the scan outcome to ``ScanLog`` either way.
+        """
+        now = now or timezone.now()
+        qr_token = resolve_qr_token(raw_token, request, action="campaign_confirm_social")
+        if (
+            qr_token.type != QRCodeToken.Type.CUSTOMER_PROFILE
+            or qr_token.customer is None
+        ):
+            raise JaqynAPIException(
+                "INVALID_QR_TOKEN", status_code=status.HTTP_400_BAD_REQUEST
+            )
+        customer = qr_token.customer
+        campaign = _load_campaign_for_staff(campaign_id, staff)
+        try:
+            result = CampaignProgressService.confirm_social_proof(
+                campaign, customer, staff=staff, now=now
+            )
+        except JaqynAPIException as exc:
+            log_scan(
+                staff=staff,
+                business=staff.business,
+                customer=customer,
+                action="campaign_confirm_social",
+                status=ScanLog.Status.BLOCKED,
+                failure_reason=exc.code,
+            )
+            raise
+        log_scan(
+            staff=staff,
+            business=staff.business,
+            customer=customer,
+            action="campaign_confirm_social",
+            status=ScanLog.Status.SUCCESS,
+            metadata={"campaign_id": str(campaign.id), "voucher_id": str(result.voucher.id)},
+        )
+        return result
+
+    @staticmethod
     def confirm_group_visit(
         staff: StaffMember, group_id, request=None, now: datetime | None = None
     ) -> GroupConfirmResult:
