@@ -1,0 +1,133 @@
+{% extends 'admin/base.html' %}
+
+{% load i18n %}
+
+{% block title %}{% trans "Analytics" %} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}{% include "unfold/helpers/site_branding.html" %}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<div style="display:flex; flex-direction:column; gap:16px;">
+
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px;">
+        <h1 class="text-font-important-light dark:text-font-important-dark" style="margin:0; font-size:20px; font-weight:600;">{% trans "Analytics" %}</h1>
+        <span style="font-size:12px; color:rgb(var(--color-base-500));">{% trans "as of" %} {{ generated_at }}</span>
+    </div>
+
+    {# Business map (Leaflet + OpenStreetMap, no API key) #}
+    <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
+        <p class="text-font-important-light dark:text-font-important-dark" style="margin:0 0 10px; font-size:14px; font-weight:500;">{% trans "Business map" %} <span style="font-weight:400; color:rgb(var(--color-base-500));">· {{ map_count }} {% trans "located" %}</span></p>
+        <div id="map" style="width:100%; height:360px; border-radius:8px; overflow:hidden; z-index:0;"></div>
+    </div>
+
+    {# Funnel + leaderboard #}
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
+            <p class="text-font-important-light dark:text-font-important-dark" style="margin:0 0 14px; font-size:14px; font-weight:500;">{% trans "Conversion funnel" %}</p>
+            {% for stage in funnel %}
+                <div style="margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+                        <span style="color:rgb(var(--color-base-600));">{{ stage.label }}</span>
+                        <span class="text-font-important-light dark:text-font-important-dark" style="font-weight:500;">{{ stage.value }} · {{ stage.pct }}%</span>
+                    </div>
+                    <div style="height:10px; background:rgb(var(--color-base-200)); border-radius:5px; overflow:hidden;">
+                        <div style="height:100%; width:{{ stage.pct }}%; background:linear-gradient(90deg,#D2805C,#C25E3C);"></div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
+            <p class="text-font-important-light dark:text-font-important-dark" style="margin:0 0 14px; font-size:14px; font-weight:500;">{% trans "Top businesses" %} <span style="font-weight:400; color:rgb(var(--color-base-500));">· {% trans "by scans" %}</span></p>
+            {% if leaderboard %}
+                <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                    <thead><tr style="text-align:left; color:rgb(var(--color-base-500));">
+                        <th style="padding:6px 4px; font-weight:400;">#</th>
+                        <th style="padding:6px 4px; font-weight:400;">{% trans "Business" %}</th>
+                        <th style="padding:6px 4px; font-weight:400; text-align:right;">{% trans "Scans" %}</th>
+                        <th style="padding:6px 4px; font-weight:400; text-align:right;">{% trans "Redemptions" %}</th>
+                    </tr></thead>
+                    <tbody>
+                        {% for row in leaderboard %}
+                            <tr style="border-top:1px solid rgb(var(--color-base-200));">
+                                <td style="padding:8px 4px; color:rgb(var(--color-base-500));">{{ forloop.counter }}</td>
+                                <td class="text-font-important-light dark:text-font-important-dark" style="padding:8px 4px; font-weight:500;">{{ row.name }}</td>
+                                <td style="padding:8px 4px; text-align:right;">{{ row.scans }}</td>
+                                <td style="padding:8px 4px; text-align:right; color:rgb(var(--color-base-600));">{{ row.redemptions }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p style="margin:0; font-size:13px; color:rgb(var(--color-base-500));">{% trans "No scan data yet." %}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Category bars + redemptions line #}
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
+            <p class="text-font-important-light dark:text-font-important-dark" style="margin:0 0 10px; font-size:14px; font-weight:500;">{% trans "Businesses by category" %}</p>
+            <div style="position:relative; width:100%; height:240px;">
+                <canvas class="chart" data-type="bar" data-value="{{ category_chart_data }}" data-options="{{ category_chart_options }}" role="img" aria-label="{% trans 'Businesses by category' %}"></canvas>
+            </div>
+        </div>
+        <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
+            <p class="text-font-important-light dark:text-font-important-dark" style="margin:0 0 10px; font-size:14px; font-weight:500;">{% trans "Redemptions over time" %}</p>
+            <div style="position:relative; width:100%; height:240px;">
+                <canvas class="chart" data-type="line" data-value="{{ redemptions_chart_data }}" data-options="{{ redemptions_chart_options }}" role="img" aria-label="{% trans 'Redemptions per month' %}"></canvas>
+            </div>
+        </div>
+    </div>
+
+    {# Scan heatmap: weekday × hour #}
+    <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
+        <p class="text-font-important-light dark:text-font-important-dark" style="margin:0 0 4px; font-size:14px; font-weight:500;">{% trans "Scan heatmap" %}</p>
+        <p style="margin:0 0 12px; font-size:12px; color:rgb(var(--color-base-500));">{% trans "Successful + failed scans by weekday and hour. Peak" %} = {{ heatmap.peak }}.</p>
+        <div style="overflow-x:auto;">
+            <table style="border-collapse:collapse; font-size:10px;">
+                <thead>
+                    <tr>
+                        <th></th>
+                        {% for h in heatmap.hours %}<th style="padding:0 1px; color:rgb(var(--color-base-400)); font-weight:400; text-align:center; min-width:14px;">{% if h|divisibleby:3 %}{{ h }}{% endif %}</th>{% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in heatmap.rows %}
+                        <tr>
+                            <td style="padding:0 6px 0 0; color:rgb(var(--color-base-500)); white-space:nowrap;">{{ row.label }}</td>
+                            {% for cell in row.cells %}
+                                <td title="{{ cell.count }}" style="width:14px; height:14px; border:1px solid rgb(var(--color-base-100)); background:rgba(194,94,60,{{ cell.intensity }});"></td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script type="application/json" id="map-points">{{ map_points_json|safe }}</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+(function () {
+    var el = document.getElementById("map");
+    if (!el || typeof L === "undefined") return;
+    var pts = JSON.parse(document.getElementById("map-points").textContent || "[]");
+    var map = L.map(el);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19, attribution: "&copy; OpenStreetMap"
+    }).addTo(map);
+    if (pts.length) {
+        var group = L.featureGroup(pts.map(function (p) {
+            return L.marker([p.lat, p.lng]).bindPopup(p.name + " — " + p.status);
+        }));
+        group.addTo(map);
+        map.fitBounds(group.getBounds().pad(0.2));
+    } else {
+        map.setView([42.8746, 74.5698], 12);  // Bishkek fallback when no coords
+    }
+})();
+</script>
+{% endblock %}

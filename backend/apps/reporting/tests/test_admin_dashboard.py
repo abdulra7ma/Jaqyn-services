@@ -122,6 +122,25 @@ class TestDashboardInlineActions:
         assert biz.status == Business.Status.PENDING
 
 
+def test_trials_expiring_widget_and_kpi(admin_client):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    Business.objects.create(name="Expiring Soon Cafe", trial_ends_at=timezone.now() + timedelta(days=3))
+    res = admin_client.get(reverse("admin:index"))
+    body = res.content.decode()
+    assert "Trials expiring" in body  # KPI tile
+    assert "Trials expiring soon" in body  # queue panel
+    assert "Expiring Soon Cafe" in body
+
+
+def test_create_demo_button_on_changelist(admin_client):
+    res = admin_client.get(reverse("admin:businesses_business_changelist"))
+    assert res.status_code == 200
+    assert "Create demo business" in res.content.decode()
+
+
 def test_dashboard_metrics_are_cached_between_loads():
     # First call computes + caches; second call must hit the cache and NOT recompute.
     spy = patch.object(

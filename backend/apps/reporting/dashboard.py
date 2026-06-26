@@ -36,6 +36,7 @@ from apps.businesses.models import (
     BusinessOwnerInvite,
     StaffInvite,
 )
+from apps.businesses.trial_services import expiring_trials, trial_status
 from apps.campaigns.models import Campaign, CampaignRewardVoucher
 from apps.groups.models import GroupOffer
 from apps.loyalty.models import RewardProgram, RewardRedemption
@@ -66,6 +67,7 @@ _GRAD_CLAY = "linear-gradient(135deg, #D2805C, #C25E3C)"
 _GRAD_AMBER = "linear-gradient(135deg, #E6B07E, #C9772F)"
 _GRAD_ROSE = "linear-gradient(135deg, #C9657A, #9E3D52)"
 _GRAD_ESPRESSO = "linear-gradient(135deg, #8A3C26, #5A2A1D)"
+_GRAD_GOLD = "linear-gradient(135deg, #D9A14E, #B5701F)"
 
 # Doughnut slice colours, ordered approved / pending / rejected / disabled.
 _STATUS_COLORS = {
@@ -181,6 +183,9 @@ def _compute_dashboard_metrics() -> dict[str, Any]:
         {"label": "QR scans", "value": scans, "sub": window,
          "icon": "qr_code_2", "gradient": _GRAD_ESPRESSO,
          "url": reverse("admin:qr_scanlog_changelist")},
+        {"label": "Trials expiring", "value": expiring_trials().count(), "sub": "next 7 days",
+         "icon": "schedule", "gradient": _GRAD_GOLD,
+         "url": f"{business_url}?is_paid__exact=0"},
     ]
 
     mini_stats = [
@@ -273,7 +278,7 @@ def dashboard_callback(request: Any, context: dict[str, Any]) -> dict[str, Any]:
     )
     # Businesses actively onboarding (post-approval profile completion). SUBMITTED
     # ones await verification; CHANGES_REQUESTED are back with the owner.
-    context["onboarding_queue"] = list(
+    onboarding_queue = list(
         Business.objects.filter(onboarding_status__in=[
             Business.OnboardingStatus.IN_PROGRESS,
             Business.OnboardingStatus.SUBMITTED,
@@ -282,6 +287,17 @@ def dashboard_callback(request: Any, context: dict[str, Any]) -> dict[str, Any]:
         .select_related("owner")
         .order_by("-updated_at")[:ONBOARDING_QUEUE_LIMIT]
     )
+    # Stamp a query-free trial badge onto each row for the template.
+    for biz in onboarding_queue:
+        biz.trial_badge_text = trial_status(biz).badge
+    context["onboarding_queue"] = onboarding_queue
+
+    # Trials ending within the week — their own actionable queue.
+    trials_expiring = list(expiring_trials()[:ONBOARDING_QUEUE_LIMIT])
+    for biz in trials_expiring:
+        biz.trial_badge_text = trial_status(biz).badge
+    context["trials_expiring_queue"] = trials_expiring
+
     context["dashboard_recent"] = list(
         AdminAuditLog.objects.select_related("admin").order_by("-created_at")[:RECENT_ACTIVITY_LIMIT]
     )

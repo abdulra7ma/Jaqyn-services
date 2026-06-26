@@ -3,8 +3,11 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import path
+from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
+from unfold.decorators import action
 
+from apps.businesses.demo_services import create_demo_business
 from apps.businesses.models import (
     Business,
     BusinessNote,
@@ -22,6 +25,14 @@ from apps.businesses.services import (
     reject_business,
     request_business_changes,
 )
+from apps.businesses.trial_services import trial_status
+from core.admin import image_thumb
+
+
+@admin.action(description="Mark selected as demo")
+def mark_as_demo(modeladmin, request, queryset):
+    updated = queryset.update(is_demo=True)
+    messages.success(request, f"Marked {updated} business(es) as demo.")
 
 
 @admin.action(description="Approve selected businesses")
@@ -67,15 +78,64 @@ class BusinessNoteInline(TabularInline):
 @admin.register(Business)
 class BusinessAdmin(ModelAdmin):
     list_display = (
-        "name", "owner", "pending_owner_name", "pending_owner_email",
+        "logo_thumb", "name", "owner", "trial_badge", "is_demo",
         "category", "area", "status", "onboarding_status", "verification_status", "created_at",
     )
-    list_filter = ("status", "onboarding_status", "verification_status", "category", "area")
+    list_filter = ("status", "onboarding_status", "verification_status", "is_demo", "is_paid", "category", "area")
     search_fields = ("name", "owner__phone", "phone", "address", "pending_owner_name", "pending_owner_email")
     # owner is rendered in list_display; join it to avoid a query per row.
     list_select_related = ("owner",)
-    actions = [approve_businesses, reject_businesses, disable_businesses, request_changes]
+    # Brand-asset previews on the detail page (read-only; uploads happen in-app).
+    readonly_fields = ("logo_preview", "cover_preview")
+    actions = [approve_businesses, reject_businesses, disable_businesses, request_changes, mark_as_demo]
+    # Changelist-level button (unfold renders it at the top of the list).
+    actions_list = ["create_demo_business_button"]
     inlines = [BusinessNoteInline]
+
+    @admin.display(description="")
+    def logo_thumb(self, obj: Business):
+        """Small lazy-loaded logo for the changelist (no query; logo is a field)."""
+        return image_thumb(obj.logo, size=32)
+
+    @admin.display(description="Logo")
+    def logo_preview(self, obj: Business):
+        return image_thumb(obj.logo, size=120, radius=10)
+
+    @admin.display(description="Cover")
+    def cover_preview(self, obj: Business):
+        return image_thumb(obj.cover_image, size=160, radius=10)
+
+    @admin.display(description="Trial")
+    def trial_badge(self, obj: Business) -> str:
+        """Coloured trial pill for the changelist (query-free via trial_status)."""
+        st = trial_status(obj)
+        if not st.badge:
+            return "—"
+        bg, fg = ("#FBEAF0", "#9E3D52") if st.expired else ("#F6E5DC", "#8A3C26")
+        return format_html(
+            '<span style="background:{};color:{};border-radius:10px;padding:1px 8px;font-size:12px;">{}</span>',
+            bg, fg, st.badge,
+        )
+
+    @action(description="Create demo business", icon="add_business")
+    def create_demo_business_button(self, request):
+        """Seed a demo business + owner login and report the credentials.
+
+        Triggered by the changelist button (a GET link — acceptable for this
+        admin-only, add-permission-gated convenience). Redirects back to the list.
+        """
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        result = create_demo_business()
+        messages.success(
+            request,
+            format_html(
+                "Demo business <strong>{}</strong> created. Owner login — "
+                "email <code>{}</code> · phone <code>{}</code> · password <code>{}</code>",
+                result.business.name, result.owner_email, result.owner_phone, result.password,
+            ),
+        )
+        return redirect("admin:businesses_business_changelist")
 
     def get_urls(self):
         # Inline action endpoint used by the dashboard review/onboarding queues.
@@ -167,10 +227,14 @@ class BusinessTypeAdmin(ModelAdmin):
 
 @admin.register(CatalogItem)
 class CatalogItemAdmin(ModelAdmin):
-    list_display = ("name", "business", "module", "category", "price", "is_active")
+    list_display = ("item_thumb", "name", "business", "module", "category", "price", "is_active")
     list_filter = ("module", "is_active")
     search_fields = ("name", "business__name")
     list_select_related = ("business",)
+
+    @admin.display(description="")
+    def item_thumb(self, obj: CatalogItem):
+        return image_thumb(obj.image, size=32)
 
 
 @admin.register(StaffInvite)

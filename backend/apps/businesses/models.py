@@ -118,6 +118,18 @@ class Business(TimeStampedModel):
     verified_at = models.DateTimeField(blank=True, null=True)
     published_at = models.DateTimeField(blank=True, null=True)
 
+    # Demo/sandbox business (seeded from the admin). Excluded from trial labelling
+    # and a candidate to filter out of real analytics.
+    is_demo = models.BooleanField(default=False)
+    # Trial lifecycle. trial_started_at is stamped once at approval;
+    # trial_ends_at is the effective end (computed from SystemConfiguration at
+    # approval, but admin-editable to override per business). is_paid marks a
+    # business as converted off-trial — no plans/billing model yet, so this is the
+    # single off-trial switch.
+    is_paid = models.BooleanField(default=False)
+    trial_started_at = models.DateTimeField(blank=True, null=True)
+    trial_ends_at = models.DateTimeField(blank=True, null=True)
+
     class Meta:
         # Default Django pluralisation gives "Businesss"; set it explicitly.
         verbose_name = "Business"

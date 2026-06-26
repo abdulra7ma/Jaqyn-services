@@ -93,6 +93,7 @@ UNFOLD = {
                 "title": _("Dashboard"),
                 "items": [
                     {"title": _("Overview"), "icon": "dashboard", "link": reverse_lazy("admin:index")},
+                    {"title": _("Analytics"), "icon": "insights", "link": reverse_lazy("admin_analytics")},
                 ],
             },
             {

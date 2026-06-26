@@ -5,10 +5,14 @@ from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.businesses.onboarding_views import BusinessTypeListView
+from apps.reporting.analytics import analytics_view
 
 from core.views import HealthView
 
 urlpatterns = [
+    # Custom admin analytics page — must precede admin.site.urls so it resolves
+    # first. admin_view gates it to logged-in staff and renders in the admin shell.
+    path("admin/analytics/", admin.site.admin_view(analytics_view), name="admin_analytics"),
     path("admin/", admin.site.urls),
     path("api/health/", HealthView.as_view(), name="health"),
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),

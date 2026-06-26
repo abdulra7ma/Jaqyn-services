@@ -14,6 +14,13 @@ class SystemConfiguration(models.Model):
         help_text="Maximum number of active group deals a customer can belong to at the same time.",
     )
 
+    # Default free-trial length applied when a business is approved. 30 days is the
+    # standard launch trial; admins can override per business via Business.trial_ends_at.
+    trial_period_days = models.PositiveSmallIntegerField(
+        default=30,
+        help_text="Length of the free trial (days) applied to a business when it is approved.",
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
