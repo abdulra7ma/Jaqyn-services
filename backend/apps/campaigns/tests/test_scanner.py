@@ -3,7 +3,7 @@
 import pytest
 
 from apps.campaigns.models import CampaignRewardVoucher
-from apps.campaigns.services import StaffScannerService
+from apps.campaigns.services import StaffScannerService, CampaignRewardService
 from apps.qr.models import QRCodeToken, ScanLog
 from apps.qr.services import get_or_create_customer_profile_token
 from apps.campaigns.tests.helpers import make_business, make_campaign, make_customer, make_staff
@@ -103,3 +103,49 @@ def test_confirm_group_visit_unknown_session_raises_not_found():
         )
 
     assert exc.value.code == "GROUP_SESSION_NOT_FOUND"
+
+
+def test_resolve_scan_customer_token_returns_customer_kind():
+    business = make_business()
+    customer = make_customer()
+    staff = make_staff(business)
+    make_campaign(business, required_count=3)
+    token = get_or_create_customer_profile_token(customer)
+
+    dispatch = StaffScannerService.resolve_scan(staff, token.token)
+
+    assert dispatch.kind == "customer"
+    assert dispatch.customer_result is not None
+    assert dispatch.customer_result.customer.id == customer.id
+    assert dispatch.voucher is None
+
+
+def test_resolve_scan_voucher_token_returns_voucher_kind():
+    business = make_business()
+    customer = make_customer()
+    staff = make_staff(business)
+    campaign = make_campaign(business, required_count=1)
+    # Complete the campaign to mint an ACTIVE voucher with a QR token.
+    result = StaffScannerService.confirm_visit(staff, campaign.id, customer)
+    voucher = result.voucher
+    assert voucher is not None and voucher.qr_token is not None
+
+    dispatch = StaffScannerService.resolve_scan(staff, voucher.qr_token.token)
+
+    assert dispatch.kind == "voucher"
+    assert dispatch.voucher is not None
+    assert dispatch.voucher.id == voucher.id
+
+
+def test_resolve_scan_redeemed_voucher_returns_invalid_kind():
+    business = make_business()
+    customer = make_customer()
+    staff = make_staff(business)
+    campaign = make_campaign(business, required_count=1)
+    voucher = StaffScannerService.confirm_visit(staff, campaign.id, customer).voucher
+    CampaignRewardService.redeem_reward_voucher(staff, token=voucher.qr_token.token)
+
+    dispatch = StaffScannerService.resolve_scan(staff, voucher.qr_token.token)
+
+    assert dispatch.kind == "invalid"
+    assert dispatch.reason_code == "VOUCHER_ALREADY_REDEEMED"

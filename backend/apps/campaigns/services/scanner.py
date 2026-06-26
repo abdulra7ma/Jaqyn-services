@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from uuid import UUID
 
 from django.utils import timezone
 from rest_framework import status
@@ -26,6 +27,7 @@ from apps.campaigns.models import (
 from apps.campaigns.services.eligibility import (
     CampaignEligibilityService,
     EligibilityResult,
+    IneligibilityReason,
 )
 from apps.campaigns.services.fraud import FraudService
 from apps.campaigns.services.group import CampaignGroupService, GroupConfirmResult
@@ -55,29 +57,46 @@ class EligibleCampaignView:
 
 
 @dataclass(frozen=True)
-class UnifiedScanResult:
-    """Result of a single staff scan that advances loyalty + one campaign (§14).
+class SkippedCampaign:
+    """A campaign that was a candidate this scan but did not advance (§14).
 
-    One staff action drives two independent legs:
+    ``campaign_id`` is the raw ``Campaign`` primary key (a ``UUID``) so callers
+    can match it against a campaign without coercion; the serializer renders it
+    as a string at the API boundary (Task 4). ``reason_code`` is the domain error
+    code from the eligibility/fraud gate (e.g. ``CAMPAIGN_MIN_GAP``) so the staff
+    UI and audit log can explain the gap.
+    """
+
+    campaign_id: UUID
+    name: str
+    reason_code: str
+
+
+@dataclass(frozen=True)
+class UnifiedScanResult:
+    """Result of a single staff scan that advances loyalty + campaigns (§14).
+
+    One staff action drives independent legs:
 
     * ``loyalty`` — the baseline leg, always attempted. Holds the
       ``staff_collect`` result dict on success, else ``None`` with
-      ``loyalty_skipped_reason`` carrying the domain error code (e.g. no active
-      program, scan interval, needs-amount for SPEND).
-    * ``campaign`` — the conditional leg. Holds the
-      :class:`~apps.campaigns.services.progress.ProgressResult` for the single
-      prioritized eligible campaign on success, else ``None`` with
-      ``campaign_skipped_reason``. ``None`` for both when no eligible campaign.
+      ``loyalty_skipped_reason`` carrying the domain error code.
+    * ``campaigns`` — every campaign that advanced this scan: all eligible
+      campaigns with ``allow_multiple_campaign_counting`` set, plus the single
+      prioritized eligible default campaign (one visit, one default stamp). Each
+      element is a :class:`~apps.campaigns.services.progress.ProgressResult`.
+    * ``skipped_campaigns`` — campaigns that were candidates but were blocked
+      (e.g. min-gap), each carrying its reason code.
 
-    The two legs are independent: neither failure aborts the other. Only an
-    invalid / non-CUSTOMER_PROFILE token hard-fails (raised before this is built).
+    The legs are independent: no leg's failure aborts another. Only an invalid /
+    non-CUSTOMER_PROFILE token hard-fails (raised before this is built).
     """
 
     customer: object
     loyalty: dict | None
     loyalty_skipped_reason: str | None
-    campaign: "ProgressResult | None"
-    campaign_skipped_reason: str | None
+    campaigns: list[ProgressResult]
+    skipped_campaigns: list[SkippedCampaign]
 
 
 @dataclass(frozen=True)
@@ -91,6 +110,23 @@ class CustomerScanResult:
     customer: object
     business: Business
     campaigns: list[EligibleCampaignView] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ScanDispatch:
+    """Read-only routing result for a single staff scan (unified scanner).
+
+    ``kind`` tags how the frontend should route the scan. Exactly one payload is
+    set per kind: ``customer_result`` for ``"customer"``, ``voucher`` for
+    ``"voucher"``, ``reason_code`` for ``"invalid"`` (the typed voucher error or
+    ``INVALID_QR_TOKEN``). No writes happen while resolving — the apply step is a
+    separate, explicit staff confirm.
+    """
+
+    kind: str  # "customer" | "voucher" | "invalid"
+    customer_result: CustomerScanResult | None = None
+    voucher: CampaignRewardVoucher | None = None
+    reason_code: str | None = None
 
 
 def ensure_business_active(business: Business) -> None:
@@ -158,9 +194,100 @@ class StaffScannerService:
         return CustomerScanResult(customer=customer, business=business, campaigns=views)
 
     @staticmethod
+    def resolve_scan(
+        staff: StaffMember, raw_token: str, request=None, now: datetime | None = None
+    ) -> ScanDispatch:
+        """Resolve a scanned token to a routing tag without writing (unified scan).
+
+        The unified scanner replaced the manual visit/redeem mode toggle: a token
+        is opaque to the client, so this read-only resolve tells the frontend
+        which preview to open. Resolves via ``resolve_qr_token`` (audit action
+        ``staff_scan_resolve``), guards the business is active, then dispatches:
+
+        * ``CUSTOMER_PROFILE`` → ``kind="customer"`` carrying the same
+          :class:`CustomerScanResult` (eligible-campaign rows) the collect
+          preview renders.
+        * ``CAMPAIGN_REWARD`` → validate the voucher; valid →
+          ``kind="voucher"``; a typed voucher error (already redeemed / expired /
+          wrong business / …) is **caught** and returned as ``kind="invalid"``
+          with its ``reason_code`` (an invalid voucher is a normal preview, not a
+          request failure).
+        * anything else → ``kind="invalid"`` with ``INVALID_QR_TOKEN``.
+
+        Redemption and cancellation deactivate the voucher's QR token
+        (``is_active=False``), so ``resolve_qr_token`` rejects it up front with
+        ``INVALID_QR_TOKEN`` — it never reaches the type switch. To still give the
+        staff a meaningful preview ("already redeemed"), that rejection is caught
+        and the raw token is matched directly against a campaign reward voucher
+        (FK lookup, tolerant of an inactive token). A match re-runs the read-only
+        voucher validation to surface the real reason (e.g.
+        ``VOUCHER_ALREADY_REDEEMED``); no match falls through to
+        ``INVALID_QR_TOKEN``.
+
+        Read-only: it neither awards a stamp nor redeems a voucher. The apply
+        step (``confirm_visit_unified`` / ``redeem_reward_voucher``) is a separate
+        staff confirm.
+        """
+        now = now or timezone.now()
+        ensure_business_active(staff.business)
+        try:
+            qr_token = resolve_qr_token(raw_token, request, action="staff_scan_resolve")
+        except JaqynAPIException:
+            # A redeemed/cancelled voucher has a deactivated QR token, which
+            # resolve_qr_token rejects as INVALID_QR_TOKEN. Fall back to a direct
+            # voucher lookup so the staff still sees a typed preview reason
+            # instead of a bare "invalid token". Anything that isn't a known
+            # voucher stays INVALID_QR_TOKEN.
+            return StaffScannerService._dispatch_inactive_voucher(staff, raw_token)
+
+        if qr_token.type == QRCodeToken.Type.CUSTOMER_PROFILE and qr_token.customer:
+            customer_result = StaffScannerService.scan_customer_qr(
+                staff, raw_token, request=request, now=now
+            )
+            return ScanDispatch(kind="customer", customer_result=customer_result)
+
+        if qr_token.type == QRCodeToken.Type.CAMPAIGN_REWARD:
+            try:
+                voucher = CampaignRewardService.validate_reward_voucher(
+                    staff, token=raw_token, request=request
+                )
+            except JaqynAPIException as exc:
+                return ScanDispatch(kind="invalid", reason_code=exc.code)
+            return ScanDispatch(kind="voucher", voucher=voucher)
+
+        return ScanDispatch(kind="invalid", reason_code="INVALID_QR_TOKEN")
+
+    @staticmethod
+    def _dispatch_inactive_voucher(staff: StaffMember, raw_token: str) -> ScanDispatch:
+        """Resolve a deactivated-token voucher to a typed invalid dispatch.
+
+        A redeemed or cancelled voucher's QR token is ``is_active=False``, so the
+        normal ``resolve_qr_token`` path rejects it before the type switch. This
+        matches the raw token directly against a ``CAMPAIGN_REWARD`` voucher (FK
+        lookup, which ignores ``is_active``); if found, it re-runs the read-only
+        voucher validation by voucher code to surface the real reason code (e.g.
+        ``VOUCHER_ALREADY_REDEEMED``). When the token belongs to no voucher it is
+        a genuine ``INVALID_QR_TOKEN``. Read-only — no writes.
+        """
+        voucher = (
+            CampaignRewardVoucher.objects.select_related("business")
+            .filter(qr_token__token=raw_token)
+            .first()
+        )
+        if voucher is None:
+            return ScanDispatch(kind="invalid", reason_code="INVALID_QR_TOKEN")
+        try:
+            valid = CampaignRewardService.validate_reward_voucher(
+                staff, code=voucher.voucher_code
+            )
+        except JaqynAPIException as exc:
+            return ScanDispatch(kind="invalid", reason_code=exc.code)
+        return ScanDispatch(kind="voucher", voucher=valid)
+
+    @staticmethod
     def confirm_visit(
         staff: StaffMember,
-        campaign_id,
+        campaign_id: UUID,
         customer,
         request=None,
         now: datetime | None = None,
@@ -228,7 +355,7 @@ class StaffScannerService:
     def confirm_visit_unified(
         staff: StaffMember,
         raw_token: str,
-        campaign_id=None,
+        campaign_id: UUID | None = None,
         request=None,
         now: datetime | None = None,
     ) -> "UnifiedScanResult":
@@ -244,14 +371,13 @@ class StaffScannerService:
         ``loyalty_skipped_reason`` and the scan continues — a loyalty failure
         never aborts the campaign leg.
 
-        CAMPAIGN leg (conditional): the target is the explicitly tapped
-        ``campaign_id`` when given, else the single prioritized *eligible*
-        campaign chosen by the §14 resolver over ``scan_customer_qr``'s
-        eligibility rows. If a target exists it is confirmed via
-        :meth:`confirm_visit`; on a ``JaqynAPIException`` the code is captured in
-        ``campaign_skipped_reason`` and the scan still returns. With no eligible
-        campaign both campaign fields are ``None``. A campaign failure never
-        aborts the loyalty award.
+        CAMPAIGN leg (conditional): advances every eligible campaign that opts
+        into ``allow_multiple_campaign_counting`` plus the single prioritized
+        eligible default campaign (§14). An explicit ``campaign_id`` overrides
+        this and targets only that campaign. Each advance runs its own
+        atomic/lock seam via :meth:`confirm_visit`; a campaign blocked by the
+        eligibility/fraud gate is recorded in ``skipped_campaigns`` and never
+        aborts the others or the loyalty award.
 
         The two legs are independent — each runs its own atomic/lock seam inside
         its own service. They are deliberately NOT wrapped in one outer
@@ -282,35 +408,74 @@ class StaffScannerService:
             loyalty_skipped_reason = exc.code
 
         # --- CAMPAIGN leg (conditional) -------------------------------------
-        campaign_result: ProgressResult | None = None
-        campaign_skipped_reason: str | None = None
-        target_id = campaign_id
-        if target_id is None:
-            # Resolve the single prioritized eligible campaign (§14). Reuses the
-            # eligibility pipeline directly so the resolver gets the real
-            # EligibilityResult rows (not the flattened scan views).
-            results = CampaignEligibilityService.eligible_campaigns_for_customer(
-                staff.business, customer.id, now
-            )
-            target = CampaignProgressService.resolve_priority_campaign(
-                results, now=now
-            )
-            target_id = target.id if target is not None else None
+        # One visit advances: every eligible campaign that opts into stacking
+        # (allow_multiple_campaign_counting), plus exactly one prioritized
+        # eligible *default* campaign (§14 — a visit counts toward one default
+        # campaign unless the business opted that campaign into stacking). A
+        # tapped campaign_id forces the single default slot.
+        campaigns: list[ProgressResult] = []
+        skipped: list[SkippedCampaign] = []
 
-        if target_id is not None:
+        results = CampaignEligibilityService.eligible_campaigns_for_customer(
+            staff.business, customer.id, now
+        )
+        eligible = [r for r in results if r.eligible]
+
+        target_ids: list[UUID]
+        if campaign_id is not None:
+            # Explicit single-target contract: advance only the tapped campaign.
+            target_ids = [campaign_id]
+        else:
+            # Stacking targets: every stacking campaign that is eligible, plus any
+            # stacking campaign blocked only by the min-gap fraud gate — those are
+            # genuine candidates this visit, so confirm_visit re-runs the gate and
+            # records them in skipped_campaigns rather than silently dropping them.
+            stacking_ids = [
+                r.campaign.id
+                for r in results
+                if r.campaign.allow_multiple_campaign_counting
+                and (
+                    r.eligible
+                    or r.reason_code == IneligibilityReason.MIN_GAP.value
+                )
+            ]
+            nonstacking_results = [
+                r for r in eligible if not r.campaign.allow_multiple_campaign_counting
+            ]
+            chosen_default = CampaignProgressService.resolve_priority_campaign(
+                nonstacking_results, now=now
+            )
+            target_ids = list(stacking_ids)
+            if chosen_default is not None:
+                target_ids.append(chosen_default.id)
+
+        # Map id → name for skipped reporting without a second query.
+        name_by_id = {r.campaign.id: r.campaign.name for r in results}
+        for target_id in target_ids:
             try:
-                campaign_result = StaffScannerService.confirm_visit(
-                    staff, target_id, customer, request=request, now=now
+                campaigns.append(
+                    StaffScannerService.confirm_visit(
+                        staff, target_id, customer, request=request, now=now
+                    )
                 )
             except JaqynAPIException as exc:
-                campaign_skipped_reason = exc.code
+                skipped.append(
+                    SkippedCampaign(
+                        # Raw campaign id (UUID); the serializer str-ifies at the
+                        # API boundary (Task 4). Kept raw here so callers can match
+                        # it against a ``Campaign.id`` without coercing.
+                        campaign_id=target_id,
+                        name=name_by_id.get(target_id, ""),
+                        reason_code=exc.code,
+                    )
+                )
 
         return UnifiedScanResult(
             customer=customer,
             loyalty=loyalty,
             loyalty_skipped_reason=loyalty_skipped_reason,
-            campaign=campaign_result,
-            campaign_skipped_reason=campaign_skipped_reason,
+            campaigns=campaigns,
+            skipped_campaigns=skipped,
         )
 
     @staticmethod

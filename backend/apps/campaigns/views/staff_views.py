@@ -17,8 +17,8 @@ from apps.campaigns.serializers import (
     ConfirmGroupSerializer,
     CustomerScanResultSerializer,
     GroupConfirmResultSerializer,
-    ProgressResultSerializer,
     ScanCustomerSerializer,
+    ScanDispatchSerializer,
     ScanVoucherSerializer,
     UnifiedConfirmVisitSerializer,
     UnifiedScanResultSerializer,
@@ -51,6 +51,28 @@ class ScanCustomerView(_StaffScanView):
         )
         return success_response(
             CustomerScanResultSerializer(result).data
+        )
+
+
+class ScanDispatchView(_StaffScanView):
+    """Resolve a scanned token to a routing tag without writing (unified scan).
+
+    Parses the token, calls ``StaffScannerService.resolve_scan``, and shapes the
+    tagged dispatch so the frontend opens the right preview (collect vs redeem vs
+    invalid). Read-only — the award/redeem step is a separate staff confirm.
+    """
+
+    serializer_class = ScanCustomerSerializer
+
+    def post(self, request):
+        serializer = ScanCustomerSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        staff = get_staff_for_user(request.user)
+        dispatch = StaffScannerService.resolve_scan(
+            staff, serializer.validated_data["token"], request=request
+        )
+        return success_response(
+            ScanDispatchSerializer(dispatch, context={"request": request}).data
         )
 
 

@@ -18,6 +18,7 @@ import type {
   ConfirmVisitResult,
   RedeemCampaignVoucherResult,
   ScanCustomerResult,
+  ScanDispatchResult,
   StaffCollectResult,
   UnifiedScanResult,
 } from "./types";
@@ -110,11 +111,11 @@ export function adaptVoucherScanResult(raw: Raw): CampaignVoucherScanResult {
 }
 
 // Unified visit endpoint → UnifiedScanResult. The loyalty leg is the staff
-// collect result verbatim (StaffCollectResult mirrors that serializer, so it
-// passes through unchanged); the campaign leg reuses adaptConfirmVisitResult.
-// Either leg may be null with a *_skipped reason — the backend returns 200 even
-// when only one (or neither) advanced.
+// collect result verbatim; each campaign leg reuses adaptConfirmVisitResult.
+// campaigns may be empty; skipped_campaigns carries blocked candidates.
 export function adaptUnifiedScan(raw: Raw): UnifiedScanResult {
+  const campaigns: Raw[] = Array.isArray(raw.campaigns) ? raw.campaigns : [];
+  const skipped: Raw[] = Array.isArray(raw.skipped_campaigns) ? raw.skipped_campaigns : [];
   return {
     customer: {
       name: raw.customer?.name ?? "",
@@ -122,8 +123,12 @@ export function adaptUnifiedScan(raw: Raw): UnifiedScanResult {
     },
     loyalty: raw.loyalty ? (raw.loyalty as StaffCollectResult) : null,
     loyalty_skipped: raw.loyalty_skipped ?? null,
-    campaign: raw.campaign ? adaptConfirmVisitResult(raw.campaign) : null,
-    campaign_skipped: raw.campaign_skipped ?? null,
+    campaigns: campaigns.map(adaptConfirmVisitResult),
+    skipped_campaigns: skipped.map((s) => ({
+      campaign_id: s.campaign_id ?? "",
+      name: s.name ?? "",
+      reason_code: s.reason_code ?? "",
+    })),
   };
 }
 
@@ -135,4 +140,26 @@ export function adaptRedeemResult(raw: Raw): RedeemCampaignVoucherResult {
     // The voucher serializer does not expose the owning customer.
     customer_name: "",
   };
+}
+
+// Scan dispatch endpoint → ScanDispatchResult. Reuses the customer-scan and
+// voucher-scan adapters per kind so the screen branches on a single tag.
+export function adaptScanDispatch(raw: Raw): ScanDispatchResult {
+  if (raw.kind === "customer") {
+    return {
+      kind: "customer",
+      customer: adaptScanCustomerResult(raw.customer ?? {}),
+      voucher: null,
+      reason: null,
+    };
+  }
+  if (raw.kind === "voucher") {
+    return {
+      kind: "voucher",
+      customer: null,
+      voucher: adaptVoucherScanResult(raw.voucher ?? {}),
+      reason: null,
+    };
+  }
+  return { kind: "invalid", customer: null, voucher: null, reason: raw.reason ?? null };
 }
