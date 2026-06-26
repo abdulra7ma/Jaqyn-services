@@ -9,6 +9,7 @@ import {
   adaptConfirmVisitResult,
   adaptRedeemResult,
   adaptScanCustomerResult,
+  adaptScanDispatch,
   adaptUnifiedScan,
   adaptVoucherScanResult,
 } from "./adapters";
@@ -19,6 +20,7 @@ import type {
   RecentActivity,
   RedeemCampaignVoucherResult,
   ScanCustomerResult,
+  ScanDispatchResult,
   ScanResult,
   StaffCollectResult,
   UnifiedScanResult,
@@ -67,6 +69,10 @@ export const staffApi = {
     api
       .post<any>("/api/staff/campaigns/scan-customer/", { token })
       .then(adaptScanCustomerResult),
+  // Read-only resolve of a scanned token → which preview to open. One round-trip
+  // replaces the old visit/redeem mode toggle; no writes happen here.
+  resolveScan: (token: string): Promise<ScanDispatchResult> =>
+    api.post<any>("/api/staff/campaigns/scan/", { token }).then(adaptScanDispatch),
   // One confirm advances BOTH the regular loyalty card and the prioritized
   // eligible campaign. Omit campaign_id to let the backend auto-pick. The backend
   // returns 200 even when one (or neither) leg advanced; only an invalid token

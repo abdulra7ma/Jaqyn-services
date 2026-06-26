@@ -68,6 +68,9 @@ export const useStaffCollect = () => {
 export const useScanCustomerForCampaigns = () =>
   useMutation({ mutationFn: (token: string) => staffApi.scanCustomerForCampaigns(token) });
 
+export const useResolveScan = () =>
+  useMutation({ mutationFn: (token: string) => staffApi.resolveScan(token) });
+
 // One confirm advances both the loyalty card and the prioritized campaign.
 export const useConfirmVisitUnified = () => {
   const qc = useQueryClient();
