@@ -23,6 +23,7 @@ import { QrScanner, parseScanned } from "../../_components/QrScanner";
 import { useErrMessage } from "../../_lib/useErrMessage";
 import { useStaffAuth } from "../_lib/staffAuth";
 import { StaffNav } from "../_components/StaffNav";
+import { SheetBackdrop, SHEET_STYLE } from "./_components/SheetBackdrop";
 
 // ─── overlay state ──────────────────────────────────────────────────────────────
 
@@ -39,27 +40,6 @@ type OverlayState =
 
 // ─── shared sheet primitives ────────────────────────────────────────────────────
 
-/** Full-screen dim + bottom sheet. Tapping the backdrop dismisses. */
-function SheetBackdrop({
-  dim = "rgba(8,6,3,.55)",
-  onDismiss,
-  children,
-}: {
-  dim?: string;
-  onDismiss: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className="absolute inset-0 z-[45] flex flex-col justify-end"
-      style={{ background: dim }}
-      onClick={onDismiss}
-    >
-      {children}
-    </div>
-  );
-}
-
 /** A one-shot color wash over the screen, used to punctuate a success result. */
 function Flash({ color }: { color: string }) {
   return (
@@ -69,13 +49,6 @@ function Flash({ color }: { color: string }) {
     />
   );
 }
-
-const SHEET_STYLE: React.CSSProperties = {
-  position: "relative",
-  background: "#fff",
-  borderRadius: "30px 30px 0 0",
-  animation: "jqRise .32s cubic-bezier(.22,1,.36,1)",
-};
 
 /** Thin bar pinned to the sheet's top edge that depletes over `duration`, then
  *  auto-dismisses. Mirrors the loyalty scanner's countdown affordance. */
@@ -121,7 +94,7 @@ function VisitEligibilitySheet({
 
   return (
     <SheetBackdrop onDismiss={onDismiss}>
-      <div style={{ ...SHEET_STYLE, padding: "24px 22px 26px" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...SHEET_STYLE, paddingTop: 24, paddingRight: 22, paddingLeft: 22, paddingBottom: "calc(26px + env(safe-area-inset-bottom, 0px))" }} onClick={(e) => e.stopPropagation()}>
         {/* Customer header */}
         <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
           <div style={{
@@ -232,7 +205,7 @@ function VisitUnifiedSheet({
   return (
     <SheetBackdrop dim="rgba(8,6,3,.5)" onDismiss={onDismiss}>
       <Flash color={flashColor} />
-      <div style={{ ...SHEET_STYLE, padding: "30px 26px 30px" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...SHEET_STYLE, paddingTop: 30, paddingRight: 26, paddingLeft: 26, paddingBottom: "calc(30px + env(safe-area-inset-bottom, 0px))" }} onClick={(e) => e.stopPropagation()}>
         {/* Only auto-dismiss when no reward action is pending */}
         {!rewardReady && <CountdownBar duration={duration} onDone={onDismiss} />}
 
@@ -390,7 +363,7 @@ function GroupEligibleSheet({
   const t = useT();
   return (
     <SheetBackdrop onDismiss={onDismiss}>
-      <div style={{ ...SHEET_STYLE, padding: "24px 22px 26px" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...SHEET_STYLE, paddingTop: 24, paddingRight: 22, paddingLeft: 22, paddingBottom: "calc(26px + env(safe-area-inset-bottom, 0px))" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
           <div>
             <div style={{ font: "700 17px 'Bricolage Grotesque',sans-serif", lineHeight: 1.2 }}>{group.campaign_name}</div>
@@ -450,7 +423,7 @@ function RewardValidSheet({
   ];
   return (
     <SheetBackdrop dim="rgba(8,6,3,.62)" onDismiss={onDismiss}>
-      <div style={{ ...SHEET_STYLE, padding: "26px 24px 26px" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...SHEET_STYLE, paddingTop: 26, paddingRight: 24, paddingLeft: 24, paddingBottom: "calc(26px + env(safe-area-inset-bottom, 0px))" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#E4F0E7", color: "#3F7355", fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 99 }}>
           ✓ {t("staff.campaign.rewardValid")}
         </div>
@@ -496,7 +469,7 @@ function RedeemedSheet({ title, subtitle, onDismiss }: { title: string; subtitle
   return (
     <SheetBackdrop dim="rgba(8,6,3,.5)" onDismiss={onDismiss}>
       <Flash color="var(--sage, #3F7355)" />
-      <div style={{ ...SHEET_STYLE, padding: "34px 26px 34px", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...SHEET_STYLE, paddingTop: 34, paddingRight: 26, paddingLeft: 26, paddingBottom: "calc(34px + env(safe-area-inset-bottom, 0px))", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
         <CountdownBar duration={2800} onDone={onDismiss} />
         <div style={{
           width: 78, height: 78, borderRadius: "50%", background: "var(--sage, #3F7355)",
@@ -517,7 +490,7 @@ function InvalidSheet({ title, reason, onDismiss }: { title: string; reason: str
   const t = useT();
   return (
     <SheetBackdrop dim="rgba(8,6,3,.5)" onDismiss={onDismiss}>
-      <div style={{ ...SHEET_STYLE, padding: "26px 26px 32px", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...SHEET_STYLE, paddingTop: 26, paddingRight: 26, paddingLeft: 26, paddingBottom: "calc(32px + env(safe-area-inset-bottom, 0px))", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
         <div style={{
           width: 66, height: 66, borderRadius: "50%", background: "#F7E4DF",
           display: "flex", alignItems: "center", justifyContent: "center",
