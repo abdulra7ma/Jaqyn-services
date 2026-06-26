@@ -5,8 +5,7 @@ campaign leg is conditional on an eligible joined campaign, and neither leg's
 failure aborts the other. Only an invalid token hard-fails.
 """
 
-from datetime import time, timedelta
-from decimal import Decimal
+from datetime import timedelta
 
 import pytest
 from django.utils import timezone
@@ -21,7 +20,7 @@ from apps.campaigns.tests.helpers import (
     make_customer,
     make_staff,
 )
-from apps.loyalty.models import CustomerRewardProgress, RewardProgram, RewardRedemption
+from apps.loyalty.models import RewardProgram
 from apps.qr.models import QRCodeToken
 from apps.qr.services import get_or_create_customer_profile_token
 from core.exceptions import JaqynAPIException
