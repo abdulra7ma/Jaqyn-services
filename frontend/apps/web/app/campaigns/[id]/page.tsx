@@ -92,12 +92,24 @@ export default function CampaignDetailPage() {
                 {/* gradient hero */}
                 <div className="relative overflow-hidden rounded-3xl bg-[linear-gradient(150deg,#3C2E22,#5A4330)] p-5 text-white">
                   <div className="flex items-center gap-3">
-                    <div
-                      className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-2xl backdrop-blur"
-                      aria-hidden
-                    >
-                      {c.glyph}
-                    </div>
+                    {c.business.logo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={c.business.logo_url}
+                        alt=""
+                        width={56}
+                        height={56}
+                        className="h-14 w-14 flex-none rounded-2xl object-cover"
+                        aria-hidden
+                      />
+                    ) : (
+                      <div
+                        className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 text-2xl backdrop-blur"
+                        aria-hidden
+                      >
+                        {c.glyph}
+                      </div>
+                    )}
                     <span className="rounded-pill bg-white/15 px-3 py-1 text-xs font-bold">
                       {t(`cmp.type.${c.campaign_type}`)}
                     </span>

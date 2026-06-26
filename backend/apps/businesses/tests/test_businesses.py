@@ -122,6 +122,43 @@ def test_public_nearby_filters_visibility_search_category_and_distance(api_clien
     assert results[0]["tags"] == ["Coffee"]
 
 
+def test_public_nearby_caches_db_work_and_busts_on_change(api_client, django_assert_num_queries):
+    """The discovery list serializes from the DB once per filter combo, then serves
+    from cache (zero queries) until a business change busts it."""
+    from django.core.cache import cache
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from apps.businesses.discovery import public_business_payload
+
+    cache.clear()
+    Business.objects.create(
+        **business_payload("Manas Coffee"),
+        status=Business.Status.APPROVED,
+        visibility_status=Business.VisibilityStatus.PUBLISHED,
+        latitude="42.874600",
+        longitude="74.569800",
+    )
+
+    # First call serializes from the DB; second is a pure cache hit (no queries).
+    first = public_business_payload(search="", category="", area="")
+    with django_assert_num_queries(0):
+        second = public_business_payload(search="", category="", area="")
+    assert [b["name"] for b in first] == [b["name"] for b in second] == ["Manas Coffee"]
+    # Cached rows are origin-independent: distance is injected per request, not here.
+    assert second[0]["distance_km"] is None
+    assert second[0]["latitude"] is not None
+
+    # Saving a business busts the cache, so the next call hits the DB again.
+    biz = Business.objects.get(name="Manas Coffee")
+    biz.name = "Manas Coffee Roastery"
+    biz.save()
+    with CaptureQueriesContext(connection) as ctx:
+        refreshed = public_business_payload(search="", category="", area="")
+    assert len(ctx) > 0  # cache was busted → it had to re-serialize from the DB
+    assert refreshed[0]["name"] == "Manas Coffee Roastery"
+
+
 def test_public_business_detail_includes_catalog_rewards_and_group_offers(api_client):
     business = Business.objects.create(
         **business_payload("Manas Coffee"),

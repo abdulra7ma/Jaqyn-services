@@ -38,7 +38,9 @@ def test_admin_index_renders_dashboard_widgets(admin_client):
     assert "Pending reviews" in body
     assert "New signups" in body
     assert 'data-type="line"' in body
-    assert 'data-type="doughnut"' in body
+    # Status donut is a dependency-free CSS conic-gradient (unfold's Chart.js
+    # bundle only registers line/bar controllers, so a doughnut chart won't draw).
+    assert "conic-gradient" in body
     assert "Businesses by status" in body
     assert "Pending review queue" in body
     # The pending business surfaces in the review queue.

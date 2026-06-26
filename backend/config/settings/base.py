@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import sentry_sdk
+from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 from dotenv import load_dotenv
@@ -65,6 +66,15 @@ UNFOLD = {
     "SITE_SUBHEADER": "Loyalty & rewards control panel",
     # Material Symbols glyph shown next to the site header.
     "SITE_SYMBOL": "loyalty",
+    # Browser-tab favicon: the Jaqyn "J" mark (href resolved lazily per request).
+    "SITE_FAVICONS": [
+        {
+            "rel": "icon",
+            "sizes": "32x32",
+            "type": "image/svg+xml",
+            "href": lambda request: static("jaqyn/favicon.svg"),
+        },
+    ],
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
     "DASHBOARD_CALLBACK": "apps.reporting.dashboard.dashboard_callback",
@@ -192,6 +202,24 @@ if os.getenv("DB_ENGINE") == "postgres":
             "PASSWORD": os.getenv("POSTGRES_PASSWORD", "jaqyn"),
             "HOST": os.getenv("POSTGRES_HOST", "db"),
             "PORT": os.getenv("POSTGRES_PORT", "5432"),
+            # Native psycopg3 connection pool: reuse a bounded set of Postgres
+            # connections across requests instead of opening one per request
+            # (cuts connect/TLS/auth overhead and caps total server connections,
+            # which matters behind a small managed Postgres). Sizes are env-driven
+            # so prod can tune to its connection budget. CONN_MAX_AGE must stay 0
+            # (Django's requirement when a pool is configured); the pool, not
+            # Django, owns connection lifetime.
+            "OPTIONS": {
+                "pool": {
+                    "min_size": int(os.getenv("POSTGRES_POOL_MIN", "1")),
+                    "max_size": int(os.getenv("POSTGRES_POOL_MAX", "10")),
+                    # Recycle idle connections so a server-side timeout never hands
+                    # back a dead one (seconds).
+                    "max_idle": int(os.getenv("POSTGRES_POOL_MAX_IDLE", "300")),
+                },
+            },
+            # Validate a pooled connection before use; drop and replace if broken.
+            "CONN_HEALTH_CHECKS": True,
         }
     }
 else:
@@ -266,6 +294,9 @@ PROJECT_DIR = Path(__file__).resolve().parents[2]
 
 STATIC_URL = "static/"
 STATIC_ROOT = PROJECT_DIR / "staticfiles"
+# Project-owned static assets (e.g. the admin favicon) live here, in addition to
+# each app's own static/ dir which APP_DIRS finders already pick up.
+STATICFILES_DIRS = [PROJECT_DIR / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = PROJECT_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

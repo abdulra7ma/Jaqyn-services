@@ -155,7 +155,7 @@ export type Redemption = {
 };
 
 export type WalletReward = {
-  business: { id: string; name: string };
+  business: { id: string; name: string; logo_url: string | null };
   reward: { id: string; title: string; description: string };
   count: number;
   soonest_expiry: string | null;
@@ -168,7 +168,7 @@ export type Wallet = {
 };
 
 export type BusinessRewardCard = {
-  business: { id: string; name: string; area: string };
+  business: { id: string; name: string; area: string; logo_url: string | null };
   programs: Array<{
     id: string;
     type: string;

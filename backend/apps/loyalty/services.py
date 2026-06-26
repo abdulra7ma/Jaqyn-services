@@ -480,7 +480,13 @@ def customer_wallet(customer):
         key = (r.business_id, r.reward_program_id)
         if key not in grouped:
             grouped[key] = {
-                "business": {"id": str(r.business_id), "name": r.business.name},
+                "business": {
+                    "id": str(r.business_id),
+                    "name": r.business.name,
+                    # Relative /media/... url (via MEDIA_URL) so it passes the
+                    # frontend proxy; None when no logo is set.
+                    "logo_url": r.business.logo.url if r.business.logo else None,
+                },
                 "reward": {
                     "id": str(r.reward_program_id),
                     "title": r.reward_program.title,
@@ -509,7 +515,13 @@ def customer_wallet(customer):
     for p in active_progress:
         in_progress.append({
             "id": str(p.id),
-            "business": {"id": str(p.business_id), "name": p.business.name},
+            "business": {
+                "id": str(p.business_id),
+                "name": p.business.name,
+                # Relative /media/... url (via MEDIA_URL) so it passes the
+                # frontend proxy; None when no logo is set.
+                "logo_url": p.business.logo.url if p.business.logo else None,
+            },
             "reward_program": {
                 "id": str(p.reward_program_id),
                 "type": p.reward_program.type,
@@ -627,6 +639,9 @@ def business_reward_card(customer, business_id):
             "id": str(business.id),
             "name": business.name,
             "area": business.area,
+            # Relative /media/... url (via MEDIA_URL) so it passes the frontend
+            # proxy; None when no logo is set.
+            "logo_url": business.logo.url if business.logo else None,
         },
         "programs": programs_data,
         "available": available,

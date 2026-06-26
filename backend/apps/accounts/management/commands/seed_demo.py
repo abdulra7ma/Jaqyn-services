@@ -14,8 +14,10 @@ from __future__ import annotations
 import secrets
 from datetime import time, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 from django.contrib.auth.hashers import make_password
+from django.core.files import File
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -42,6 +44,22 @@ STAFF_PIN = "1234"  # demo PIN stored hashed on the StaffMember
 
 _CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no ambiguous 0/O/1/I — matches voucher style
 
+# Bundled real storefront photos used so the demo map/profile show real imagery
+# instead of initials. Lives next to the businesses app; committed to the repo.
+# __file__ = apps/accounts/management/commands/seed_demo.py → parents[3] = apps/.
+SEED_ASSETS_DIR = Path(__file__).resolve().parents[3] / "businesses" / "seed_assets"
+# Maps a Business.Category value to one of the four bundled photo sets. Categories
+# without a dedicated set fall back to the cafe photos (the most generic storefront).
+CATEGORY_ASSET = {
+    "cafe": "cafe",
+    "bakery": "cafe",
+    "restaurant": "grill",
+    "barber": "barber",
+    "beauty": "salon",
+    "retail": "salon",
+    "other": "cafe",
+}
+
 
 def _code(n: int = 8) -> str:
     return "".join(secrets.choice(_CODE_ALPHABET) for _ in range(n))
@@ -60,6 +78,8 @@ class Command(BaseCommand):
             counts["loyalty"] = self._seed_loyalty(biz, customers)
             counts["campaigns"] = self._seed_campaigns(biz, owner, customers)
             counts["groups"] = self._seed_groups(biz, customers)
+            counts["storefronts"] = self._seed_extra_storefronts()
+            counts["images"] = self._seed_images()
 
         self._report(rows, counts)
 
@@ -230,7 +250,7 @@ class Command(BaseCommand):
 
     # ----- extra demo businesses (campaigns-redesign) ---------------------
     def _upsert_business(self, *, owner_phone, owner_name, name, glyph, area, description,
-                         latitude, longitude):
+                         latitude, longitude, category="cafe"):
         """Idempotently upsert an APPROVED+PUBLISHED business under its own owner.
 
         Backs the redesigned customer campaigns page, which needs campaigns spread
@@ -252,7 +272,7 @@ class Command(BaseCommand):
         if biz is None:
             biz = Business(owner=owner, name=name)
         biz.name = name
-        biz.category = "cafe"
+        biz.category = category
         biz.area = area
         biz.city = "Bishkek"
         # Real Bishkek coordinates so the nearby map plots each storefront.
@@ -269,6 +289,54 @@ class Command(BaseCommand):
                 setattr(biz, attr, getattr(enum, member))
         biz.save()
         return biz
+
+    # ----- extra storefronts + imagery ------------------------------------
+    def _seed_extra_storefronts(self) -> int:
+        """Three more real, varied storefronts (barber/beauty/restaurant) so the
+        nearby map and public profiles show category variety with real photos —
+        mirroring the four brands on the marketing landing. No campaigns attached;
+        they exist purely to populate discovery. Idempotent (matched by owner)."""
+        specs = [
+            dict(owner_phone="+996700112266", owner_name="Aibek T.", name="Aibek Barber",
+                 glyph="💈", area="Sovetskaya Street", category="barber",
+                 description="Classic cuts and hot-towel shaves on Sovetskaya, Bishkek.",
+                 latitude=Decimal("42.871500"), longitude=Decimal("74.598200")),
+            dict(owner_phone="+996700112277", owner_name="Aizada N.", name="Lush Salon",
+                 glyph="💅", area="Toktogul Street", category="beauty",
+                 description="Hair, nails and beauty treatments on Toktogul, Bishkek.",
+                 latitude=Decimal("42.879100"), longitude=Decimal("74.608700")),
+            dict(owner_phone="+996700112288", owner_name="Tanyrbek K.", name="Tanyr Grill",
+                 glyph="🍖", area="Jibek Jolu Avenue", category="restaurant",
+                 description="Charcoal-grilled kebabs and ribs on Jibek Jolu, Bishkek.",
+                 latitude=Decimal("42.883400"), longitude=Decimal("74.605900")),
+        ]
+        for spec in specs:
+            self._upsert_business(**spec)
+        return len(specs)
+
+    def _attach_images(self, biz) -> bool:
+        """Attach a bundled real logo + cover to a business that lacks them, chosen
+        by category. Returns True if anything was attached. Idempotent: skips a
+        field that is already set so re-runs don't churn storage."""
+        prefix = CATEGORY_ASSET.get(biz.category or "", "cafe")
+        changed = False
+        if not biz.logo:
+            with open(SEED_ASSETS_DIR / f"{prefix}_logo.jpg", "rb") as fh:
+                biz.logo.save(f"seed_{biz.id}_logo.jpg", File(fh), save=False)
+            biz.logo_set = True  # server-managed "has real logo" flag
+            changed = True
+        if not biz.cover_image:
+            with open(SEED_ASSETS_DIR / f"{prefix}_cover.jpg", "rb") as fh:
+                biz.cover_image.save(f"seed_{biz.id}_cover.jpg", File(fh), save=False)
+            biz.cover_set = True
+            changed = True
+        if changed:
+            biz.save()
+        return changed
+
+    def _seed_images(self) -> int:
+        """Give every seeded business real photos so discovery is never initials."""
+        return sum(int(self._attach_images(biz)) for biz in Business.objects.all())
 
     # ----- campaigns ------------------------------------------------------
     def _seed_campaigns(self, biz, owner, customers):

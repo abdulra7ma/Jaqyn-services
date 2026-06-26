@@ -31,7 +31,7 @@ function AvailableCard({ item }: { item: WalletReward }) {
   return (
     <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
       <div className="flex items-center gap-3">
-        <InitialTile name={item.business.name} size={44} />
+        <InitialTile name={item.business.name} size={44} image={item.business.logo_url} />
         <div className="min-w-0 flex-1">
           <Link
             href={`/rewards/business/${item.business.id}`}
@@ -88,7 +88,7 @@ function InProgressCard({ progress }: { progress: RewardProgress }) {
       className="block rounded-2xl border border-line bg-card p-4 shadow-card transition active:scale-[.99]"
     >
       <div className="flex items-center gap-3">
-        <InitialTile name={label} size={44} />
+        <InitialTile name={label} size={44} image={progress.business.logo_url} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-bold text-ink">{label}</p>
           <p className="truncate text-xs text-subtle">{prog.title}</p>

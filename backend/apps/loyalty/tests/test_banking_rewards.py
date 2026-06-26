@@ -410,6 +410,9 @@ def test_wallet_endpoint_groups_available_vouchers(api_client):
     group = wallet["available"][0]
     assert group["count"] == 2
     assert group["business"]["id"] == str(business.id)
+    # logo_url is exposed so the wallet card can render the real business logo;
+    # None here because the factory business has no uploaded logo.
+    assert group["business"]["logo_url"] is None
     assert group["reward"]["id"] == str(program.id)
     assert len(group["redemption_ids"]) == 2
 
@@ -459,6 +462,8 @@ def test_business_reward_card_returns_available_and_history(api_client, settings
 
     card = business_reward_card(customer, business.id)
     assert card["business"]["id"] == str(business.id)
+    # logo_url exposed for the reward-card header; None without an uploaded logo.
+    assert card["business"]["logo_url"] is None
     assert len(card["programs"]) == 1
     assert card["programs"][0]["available_count"] == 1
     assert len(card["available"]) == 1

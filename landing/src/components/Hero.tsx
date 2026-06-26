@@ -221,21 +221,13 @@ export default function Hero() {
                 </div>
                 <div style={{ flex: 1, overflow: 'hidden', padding: '6px 18px 18px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div
-                      style={{
-                        width: 42,
-                        height: 42,
-                        borderRadius: 13,
-                        background: 'linear-gradient(150deg,var(--accent),var(--accent-deep))',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#fff',
-                        font: "800 20px/1 'Bricolage Grotesque', sans-serif",
-                      }}
-                    >
-                      M
-                    </div>
+                    <img
+                      src="/businesses/manas-logo.jpg"
+                      alt="Manas Coffee"
+                      width={42}
+                      height={42}
+                      style={{ width: 42, height: 42, borderRadius: 13, objectFit: 'cover', flex: '0 0 auto' }}
+                    />
                     <div>
                       <div style={{ font: "700 15px 'Bricolage Grotesque', sans-serif" }}>Manas Coffee</div>
                       <div style={{ fontSize: 11.5, color: 'var(--soft)' }}>{h.phone.tag}</div>

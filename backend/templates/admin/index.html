@@ -38,8 +38,14 @@
 
         <div style="background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:8px; padding:20px;">
             <p style="margin:0 0 8px; font-size:13px; color:rgb(var(--color-base-500));">{% trans "Businesses by status" %}</p>
-            <div style="position:relative; width:100%; height:150px;">
-                <canvas class="chart" data-type="doughnut" data-value="{{ status_chart_data }}" data-options="{{ status_chart_options }}" role="img" aria-label="{% trans 'Businesses by status' %}"></canvas>
+            <div style="display:flex; justify-content:center; align-items:center; height:150px;" role="img" aria-label="{% trans 'Businesses by status' %}">
+                <div style="position:relative; width:140px; height:140px;">
+                    <div style="width:140px; height:140px; border-radius:50%; background:{{ status_donut_gradient }};"></div>
+                    <div style="position:absolute; inset:0; margin:auto; width:84px; height:84px; border-radius:50%; background:rgb(var(--color-base-50)); display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                        <span class="text-font-important-light dark:text-font-important-dark" style="font-size:20px; font-weight:600; line-height:1;">{{ status_total }}</span>
+                        <span style="font-size:10px; color:rgb(var(--color-base-500));">{% trans "total" %}</span>
+                    </div>
+                </div>
             </div>
             <div style="display:flex; flex-direction:column; gap:6px; margin-top:12px; font-size:12px;">
                 {% for item in status_legend %}

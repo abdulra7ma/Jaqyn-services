@@ -101,6 +101,7 @@ export default function NearbyPage() {
                   lat: toNum(b.latitude),
                   lng: toNum(b.longitude),
                   accent: b.accent_color,
+                  logoUrl: b.logo_url,
                   category: b.category,
                   reward: b.reward ?? undefined,
                 }))}

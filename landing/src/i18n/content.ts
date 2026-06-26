@@ -8,8 +8,8 @@ export interface NavLink { label: string; href: string; }
 export interface Avatar { ch: string; style: CSSProperties; }
 export interface HowStep { n: string; title: string; text: string; delay: number; }
 export interface Benefit { title: string; text: string; glyph: string; icon: CSSProperties; delay: number; }
-export interface MiniDeal { ch: string; name: string; deal: string; tag: string; bg: string; }
-export interface DealOffer { ch: string; name: string; cat: string; bg: string; badge: string; offer: string; window: string; avatars: Avatar[]; }
+export interface MiniDeal { ch: string; name: string; deal: string; tag: string; bg: string; img: string; cover: string; }
+export interface DealOffer { ch: string; name: string; cat: string; bg: string; badge: string; offer: string; window: string; avatars: Avatar[]; img: string; cover: string; }
 export interface QrStep { label: string; glyph: string; box: CSSProperties; arrow: boolean; }
 export interface DashWidget { label: string; value: number; display: string; prefix: string; suffix: string; delta: string; }
 export interface ChartBar { day: string; h: string; fill: string; }
@@ -56,20 +56,30 @@ const CUST_ICONS = [
 ];
 const CUST_GLYPHS = ['◎', '◇', '▦', '◐'];
 
+// Real storefront photos served from landing/public/businesses. The same four
+// demo brands appear in the live app's seeded data, so landing ↔ app stay visually
+// consistent. logo = square avatar, cover = wide background.
+const BIZ_IMG: Record<string, { img: string; cover: string }> = {
+  'Manas Coffee': { img: '/businesses/manas-logo.jpg', cover: '/businesses/manas-cover.jpg' },
+  'Aibek Barber': { img: '/businesses/aibek-logo.jpg', cover: '/businesses/aibek-cover.jpg' },
+  'Lush Salon': { img: '/businesses/lush-logo.jpg', cover: '/businesses/lush-cover.jpg' },
+  'Tanyr Grill': { img: '/businesses/tanyr-logo.jpg', cover: '/businesses/tanyr-cover.jpg' },
+};
+
 const MINI_DEAL_META = [
-  { ch: 'M', name: 'Manas Coffee', bg: `linear-gradient(150deg,${ACCENT},${ACCENT_DEEP})` },
-  { ch: 'L', name: 'Lush Salon', bg: '#5E8B6A' },
-  { ch: 'T', name: 'Tanyr Grill', bg: '#E7A23E' },
+  { ch: 'M', name: 'Manas Coffee', bg: `linear-gradient(150deg,${ACCENT},${ACCENT_DEEP})`, ...BIZ_IMG['Manas Coffee'] },
+  { ch: 'L', name: 'Lush Salon', bg: '#5E8B6A', ...BIZ_IMG['Lush Salon'] },
+  { ch: 'T', name: 'Tanyr Grill', bg: '#E7A23E', ...BIZ_IMG['Tanyr Grill'] },
 ];
 
 const BIZ_ICON = iconTile('rgba(231,162,62,.2)', '#E7A23E');
 const BIZ_GLYPHS = ['◷', '◎', '▦', '▤'];
 
 const DEAL_META = [
-  { ch: 'M', name: 'Manas Coffee', bg: `linear-gradient(150deg,${ACCENT},${ACCENT_DEEP})`, avatars: [{ ch: 'A', style: smallAvatar('#D9B98F', '#5a4326') }, { ch: 'B', style: smallAvatar('#A9C0A0', '#3a4d33') }, { ch: '+3', style: smallAvatar('#E7A23E', '#fff') }] },
-  { ch: 'A', name: 'Aibek Barber', bg: '#2E241D', avatars: [{ ch: 'K', style: smallAvatar('#B8A9D8', '#3f3360') }, { ch: '+2', style: smallAvatar(ACCENT, '#fff') }] },
-  { ch: 'L', name: 'Lush Salon', bg: '#5E8B6A', avatars: [{ ch: 'N', style: smallAvatar('#E0A9A0', '#6b3b33') }, { ch: '+1', style: smallAvatar(ACCENT, '#fff') }] },
-  { ch: 'T', name: 'Tanyr Grill', bg: '#E7A23E', avatars: [{ ch: 'D', style: smallAvatar('#D9B98F', '#5a4326') }, { ch: '+3', style: smallAvatar(ACCENT, '#fff') }] },
+  { ch: 'M', name: 'Manas Coffee', bg: `linear-gradient(150deg,${ACCENT},${ACCENT_DEEP})`, ...BIZ_IMG['Manas Coffee'], avatars: [{ ch: 'A', style: smallAvatar('#D9B98F', '#5a4326') }, { ch: 'B', style: smallAvatar('#A9C0A0', '#3a4d33') }, { ch: '+3', style: smallAvatar('#E7A23E', '#fff') }] },
+  { ch: 'A', name: 'Aibek Barber', bg: '#2E241D', ...BIZ_IMG['Aibek Barber'], avatars: [{ ch: 'K', style: smallAvatar('#B8A9D8', '#3f3360') }, { ch: '+2', style: smallAvatar(ACCENT, '#fff') }] },
+  { ch: 'L', name: 'Lush Salon', bg: '#5E8B6A', ...BIZ_IMG['Lush Salon'], avatars: [{ ch: 'N', style: smallAvatar('#E0A9A0', '#6b3b33') }, { ch: '+1', style: smallAvatar(ACCENT, '#fff') }] },
+  { ch: 'T', name: 'Tanyr Grill', bg: '#E7A23E', ...BIZ_IMG['Tanyr Grill'], avatars: [{ ch: 'D', style: smallAvatar('#D9B98F', '#5a4326') }, { ch: '+3', style: smallAvatar(ACCENT, '#fff') }] },
 ];
 
 const QR_STEP_META = [

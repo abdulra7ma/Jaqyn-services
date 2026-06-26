@@ -85,23 +85,30 @@ export default function DealsCarousel() {
               boxShadow: '0 10px 30px -18px rgba(46,36,29,.35)',
             }}
           >
+            <img
+              src={d.cover}
+              alt=""
+              aria-hidden
+              loading="lazy"
+              style={{
+                display: 'block',
+                width: 'calc(100% + 48px)',
+                height: 116,
+                objectFit: 'cover',
+                margin: '-24px -24px 16px',
+                borderRadius: '24px 24px 0 0',
+              }}
+            />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                <div
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 13,
-                    background: d.bg,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#fff',
-                    font: "800 19px 'Bricolage Grotesque', sans-serif",
-                  }}
-                >
-                  {d.ch}
-                </div>
+                <img
+                  src={d.img}
+                  alt={d.name}
+                  width={44}
+                  height={44}
+                  loading="lazy"
+                  style={{ width: 44, height: 44, borderRadius: 13, objectFit: 'cover', flex: '0 0 auto' }}
+                />
                 <div>
                   <div style={{ font: "700 15.5px 'Bricolage Grotesque', sans-serif" }}>{d.name}</div>
                   <div style={{ fontSize: 12, color: 'var(--soft)' }}>{d.cat}</div>

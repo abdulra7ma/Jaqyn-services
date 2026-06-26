@@ -54,21 +54,13 @@ export default function DashboardPreview() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 11,
-                background: 'linear-gradient(150deg,var(--accent),var(--accent-deep))',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fff',
-                font: "800 18px 'Bricolage Grotesque', sans-serif",
-              }}
-            >
-              M
-            </div>
+            <img
+              src="/businesses/manas-logo.jpg"
+              alt="Manas Coffee"
+              width={36}
+              height={36}
+              style={{ width: 36, height: 36, borderRadius: 11, objectFit: 'cover', flex: '0 0 auto' }}
+            />
             <div>
               <div style={{ font: "700 16px 'Bricolage Grotesque', sans-serif" }}>Manas Coffee</div>
               <div style={{ fontSize: 12, color: 'var(--soft)' }}>{d.ownerSub}</div>

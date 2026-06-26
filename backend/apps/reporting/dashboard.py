@@ -221,19 +221,24 @@ def _compute_dashboard_metrics() -> dict[str, Any]:
         "scales": {"x": {"grid": {"display": False}}, "y": {"display": False, "beginAtZero": True}},
     })
 
-    # --- businesses-by-status doughnut ---
+    # --- businesses-by-status donut ---
+    # Rendered as a CSS conic-gradient ring (not Chart.js): unfold's bundled
+    # Chart.js registers only the line + bar controllers, so a doughnut chart
+    # silently fails to draw. A conic-gradient needs no library and can't break.
     status_map = {r["status"]: r["c"] for r in Business.objects.values("status").annotate(c=Count("id"))}
     status_labels = [Business.Status(s).label for s in _STATUS_COLORS]
     status_values = [status_map.get(s, 0) for s in _STATUS_COLORS]
     status_colors = list(_STATUS_COLORS.values())
-    status_chart_data = json.dumps({
-        "labels": status_labels,
-        "datasets": [{"data": status_values, "backgroundColor": status_colors, "borderWidth": 0}],
-    })
-    status_chart_options = json.dumps({
-        "responsive": True, "maintainAspectRatio": False, "cutout": "70%",
-        "plugins": {"legend": {"display": False}},
-    })
+    status_total = sum(status_values)
+    if status_total:
+        stops, cursor = [], 0.0
+        for value, color in zip(status_values, status_colors):
+            pct = value / status_total * 100
+            stops.append(f"{color} {cursor:.2f}% {cursor + pct:.2f}%")
+            cursor += pct
+        status_donut_gradient = f"conic-gradient({', '.join(stops)})"
+    else:
+        status_donut_gradient = "conic-gradient(#E0DCD5 0% 100%)"  # empty ring
     status_legend = [
         {"label": label, "value": value, "color": color}
         for label, value, color in zip(status_labels, status_values, status_colors)
@@ -247,8 +252,8 @@ def _compute_dashboard_metrics() -> dict[str, Any]:
         "signup_headline_label": f"New signups — last {SIGNUP_CHART_MONTHS} months",
         "signup_chart_data": signup_chart_data,
         "signup_chart_options": signup_chart_options,
-        "status_chart_data": status_chart_data,
-        "status_chart_options": status_chart_options,
+        "status_donut_gradient": status_donut_gradient,
+        "status_total": status_total,
         "status_legend": status_legend,
         "nav_sections": _build_nav_sections(),
     }

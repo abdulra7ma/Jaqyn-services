@@ -25,6 +25,8 @@ export const metadata: Metadata = {
   title: "Jaqyn — Customer",
   description: "Local group rewards & loyalty",
   manifest: "/manifest.json",
+  // Brand "J" favicon (public/icon.svg) on every page's browser tab.
+  icons: { icon: "/icon.svg" },
 };
 
 export const viewport: Viewport = {

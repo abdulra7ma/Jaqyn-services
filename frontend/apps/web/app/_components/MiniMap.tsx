@@ -1,5 +1,6 @@
 "use client";
 
+import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { useT } from "@jaqyn/i18n";
 import { cn } from "@jaqyn/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -13,6 +14,9 @@ export type MapPin = {
   lat?: number | null;
   lng?: number | null;
   accent?: string;
+  // Business logo (relative /media/... url) rendered inside the pin and cards when
+  // present; falls back to the initial when null or the image fails to load.
+  logoUrl?: string | null;
   // Optional details surfaced in the hover tooltip.
   category?: string;
   reward?: string;
@@ -20,6 +24,53 @@ export type MapPin = {
 
 // Brand orange for the live "you are here" dot.
 const USER_DOT_COLOR = "#F2741B";
+
+/**
+ * Round logo image for a map pin / business card. Falls back to the initial in a
+ * branded circle when no logo is set or the image fails to load. Plain <img> (not
+ * next/image) so the same-origin /media/ proxy rewrite works.
+ */
+function PinLogo({
+  logoUrl,
+  initial,
+  size,
+  accent,
+  active,
+}: {
+  logoUrl?: string | null;
+  initial: string;
+  size: number;
+  accent?: string;
+  active?: boolean;
+}) {
+  const [err, setErr] = useState(false);
+  if (logoUrl && !err) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={logoUrl}
+        alt=""
+        width={size}
+        height={size}
+        aria-hidden
+        onError={() => setErr(true)}
+        className="flex-none rounded-full border-2 border-white object-cover shadow-card"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  return (
+    <span
+      className={cn(
+        "flex flex-none items-center justify-center rounded-full border-2 border-white font-display font-extrabold shadow-card",
+        active ? "text-brand-fg" : "bg-card text-brand",
+      )}
+      style={{ width: size, height: size, fontSize: size * 0.4, background: active ? accent || "#C25E3C" : undefined }}
+    >
+      {initial}
+    </span>
+  );
+}
 
 type Point = MapPin & { x: number; y: number };
 type UserLocation = { lat: number; lng: number } | null;
@@ -129,14 +180,14 @@ export function MiniMap({
                   {p.dist ? ` · ${p.dist}` : ""}
                 </span>
               )}
-              <span
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full border-2 border-white font-display text-sm font-extrabold shadow-card transition",
-                  active ? "scale-110 text-brand-fg" : "bg-card text-brand",
-                )}
-                style={active ? { background: p.accent || "#C25E3C" } : undefined}
-              >
-                {p.initial}
+              <span className={cn("transition", active && "scale-110")}>
+                <PinLogo
+                  logoUrl={p.logoUrl}
+                  initial={p.initial}
+                  size={36}
+                  accent={p.accent}
+                  active={active}
+                />
               </span>
             </button>
           );
@@ -159,9 +210,7 @@ export function MiniMap({
           onClick={() => (onOpen ? onOpen(selected.id) : onSelect?.(selected.id))}
           className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-3 rounded-[14px] border border-line bg-card/95 p-3 text-left shadow-card backdrop-blur transition active:scale-[.99]"
         >
-          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-brand-muted font-display font-bold text-brand">
-            {selected.initial}
-          </span>
+          <PinLogo logoUrl={selected.logoUrl} initial={selected.initial} size={40} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-bold text-ink">{selected.name}</div>
             <div className="text-xs font-semibold text-subtle">{selected.dist || t("nearby.title")}</div>
@@ -228,6 +277,74 @@ export function MiniMap({
   return <div className="relative mt-1 h-[260px]">{body}</div>;
 }
 
+// Provider map markers (2GIS/Google) take a flat image URL and render it as a
+// square. To match the round pins everywhere else, we pre-render each logo into a
+// circular PNG (clipped + white ring) on a canvas and hand that data URL to the
+// marker. Cached by url+size so we only rasterize once per logo.
+const CIRCLE_ICON_CACHE = new Map<string, string>();
+
+function circularizeIcon(url: string, size: number, dpr = 2): Promise<string> {
+  const key = `${url}@${size}`;
+  const cached = CIRCLE_ICON_CACHE.get(key);
+  if (cached) return Promise.resolve(cached);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous"; // same-origin /media — keeps the canvas untainted
+    img.onload = () => {
+      const s = size * dpr;
+      const canvas = document.createElement("canvas");
+      canvas.width = s;
+      canvas.height = s;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(url);
+        return;
+      }
+      const ring = 2 * dpr; // white border matching the CSS pins
+      ctx.beginPath();
+      ctx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(s / 2, s / 2, s / 2 - ring, 0, Math.PI * 2);
+      ctx.clip();
+      const iw = img.naturalWidth || size;
+      const ih = img.naturalHeight || size;
+      const scale = Math.max(s / iw, s / ih); // object-fit: cover
+      const dw = iw * scale;
+      const dh = ih * scale;
+      ctx.drawImage(img, (s - dw) / 2, (s - dh) / 2, dw, dh);
+      const data = canvas.toDataURL("image/png");
+      CIRCLE_ICON_CACHE.set(key, data);
+      resolve(data);
+    };
+    img.onerror = () => resolve(url); // fall back to the raw url on decode failure
+    img.src = url;
+  });
+}
+
+/** Rasterizes each pin's logo into a circular marker icon; returns id → data URL. */
+function useCircularPinIcons(pins: MapPin[], size: number): Record<string, string> {
+  const [icons, setIcons] = useState<Record<string, string>>({});
+  // Stable signature so the effect only re-runs when the set of logos changes.
+  const sig = pins.map((p) => `${p.id}:${p.logoUrl ?? ""}`).join("|");
+  useEffect(() => {
+    let cancelled = false;
+    const withLogo = pins.filter((p) => p.logoUrl);
+    if (withLogo.length === 0) return;
+    Promise.all(
+      withLogo.map(async (p) => [p.id, await circularizeIcon(p.logoUrl as string, size)] as const),
+    ).then((entries) => {
+      if (!cancelled) setIcons((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig, size]);
+  return icons;
+}
+
 function DgisMapBody({
   pins,
   selectedId,
@@ -260,6 +377,7 @@ function DgisMapBody({
   const onOpenRef = useRef(onOpen);
   onOpenRef.current = onOpen;
   const selected = pins.find((p) => p.id === selectedId) ?? pins[0] ?? null;
+  const circleIcons = useCircularPinIcons(pins, 40);
 
   useEffect(() => {
     let cancelled = false;
@@ -304,7 +422,12 @@ function DgisMapBody({
       const active = pin.id === selectedId || (!selectedId && !!pin.closest);
       const marker = new mapgl.Marker(currentMap, {
         coordinates: [pin.lng, pin.lat],
-        icon: pinIcon(pin.initial, pin.accent || "#C25E3C", active),
+        // Circular business-logo marker once rasterized; branded initial pin until
+        // the logo finishes rendering (or when the business has no logo).
+        icon:
+          pin.logoUrl && circleIcons[pin.id]
+            ? circleIcons[pin.id]
+            : pinIcon(pin.initial, pin.accent || "#C25E3C", active),
         size: active ? [42, 42] : [36, 36],
         anchor: active ? [21, 21] : [18, 18],
         zIndex: active ? 20 : 10,
@@ -328,7 +451,7 @@ function DgisMapBody({
     }
 
     fitDgisMap(currentMap, pins, userLocation);
-  }, [pins, selectedId, userLocation]);
+  }, [pins, selectedId, userLocation, circleIcons]);
 
   function zoomBy(delta: number) {
     if (!map.current) return;
@@ -359,9 +482,7 @@ function DgisMapBody({
           onClick={() => (onOpen ? onOpen(selected.id) : onSelect?.(selected.id))}
           className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-3 rounded-[14px] border border-line bg-card/95 p-3 text-left shadow-card backdrop-blur transition active:scale-[.99]"
         >
-          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-brand-muted font-display font-bold text-brand">
-            {selected.initial}
-          </span>
+          <PinLogo logoUrl={selected.logoUrl} initial={selected.initial} size={40} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-bold text-ink">{selected.name}</div>
             <div className="text-xs font-semibold text-subtle">{selected.dist || t("nearby.title")}</div>
@@ -418,7 +539,9 @@ function GoogleMapBody({
   const markers = useRef<GoogleMarker[]>([]);
   const userDot = useRef<any>(null);
   const infoWindow = useRef<any>(null);
+  const clusterer = useRef<any>(null);
   const selected = pins.find((p) => p.id === selectedId) ?? pins[0] ?? null;
+  const circleIcons = useCircularPinIcons(pins, 40);
 
   useEffect(() => {
     let cancelled = false;
@@ -453,6 +576,9 @@ function GoogleMapBody({
     const google = (window as any).google;
     if (!currentMap || !google?.maps) return;
 
+    // Tear down the previous render: clusterer first (it owns marker→map), then
+    // any stragglers, so re-renders never leak markers onto the map.
+    clusterer.current?.clearMarkers();
     markers.current.forEach((m) => m.setMap(null));
     markers.current = [];
     if (!infoWindow.current) {
@@ -463,24 +589,39 @@ function GoogleMapBody({
     pins.forEach((pin) => {
       if (typeof pin.lat !== "number" || typeof pin.lng !== "number") return;
       const active = pin.id === selectedId || (!selectedId && pin.closest);
+      // Circular business-logo marker once rasterized (same-origin /media url);
+      // branded initial-in-circle symbol until the logo renders or when absent.
+      const logoSize = active ? 42 : 34;
+      const circleIcon = pin.logoUrl ? circleIcons[pin.id] : undefined;
       const marker = new google.maps.Marker({
-        map: currentMap,
+        // No `map` here: the clusterer assigns markers to the map and replaces
+        // overlapping ones with a single count bubble as you zoom out.
         position: { lat: pin.lat, lng: pin.lng },
         title: pin.name,
-        label: {
-          text: pin.initial.slice(0, 2),
-          color: active ? "#ffffff" : "#C25E3C",
-          fontFamily: "Bricolage Grotesque, sans-serif",
-          fontWeight: "800",
-        },
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: active ? 16 : 13,
-          fillColor: active ? pin.accent || "#C25E3C" : "#ffffff",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 3,
-        },
+        ...(circleIcon
+          ? {
+              icon: {
+                url: circleIcon,
+                scaledSize: new google.maps.Size(logoSize, logoSize),
+                anchor: new google.maps.Point(logoSize / 2, logoSize / 2),
+              },
+            }
+          : {
+              label: {
+                text: pin.initial.slice(0, 2),
+                color: active ? "#ffffff" : "#C25E3C",
+                fontFamily: "Bricolage Grotesque, sans-serif",
+                fontWeight: "800",
+              },
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: active ? 16 : 13,
+                fillColor: active ? pin.accent || "#C25E3C" : "#ffffff",
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 3,
+              },
+            }),
         zIndex: active ? 20 : 10,
       });
       marker.addListener("click", () => (onOpen ? onOpen(pin.id) : onSelect?.(pin.id)));
@@ -493,6 +634,36 @@ function GoogleMapBody({
       markers.current.push(marker);
     });
 
+    // Cluster overlapping markers into one count bubble; clicking a cluster zooms
+    // in (default behaviour). The bubble is a brand-coloured circle that grows
+    // slightly with the count, with the number baked in as the marker label.
+    clusterer.current = new MarkerClusterer({
+      map: currentMap,
+      markers: markers.current,
+      renderer: {
+        render: ({ count, position }: { count: number; position: any }) =>
+          new google.maps.Marker({
+            position,
+            zIndex: 1000 + count,
+            label: {
+              text: String(count),
+              color: "#ffffff",
+              fontSize: "13px",
+              fontWeight: "800",
+              fontFamily: "Bricolage Grotesque, sans-serif",
+            },
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 15 + Math.min(count, 25), // grows with size, capped
+              fillColor: "#C25E3C", // brand terracotta
+              fillOpacity: 0.95,
+              strokeColor: "#ffffff",
+              strokeWeight: 3,
+            },
+          }),
+      },
+    });
+
     if (userDot.current) userDot.current.setMap(null);
     userDot.current = null;
     if (userLocation) {
@@ -502,7 +673,7 @@ function GoogleMapBody({
     }
 
     fitGoogleMap(currentMap, pins, userLocation);
-  }, [pins, selectedId, onSelect, onOpen, userLocation, t]);
+  }, [pins, selectedId, onSelect, onOpen, userLocation, t, circleIcons]);
 
   function zoomBy(delta: number) {
     if (!map.current) return;
@@ -533,9 +704,7 @@ function GoogleMapBody({
           onClick={() => (onOpen ? onOpen(selected.id) : onSelect?.(selected.id))}
           className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-3 rounded-[14px] border border-line bg-card/95 p-3 text-left shadow-card backdrop-blur transition active:scale-[.99]"
         >
-          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-brand-muted font-display font-bold text-brand">
-            {selected.initial}
-          </span>
+          <PinLogo logoUrl={selected.logoUrl} initial={selected.initial} size={40} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-bold text-ink">{selected.name}</div>
             <div className="text-xs font-semibold text-subtle">{selected.dist || t("nearby.title")}</div>

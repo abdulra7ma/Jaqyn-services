@@ -108,21 +108,14 @@ export default function CustomerBenefits() {
                     marginTop: 11,
                   }}
                 >
-                  <div
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 11,
-                      background: d.bg,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#fff',
-                      font: "800 16px 'Bricolage Grotesque', sans-serif",
-                    }}
-                  >
-                    {d.ch}
-                  </div>
+                  <img
+                    src={d.img}
+                    alt={d.name}
+                    width={38}
+                    height={38}
+                    loading="lazy"
+                    style={{ width: 38, height: 38, borderRadius: 11, objectFit: 'cover', flex: '0 0 auto' }}
+                  />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{

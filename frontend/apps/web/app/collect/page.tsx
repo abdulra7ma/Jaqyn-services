@@ -5,7 +5,7 @@ import { useT } from "@jaqyn/i18n";
 import { Card } from "@jaqyn/ui";
 import { CustomerShell } from "../_components/CustomerShell";
 import { QueryBoundary } from "../_components/QueryBoundary";
-import { InitialTile, StampRow } from "../_components/kit";
+import { InitialTile, StampRow, UserAvatar } from "../_components/kit";
 import { useRequireAuth } from "../_lib/auth";
 
 export default function CollectPage() {
@@ -27,11 +27,11 @@ export default function CollectPage() {
 
           {/* member line */}
           <div className="flex items-center gap-3">
-            <InitialTile
-              name={me.data?.user.name || me.data?.user.phone || "?"}
-              variant="gradient"
-              size={44}
-            />
+            {me.data?.user ? (
+              <UserAvatar user={me.data.user} size={44} />
+            ) : (
+              <InitialTile name="?" variant="gradient" size={44} />
+            )}
             <div>
               <p className="font-semibold text-ink">{me.data?.user.name || ""}</p>
               <p className="text-xs text-subtle">{me.data?.user.phone}</p>

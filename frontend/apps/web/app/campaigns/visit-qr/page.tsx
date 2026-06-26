@@ -101,7 +101,7 @@ export default function VisitQrPage() {
                         const target = c.my_progress?.target_count ?? c.rule.required_count ?? 0;
                         return (
                           <div key={c.id} className="flex items-center gap-3">
-                            <GlyphTile glyph={c.glyph} size={38} />
+                            <GlyphTile glyph={c.glyph} size={38} image={c.business.logo_url} />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-bold text-ink">{c.name}</p>
                               <p className="truncate text-xs text-subtle">{c.business.name}</p>

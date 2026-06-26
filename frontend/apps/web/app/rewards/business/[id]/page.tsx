@@ -37,7 +37,12 @@ export default function BusinessRewardCardPage() {
             <div className="flex flex-col gap-6">
               {/* ── Business header ── */}
               <div className="flex items-center gap-3.5">
-                <InitialTile name={data.business.name} size={60} variant="gradient" />
+                <InitialTile
+                  name={data.business.name}
+                  size={60}
+                  variant="gradient"
+                  image={data.business.logo_url}
+                />
                 <div className="min-w-0">
                   <p className="truncate font-display text-xl font-bold text-ink">
                     {data.business.name}

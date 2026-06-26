@@ -88,12 +88,14 @@ DJANGO_CSRF_TRUSTED_ORIGINS=https://jaqyn-web-production.up.railway.app
    DJANGO_COLLECTSTATIC=false
    ```
    (Only **web** migrates — stops two services racing on the DB.)
-3. **Settings → Deploy → Custom Start Command**:
+3. **Settings → Config-as-code → Railway Config File = `railway.worker.json`**.
+   This file sets the start command:
    ```
    celery -A config worker -B -l info
    ```
-   `-B` runs **beat inside the worker** → one process, lower cost.
-4. This service is not an HTTP server: **don't** generate a domain and **disable the healthcheck** for it.
+   `-B` runs **beat inside the worker** → one process, lower cost. The file has
+   **no `healthcheckPath`**, so Railway won't health-check this service.
+4. This service is not an HTTP server: **don't** generate a domain.
 
 ---
 

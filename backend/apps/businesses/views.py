@@ -1,6 +1,5 @@
 import math
 
-from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -18,6 +17,7 @@ from apps.businesses.serializers import (
     GalleryUploadSerializer,
     PublicBusinessSerializer,
 )
+from apps.businesses.discovery import public_business_payload
 from apps.businesses.services import (
     BusinessLeadData,
     add_gallery_image,
@@ -40,45 +40,26 @@ class PublicBusinessListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        qs = (
-            Business.objects.filter(
-                status=Business.Status.APPROVED,
-                visibility_status=Business.VisibilityStatus.PUBLISHED,
-            )
-            .prefetch_related("catalog_items", "reward_programs", "group_offers", "gallery_images")
-            .order_by("name")
-        )
-
+        # The DB-bound query + serialization is cached (origin-independent); only
+        # distance/sort/limit happen per request. See apps.businesses.discovery.
         search = request.query_params.get("search", "").strip()
-        if search:
-            qs = qs.filter(
-                Q(name__icontains=search)
-                | Q(category__icontains=search)
-                | Q(area__icontains=search)
-                | Q(address__icontains=search)
-                | Q(description__icontains=search)
-            )
-
         category = request.query_params.get("category", "").strip()
-        if category and category != "all":
-            qs = qs.filter(category=category)
+        area = (request.query_params.get("area") or "").strip()
+        items = public_business_payload(search=search, category=category, area=area)
 
-        area = request.query_params.get("area")
-        if area:
-            qs = qs.filter(area__icontains=area)
-
-        businesses = list(qs)
         origin = _parse_origin(request)
         radius_km = _parse_float(request.query_params.get("radius_km"))
         if origin:
-            businesses = _with_distances(businesses, origin)
+            lat, lng = origin
+            for item in items:
+                item["distance_km"] = _distance_from_serialized(item, lat, lng)
             if radius_km is not None:
-                businesses = [b for b in businesses if getattr(b, "distance_km", None) is not None and b.distance_km <= radius_km]
-            businesses.sort(key=lambda b: (getattr(b, "distance_km", None) is None, getattr(b, "distance_km", 0), b.name.lower()))
+                items = [it for it in items if it["distance_km"] is not None and it["distance_km"] <= radius_km]
+            items.sort(key=lambda it: (it["distance_km"] is None, it["distance_km"] or 0, (it.get("name") or "").lower()))
         limit = _parse_int(request.query_params.get("limit"), default=8, minimum=1, maximum=20)
-        businesses = businesses[:limit]
+        items = items[:limit]
 
-        return success_response({"results": PublicBusinessSerializer(businesses, many=True, context={"request": request}).data})
+        return success_response({"results": items})
 
 
 class PublicBusinessCategoriesView(APIView):
@@ -359,14 +340,14 @@ def _parse_origin(request):
     return lat, lng
 
 
-def _with_distances(businesses, origin):
-    lat, lng = origin
-    for business in businesses:
-        if business.latitude is None or business.longitude is None:
-            business.distance_km = None
-            continue
-        business.distance_km = _distance_km(lat, lng, float(business.latitude), float(business.longitude))
-    return businesses
+def _distance_from_serialized(item, lat, lng):
+    """Great-circle km from (lat, lng) to a *serialized* business dict, rounded to
+    1 decimal to match ``PublicBusinessSerializer.get_distance_km``; ``None`` when
+    the business has no coordinates."""
+    raw_lat, raw_lng = item.get("latitude"), item.get("longitude")
+    if raw_lat is None or raw_lng is None:
+        return None
+    return round(_distance_km(lat, lng, float(raw_lat), float(raw_lng)), 1)
 
 
 def _distance_km(lat1, lng1, lat2, lng2):
