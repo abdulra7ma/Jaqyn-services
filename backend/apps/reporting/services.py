@@ -1,10 +1,16 @@
 from django.contrib.auth import get_user_model
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.db.models.functions import TruncDate
 
 from apps.businesses.models import Business
-from apps.groups.models import GroupDeal, GroupMember, GroupOffer
-from apps.loyalty.models import CustomerRewardProgress, RewardProgram, RewardRedemption, RewardTransaction
+from apps.campaigns.models import (
+    Campaign,
+    CampaignAction,
+    CampaignParticipant,
+    CampaignRewardVoucher,
+    Group,
+    GroupMember,
+)
 from apps.qr.models import QRCodeToken, ScanLog
 from apps.reporting.models import AdminAuditLog
 
@@ -26,19 +32,19 @@ def business_metrics(business):
     returning_customers = sum(1 for row in customer_scan_days if row["days"] >= 2)
     total_customers = scans.exclude(customer__isnull=True).values("customer").distinct().count()
     new_customers = max(total_customers - returning_customers, 0)
-    active_groups = GroupDeal.objects.filter(group_offer__business=business).exclude(status__in=[GroupDeal.Status.COMPLETED, GroupDeal.Status.CANCELLED, GroupDeal.Status.EXPIRED, GroupDeal.Status.FAILED]).count()
-    completed_groups = GroupDeal.objects.filter(group_offer__business=business, status=GroupDeal.Status.COMPLETED).count()
-    total_groups = GroupDeal.objects.filter(group_offer__business=business).count()
+    active_groups = Group.objects.filter(campaign__business=business).exclude(status__in=[Group.Status.COMPLETED, Group.Status.CANCELLED, Group.Status.EXPIRED]).count()
+    completed_groups = Group.objects.filter(campaign__business=business, status=Group.Status.COMPLETED).count()
+    total_groups = Group.objects.filter(campaign__business=business).count()
     return {
         "total_scans": scans.count(),
         "new_customers": new_customers,
         "returning_customers": returning_customers,
-        "rewards_issued": RewardRedemption.objects.filter(business=business).count(),
-        "rewards_redeemed": RewardRedemption.objects.filter(business=business, status=RewardRedemption.Status.REDEEMED).count(),
+        "rewards_issued": CampaignRewardVoucher.objects.filter(business=business).count(),
+        "rewards_redeemed": CampaignRewardVoucher.objects.filter(business=business, status=CampaignRewardVoucher.Status.REDEEMED).count(),
         "active_groups": active_groups,
         "completed_groups": completed_groups,
         "group_completion_rate": completed_groups / total_groups if total_groups else 0,
-        "customers_from_group_deals": GroupMember.objects.filter(group_deal__group_offer__business=business).values("customer").distinct().count(),
+        "customers_from_group_deals": GroupMember.objects.filter(group__campaign__business=business).values("customer").distinct().count(),
         "estimated_revenue": "0.00",
     }
 
@@ -46,8 +52,8 @@ def business_metrics(business):
 def business_customers(business):
     user_ids = set()
     user_ids.update(ScanLog.objects.filter(business=business, customer__isnull=False).values_list("customer_id", flat=True))
-    user_ids.update(RewardTransaction.objects.filter(business=business).values_list("customer_id", flat=True))
-    user_ids.update(GroupMember.objects.filter(group_deal__group_offer__business=business).values_list("customer_id", flat=True))
+    user_ids.update(CampaignAction.objects.filter(business=business).values_list("customer_id", flat=True))
+    user_ids.update(GroupMember.objects.filter(group__campaign__business=business).values_list("customer_id", flat=True))
     users = get_user_model().objects.filter(id__in=user_ids).order_by("-created_at")
     return [{"id": str(user.id), "phone": mask_phone(user.phone), "name": user.name} for user in users]
 
@@ -60,10 +66,10 @@ def admin_metrics():
         "active_businesses": Business.objects.filter(status=Business.Status.APPROVED).count(),
         "total_customers": User.objects.filter(role="customer").count(),
         "total_scans": ScanLog.objects.count(),
-        "total_redemptions": RewardRedemption.objects.count(),
+        "total_redemptions": CampaignRewardVoucher.objects.filter(status=CampaignRewardVoucher.Status.REDEEMED).count(),
         "suspicious_scans": suspicious,
-        "active_offers": GroupOffer.objects.filter(status=GroupOffer.Status.ACTIVE).count(),
-        "completed_groups": GroupDeal.objects.filter(status=GroupDeal.Status.COMPLETED).count(),
+        "active_offers": Campaign.objects.filter(campaign_type=Campaign.CampaignType.GROUP, status=Campaign.Status.ACTIVE).count(),
+        "completed_groups": Group.objects.filter(status=Group.Status.COMPLETED).count(),
     }
 
 
@@ -101,40 +107,49 @@ def disable_qr_token(token, admin=None, reason=None):
 
 
 def mark_group_failed(group, admin=None, reason=None):
-    group.status = GroupDeal.Status.FAILED
+    # Group has no FAILED state post-restructure; an admin-failed group is
+    # CANCELLED (the closest terminal state).
+    group.status = Group.Status.CANCELLED
     group.save(update_fields=["status", "updated_at"])
     audit(admin, "mark_group_failed", group, reason)
     return group
 
 
 def mark_group_completed(group, admin=None, reason=None):
-    group.status = GroupDeal.Status.COMPLETED
+    group.status = Group.Status.COMPLETED
     group.save(update_fields=["status", "updated_at"])
     audit(admin, "mark_group_completed", group, reason)
     return group
 
 
-def manual_adjustment(admin, customer, program, amount_count, reason):
-    progress, _ = CustomerRewardProgress.objects.get_or_create(
+def manual_adjustment(admin, customer, campaign, amount_count, reason):
+    """Admin-adjust a customer's progress on an INDIVIDUAL campaign.
+
+    Post-restructure a reward program is an INDIVIDUAL campaign; progress lives on
+    ``CampaignParticipant.progress_count`` and the audit trail on
+    ``CampaignAction``. Returns the (participant, action) pair.
+    """
+    participant, _ = CampaignParticipant.objects.get_or_create(
         customer=customer,
-        business=program.business,
-        reward_program=program,
-        defaults={"target_count": program.required_count or 1},
+        campaign=campaign,
     )
-    progress.current_count = max(progress.current_count + amount_count, 0)
-    progress.save(update_fields=["current_count", "updated_at"])
-    transaction = RewardTransaction.objects.create(
+    participant.progress_count = max(participant.progress_count + amount_count, 0)
+    participant.save(update_fields=["progress_count", "updated_at"])
+    from django.utils import timezone
+
+    action = CampaignAction.objects.create(
         customer=customer,
-        business=program.business,
-        reward_program=program,
-        progress=progress,
-        action=RewardTransaction.Action.ADJUSTED,
-        amount_count=amount_count,
-        source=RewardTransaction.Source.ADMIN_ADJUSTMENT,
-        metadata={"reason": reason, "admin": str(admin.id) if admin else None},
+        business=campaign.business,
+        campaign=campaign,
+        participant=participant,
+        action_type=CampaignAction.ActionType.VISIT,
+        verification_method=CampaignAction.VerificationMethod.STAFF_MANUAL,
+        action_time=timezone.now(),
+        status=CampaignAction.Status.COUNTED,
+        metadata={"reason": reason, "admin": str(admin.id) if admin else None, "adjustment": amount_count},
     )
-    audit(admin, "manual_adjustment", progress, reason, {"transaction": str(transaction.id)})
-    return progress, transaction
+    audit(admin, "manual_adjustment", participant, reason, {"action": str(action.id)})
+    return participant, action
 
 
 def suspicious_scan_rows():

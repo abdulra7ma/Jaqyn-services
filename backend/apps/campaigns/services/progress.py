@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
@@ -24,7 +25,9 @@ from apps.campaigns.models import (
     Campaign,
     CampaignAction,
     CampaignParticipant,
+    CampaignReward,
     CampaignRewardVoucher,
+    CampaignRule,
 )
 from apps.campaigns.services.eligibility import (
     CampaignEligibilityService,
@@ -86,13 +89,40 @@ class CampaignProgressService:
 
     @staticmethod
     def _required_count(campaign: Campaign) -> int:
-        """Return the visit count that completes the campaign (default 1).
+        """Return the visit/stamp count that completes the campaign (default 1).
 
         Reads ``CampaignRule.required_count``; a campaign with no rule row
         completes on a single visit.
         """
         rule = getattr(campaign, "rule", None)
         return rule.required_count if rule is not None else 1
+
+    @staticmethod
+    def _mechanic(campaign: Campaign) -> str:
+        """Return the INDIVIDUAL mechanic (VISIT/STAMP/SPEND), defaulting to VISIT.
+
+        Reads ``CampaignRule.mechanic``; a campaign with no rule (or no mechanic
+        set, e.g. a GROUP/SOCIAL campaign whose rule omits it) is treated as VISIT
+        so the count-by-one path is the safe default.
+        """
+        rule = getattr(campaign, "rule", None)
+        if rule is not None and rule.mechanic:
+            return rule.mechanic
+        return CampaignRule.Mechanic.VISIT
+
+    @staticmethod
+    def _banked_voucher_count(campaign: Campaign, customer) -> int:
+        """Count a customer's unredeemed (ACTIVE) vouchers for a campaign.
+
+        Backs the STAMP ``max_banked`` cap: a stamp completion is blocked when the
+        customer already holds ``max_banked`` ACTIVE (banked, not-yet-redeemed)
+        vouchers for the campaign. Source: campaigns-restructure design §3.
+        """
+        return CampaignRewardVoucher.objects.filter(
+            campaign=campaign,
+            customer=customer,
+            status=CampaignRewardVoucher.Status.ACTIVE,
+        ).count()
 
     @classmethod
     def join_campaign(cls, campaign: Campaign, customer) -> CampaignParticipant:
@@ -198,9 +228,24 @@ class CampaignProgressService:
         staff: StaffMember | None = None,
         verification_method: str = CampaignAction.VerificationMethod.STAFF_SCAN,
         action_type: str = CampaignAction.ActionType.VISIT,
+        amount_spend: Decimal | None = None,
         now: datetime | None = None,
     ) -> ProgressResult:
-        """Count one verified visit toward a campaign, completing it if due (§13/§19).
+        """Count one verified action toward an INDIVIDUAL campaign, completing it if due.
+
+        Branches on the rule's mechanic (§13/§19, campaigns-restructure design §4):
+
+        * **VISIT** / **STAMP** — each counted action increments ``progress_count``
+          by one; the campaign completes when ``progress_count`` reaches the rule's
+          ``required_count``. STAMP additionally honours ``max_banked``: when a
+          completing stamp would push the customer over ``max_banked`` ACTIVE
+          (banked, unredeemed) vouchers, the action is still counted but **no**
+          voucher is minted and the result reports ``completed=False`` — the
+          customer must redeem a banked voucher before earning another.
+        * **SPEND** — the action carries ``amount_spend`` (rejected as
+          ``VALIDATION_ERROR`` when missing/non-positive, or below the rule's
+          ``min_spend``); it is accumulated onto ``current_spend`` and the campaign
+          completes when ``current_spend`` reaches the rule's ``required_spend``.
 
         Runs inside one atomic block. Acquires two row locks in a *fixed order* —
         the ``Campaign`` row first, then the participant row — so the reward cap
@@ -210,15 +255,13 @@ class CampaignProgressService:
         anti-deadlock rule). It auto-joins first when the campaign allows and the
         customer has no row, re-runs the full §13 eligibility pipeline under the
         locks, and raises the pipeline's reason code (e.g. ``CAMPAIGN_MIN_GAP``,
-        ``CAMPAIGN_DAILY_LIMIT_REACHED``) if the visit is not eligible. On success
-        it writes a COUNTED ``CampaignAction`` audit row, increments
-        ``progress_count``, and — when progress reaches the rule's
-        ``required_count`` — completes the campaign (see :meth:`complete_campaign`)
-        in the *same* transaction, re-checking the reward cap under the campaign
-        lock before issuing the voucher and scheduling the unlock notification via
+        ``CAMPAIGN_DAILY_LIMIT_REACHED``) if the action is not eligible. On a
+        completing action it mints exactly one voucher via
+        :meth:`complete_campaign` in the *same* transaction, re-checking the reward
+        cap under the campaign lock and scheduling the unlock notification via
         ``on_commit``. Because the read-modify-write is fully locked, two
-        simultaneous confirm-visits cannot double-count and two simultaneous
-        final-slot completions cannot both mint a voucher over the cap.
+        simultaneous confirms cannot double-count and two simultaneous final-slot
+        completions cannot both mint a voucher over the cap.
         """
         now = now or timezone.now()
         with transaction.atomic():
@@ -251,6 +294,14 @@ class CampaignProgressService:
                     result.reason_code, status_code=status.HTTP_409_CONFLICT
                 )
 
+            mechanic = cls._mechanic(campaign)
+            rule = getattr(campaign, "rule", None)
+
+            # SPEND mechanic requires a positive amount at/above the rule minimum.
+            spend_amount: Decimal | None = None
+            if mechanic == CampaignRule.Mechanic.SPEND:
+                spend_amount = cls._validate_spend_amount(rule, amount_spend)
+
             action = CampaignAction.objects.create(
                 campaign=campaign,
                 participant=participant,
@@ -261,34 +312,64 @@ class CampaignProgressService:
                 verification_method=verification_method,
                 action_time=now,
                 status=CampaignAction.Status.COUNTED,
+                metadata=(
+                    {"amount_spend": str(spend_amount)}
+                    if spend_amount is not None
+                    else {}
+                ),
             )
 
-            participant.progress_count += 1
+            update_fields = ["last_progress_at", "status", "updated_at"]
             participant.last_progress_at = now
             if participant.status == CampaignParticipant.Status.JOINED:
                 participant.status = CampaignParticipant.Status.IN_PROGRESS
-            participant.save(
-                update_fields=[
-                    "progress_count",
-                    "last_progress_at",
-                    "status",
-                    "updated_at",
-                ]
-            )
+
+            if mechanic == CampaignRule.Mechanic.SPEND:
+                participant.current_spend = (
+                    participant.current_spend or Decimal("0")
+                ) + spend_amount
+                update_fields.append("current_spend")
+                required = (
+                    rule.required_spend
+                    if rule is not None and rule.required_spend is not None
+                    else Decimal("0")
+                )
+                completed = bool(required) and participant.current_spend >= required
+                progress_now = int(participant.current_spend)
+                required_now = int(required)
+            else:
+                participant.progress_count += 1
+                update_fields.append("progress_count")
+                required_now = cls._required_count(campaign)
+                completed = participant.progress_count >= required_now
+                progress_now = participant.progress_count
+
+            participant.save(update_fields=update_fields)
 
             emit_event(
                 "campaign_visit_counted",
                 business_id=str(campaign.business_id),
                 customer_id=str(customer.id),
                 campaign_id=str(campaign.id),
-                progress=participant.progress_count,
+                progress=progress_now,
             )
 
-            required = cls._required_count(campaign)
             voucher: CampaignRewardVoucher | None = None
-            completed = participant.progress_count >= required
             if completed:
-                voucher = cls.complete_campaign(campaign, participant, customer, now)
+                # STAMP honours max_banked: a completion that would exceed the cap
+                # of concurrently-banked ACTIVE vouchers mints nothing.
+                if (
+                    mechanic == CampaignRule.Mechanic.STAMP
+                    and rule is not None
+                    and rule.max_banked is not None
+                    and cls._banked_voucher_count(campaign, customer)
+                    >= rule.max_banked
+                ):
+                    completed = False
+                else:
+                    voucher = cls.complete_campaign(
+                        campaign, participant, customer, now
+                    )
 
             # Schedule the per-visit notification on commit (never inside atomic).
             campaign_id = str(campaign.id)
@@ -302,10 +383,45 @@ class CampaignProgressService:
             participant=participant,
             action=action,
             completed=completed,
-            progress_count=participant.progress_count,
-            required_count=required,
+            progress_count=progress_now,
+            required_count=required_now,
             voucher=voucher,
         )
+
+    @staticmethod
+    def _validate_spend_amount(
+        rule: CampaignRule | None, amount_spend: Decimal | None
+    ) -> Decimal:
+        """Validate a SPEND action amount and return it as a positive Decimal.
+
+        Raises ``VALIDATION_ERROR`` when no amount is supplied, the amount is not
+        positive, or it falls below the rule's ``min_spend``. Money is always a
+        ``Decimal`` — never a float. Source: campaigns-restructure design §3/§4.
+        """
+        if amount_spend is None:
+            raise JaqynAPIException(
+                "VALIDATION_ERROR",
+                "A spend amount is required for a spend campaign",
+                status.HTTP_400_BAD_REQUEST,
+            )
+        amount = Decimal(amount_spend)
+        if amount <= 0:
+            raise JaqynAPIException(
+                "VALIDATION_ERROR",
+                "Spend amount must be positive",
+                status.HTTP_400_BAD_REQUEST,
+            )
+        if (
+            rule is not None
+            and rule.min_spend is not None
+            and amount < rule.min_spend
+        ):
+            raise JaqynAPIException(
+                "VALIDATION_ERROR",
+                "Spend amount is below the minimum",
+                status.HTTP_400_BAD_REQUEST,
+            )
+        return amount
 
     @classmethod
     def complete_campaign(
@@ -365,9 +481,25 @@ class CampaignProgressService:
         update_fields = ["status", "completed_at", "updated_at"]
         if campaign.completion_limit_per_customer == Campaign.CompletionLimit.REPEATABLE:
             participant.completion_cycle += 1
-            participant.progress_count = 0
             participant.status = CampaignParticipant.Status.IN_PROGRESS
-            update_fields += ["completion_cycle", "progress_count"]
+            update_fields += ["completion_cycle"]
+            # Reset the counter that drives this campaign's mechanic so the same
+            # participant row can earn again: SPEND subtracts the threshold from
+            # current_spend (keeping any overflow), every other mechanic resets the
+            # visit/stamp count. Source: campaigns-restructure design §4.
+            rule = getattr(campaign, "rule", None)
+            if (
+                rule is not None
+                and rule.mechanic == CampaignRule.Mechanic.SPEND
+                and rule.required_spend is not None
+            ):
+                participant.current_spend = (
+                    participant.current_spend or Decimal("0")
+                ) - rule.required_spend
+                update_fields += ["current_spend"]
+            else:
+                participant.progress_count = 0
+                update_fields += ["progress_count"]
         participant.save(update_fields=update_fields)
 
         emit_event(
@@ -384,6 +516,99 @@ class CampaignProgressService:
             lambda: _schedule_reward_notification(customer_id, voucher_id)
         )
         return voucher
+
+    @classmethod
+    def confirm_social_proof(
+        cls,
+        campaign: Campaign,
+        customer,
+        staff: StaffMember | None = None,
+        now: datetime | None = None,
+    ) -> ProgressResult:
+        """Complete a SOCIAL campaign for a customer on staff-verified proof (§4).
+
+        A SOCIAL campaign has no per-visit mechanic: a single staff-verified
+        Instagram follow/tag proof completes it. Rejects a non-SOCIAL campaign
+        (``VALIDATION_ERROR``). Auto-joins the customer when they have no
+        participant row (so a staff member can confirm a walk-in), then re-runs the
+        §13 eligibility pipeline under a participant lock. **Idempotent per
+        (campaign, customer, cycle):** a customer already COMPLETED/REDEEMED for a
+        ONCE campaign is rejected by the pipeline (``CAMPAIGN_ALREADY_COMPLETED``)
+        so a double-confirm never mints a second voucher. On success it writes a
+        COUNTED ``SOCIAL_PROOF`` ``CampaignAction``, then mints exactly one voucher
+        via :meth:`complete_campaign` (which holds the campaign lock and re-checks
+        the reward cap). Side effects are scheduled via ``transaction.on_commit``.
+        """
+        now = now or timezone.now()
+        if campaign.campaign_type != Campaign.CampaignType.SOCIAL:
+            raise JaqynAPIException(
+                "VALIDATION_ERROR",
+                "Only a social campaign accepts social proof",
+                status.HTTP_400_BAD_REQUEST,
+            )
+        with transaction.atomic():
+            campaign = cls._lock_campaign(campaign.id)
+            participant = (
+                CampaignParticipant.objects.select_for_update()
+                .filter(campaign=campaign, customer=customer)
+                .first()
+            )
+            if participant is None:
+                cls.join_campaign(campaign, customer)
+                participant = (
+                    CampaignParticipant.objects.select_for_update()
+                    .get(campaign=campaign, customer=customer)
+                )
+
+            result = CampaignEligibilityService.evaluate(
+                campaign, customer.id, participant, now
+            )
+            if not result.eligible:
+                raise JaqynAPIException(
+                    result.reason_code, status_code=status.HTTP_409_CONFLICT
+                )
+
+            action = CampaignAction.objects.create(
+                campaign=campaign,
+                participant=participant,
+                customer=customer,
+                business=campaign.business,
+                action_type=CampaignAction.ActionType.SOCIAL_PROOF,
+                verified_by_staff=staff,
+                verification_method=CampaignAction.VerificationMethod.STAFF_SCAN,
+                action_time=now,
+                status=CampaignAction.Status.COUNTED,
+            )
+            participant.last_progress_at = now
+            participant.progress_count += 1
+            if participant.status == CampaignParticipant.Status.JOINED:
+                participant.status = CampaignParticipant.Status.IN_PROGRESS
+            participant.save(
+                update_fields=[
+                    "progress_count",
+                    "last_progress_at",
+                    "status",
+                    "updated_at",
+                ]
+            )
+            voucher = cls.complete_campaign(campaign, participant, customer, now)
+
+        emit_event(
+            "campaign_social_proof_confirmed",
+            business_id=str(campaign.business_id),
+            customer_id=str(customer.id),
+            campaign_id=str(campaign.id),
+            voucher_id=str(voucher.id),
+        )
+        return ProgressResult(
+            campaign=campaign,
+            participant=participant,
+            action=action,
+            completed=True,
+            progress_count=participant.progress_count,
+            required_count=1,
+            voucher=voucher,
+        )
 
 
 def _schedule_visit_notification(customer_id: str, campaign_id: str) -> None:

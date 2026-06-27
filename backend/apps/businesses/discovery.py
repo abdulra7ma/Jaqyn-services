@@ -92,7 +92,12 @@ def _serialize(*, search: str, category: str, area: str) -> list[dict]:
             status=Business.Status.APPROVED,
             visibility_status=Business.VisibilityStatus.PUBLISHED,
         )
-        .prefetch_related("catalog_items", "reward_programs", "group_offers", "gallery_images")
+        .prefetch_related(
+            "catalog_items",
+            "campaigns__rule",
+            "campaigns__reward",
+            "gallery_images",
+        )
         .order_by("name")
     )
     if search:

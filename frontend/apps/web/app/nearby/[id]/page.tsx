@@ -149,7 +149,7 @@ export default function BusinessProfilePage() {
                   <p className="font-display text-sm font-bold text-ink">Group offers</p>
                   <div className="mt-3 flex flex-col gap-2">
                     {b.group_offers.map((o) => (
-                      <Link key={o.id} href={`/group-offers/${o.id}`} className="rounded-xl border border-line bg-[#FBF7F0] p-3">
+                      <Link key={o.id} href="/campaigns" className="rounded-xl border border-line bg-[#FBF7F0] p-3">
                         <div className="text-sm font-bold text-ink">{o.title}</div>
                         <div className="mt-1 text-xs text-subtle">
                           {o.min_group_size}

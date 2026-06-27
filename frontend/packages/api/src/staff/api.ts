@@ -17,15 +17,13 @@ import type {
   CampaignVoucherScanResult,
   CampaignVoucherScanState,
   ConfirmGroupResult,
+  ConfirmSocialResult,
   RecentActivity,
   RedeemCampaignVoucherResult,
   ScanCustomerResult,
   ScanDispatchResult,
   ScanResult,
-  StaffCollectResult,
   UnifiedScanResult,
-  StaffGroup,
-  StaffProgram,
   StaffRedemption,
   TodayCode,
 } from "./types";
@@ -42,14 +40,11 @@ const VOUCHER_SCAN_STATE: Record<string, CampaignVoucherScanState> = {
   WRONG_BUSINESS: "not_found",
 };
 
-type Paginated<T> = { results: T[] };
-
 export const staffApi = {
   logout() {
     tokenStore.clear();
     session.clear();
   },
-  programs: () => api.get<{ programs: StaffProgram[] }>("/api/staff/programs/"),
   todayCode: () => api.get<TodayCode>("/api/staff/today-code/"),
   scan: (token: string) => api.post<ScanResult>("/api/staff/scan/", { token }),
   redeem: (body: { code?: string; token?: string }) =>
@@ -57,12 +52,6 @@ export const staffApi = {
   redeemManual: (code: string) =>
     api.post<StaffRedemption>("/api/staff/redeem/manual-code/", { code }),
   recentActivity: () => api.get<RecentActivity>("/api/staff/recent-activity/"),
-  listGroups: () =>
-    api.get<Paginated<StaffGroup>>("/api/staff/groups/").then((d) => d.results),
-  verifyGroup: (id: string) => api.post<StaffGroup>(`/api/staff/groups/${id}/verify/`),
-  redeemGroup: (id: string) => api.post<StaffGroup>(`/api/staff/groups/${id}/redeem/`),
-  collect: (body: { token: string; amount?: number; program_id?: string }) =>
-    api.post<StaffCollectResult>("/api/staff/collect/", body),
 
   // ---- campaign-aware scan (apps.campaigns — plan §3) ----
   scanCustomerForCampaigns: (token: string): Promise<ScanCustomerResult> =>
@@ -118,6 +107,13 @@ export const staffApi = {
     api.post<ConfirmGroupResult>("/api/staff/campaigns/confirm-group/", {
       group_session_id: sessionId,
     }),
+  // Verify a SOCIAL campaign proof → mint the voucher (campaigns-restructure
+  // design §5). Staff scans the customer's QR (token) and selects the SOCIAL
+  // campaign. Returns the ProgressResult-shaped confirm payload (campaign + voucher).
+  confirmSocial: (token: string, campaignId: string): Promise<ConfirmSocialResult> =>
+    api
+      .post<any>("/api/staff/campaigns/confirm-social/", { token, campaign_id: campaignId })
+      .then(adaptConfirmVisitResult),
 };
 
 export type StaffApi = typeof staffApi;

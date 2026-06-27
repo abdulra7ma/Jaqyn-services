@@ -18,7 +18,8 @@ from apps.campaigns.models import (
     CampaignReward,
     CampaignRewardVoucher,
     CampaignRule,
-    GroupSession,
+    Group,
+    GroupMember,
 )
 from core.frontend import frontend_base_url
 
@@ -30,7 +31,11 @@ class CampaignRuleSerializer(serializers.ModelSerializer):
         model = CampaignRule
         fields = (
             "rule_type",
+            "mechanic",
             "required_count",
+            "required_spend",
+            "min_spend",
+            "max_banked",
             "minimum_time_between_actions",
             "max_count_per_day",
             "required_group_size",
@@ -84,6 +89,7 @@ class CampaignWriteSerializer(serializers.ModelSerializer):
             "completion_limit_per_customer",
             "auto_join_enabled",
             "allow_multiple_campaign_counting",
+            "instagram_handle",
             "rule",
             "reward",
         )
@@ -130,6 +136,10 @@ class CampaignSerializer(serializers.ModelSerializer):
     completed = serializers.SerializerMethodField()
     redeemed = serializers.SerializerMethodField()
     ends_label = serializers.SerializerMethodField()
+    # The three type-specific headline stats for the business list card
+    # (campaigns-restructure design §5). Read from the business-list annotations;
+    # defaults to zeros on non-business paths.
+    type_stats = serializers.SerializerMethodField()
 
     class Meta:
         model = Campaign
@@ -154,6 +164,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "completion_limit_per_customer",
             "auto_join_enabled",
             "allow_multiple_campaign_counting",
+            "instagram_handle",
             "rule",
             "reward",
             "required_count",
@@ -163,10 +174,40 @@ class CampaignSerializer(serializers.ModelSerializer):
             "completed",
             "redeemed",
             "ends_label",
+            "type_stats",
             "created_at",
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_type_stats(self, obj: Campaign) -> dict:
+        """Return the three type-specific headline stats for the list card (§5).
+
+        Branches on ``campaign_type`` and reads the business-list annotations
+        (``_participants``/``_redeemed``/``_groups``/``_members``/``_reach``/
+        ``_close``); each defaults to 0 when the annotation is absent (non-business
+        paths). Each slot carries a label so the UI renders the triplet without
+        re-deriving the meaning.
+        """
+        redeemed = getattr(obj, "_redeemed", 0) or 0
+        participants = getattr(obj, "_participants", 0) or 0
+        if obj.campaign_type == Campaign.CampaignType.GROUP:
+            return {
+                "stat_a": {"label": "Groups created", "value": getattr(obj, "_groups", 0) or 0},
+                "stat_b": {"label": "Customers joined", "value": getattr(obj, "_members", 0) or 0},
+                "stat_c": {"label": "Redeemed", "value": redeemed},
+            }
+        if obj.campaign_type == Campaign.CampaignType.SOCIAL:
+            return {
+                "stat_a": {"label": "Joined", "value": participants},
+                "stat_b": {"label": "Redeemed", "value": redeemed},
+                "stat_c": {"label": "Reach", "value": getattr(obj, "_reach", 0) or 0},
+            }
+        return {
+            "stat_a": {"label": "Enrolled", "value": participants},
+            "stat_b": {"label": "Redeemed", "value": redeemed},
+            "stat_c": {"label": "Close to reward", "value": getattr(obj, "_close", 0) or 0},
+        }
 
     def get_business_logo_url(self, obj: Campaign) -> str | None:
         business = getattr(obj, "business", None)
@@ -297,6 +338,14 @@ class CampaignDetailSerializer(CampaignSerializer):
     """
 
     my_progress = serializers.SerializerMethodField()
+    # Flattened owning-business fields the customer offer-detail header binds to
+    # (campaigns-restructure offer-detail grid). ``business_name``/
+    # ``business_logo_url`` come from the base serializer; these add the category
+    # and location so a GROUP/SOCIAL offer card shows where to go. Empty string
+    # when the business has not set the field.
+    business_category = serializers.CharField(source="business.category", read_only=True)
+    business_address = serializers.CharField(source="business.address", read_only=True)
+    business_area = serializers.CharField(source="business.area", read_only=True)
 
     class Meta:
         model = Campaign
@@ -308,6 +357,9 @@ class CampaignDetailSerializer(CampaignSerializer):
             "business",
             "business_name",
             "business_logo_url",
+            "business_category",
+            "business_address",
+            "business_area",
             "created_by",
             "name",
             "description",
@@ -324,6 +376,7 @@ class CampaignDetailSerializer(CampaignSerializer):
             "completion_limit_per_customer",
             "auto_join_enabled",
             "allow_multiple_campaign_counting",
+            "instagram_handle",
             "rule",
             "reward",
             "required_count",
@@ -357,6 +410,29 @@ class CampaignDiscoverQuerySerializer(serializers.Serializer):
 
     type = serializers.CharField(required=False, allow_blank=True, max_length=32)
     joined = serializers.BooleanField(required=False, default=False)
+
+
+class CampaignFeedQuerySerializer(serializers.Serializer):
+    """Query params for the customer campaigns feed (campaigns-restructure §6).
+
+    ``discover`` selects the discover-list filter
+    (``all``/``group``/``neighborhood``/``ended``); the service degrades an
+    unknown value to ``all``. Shape-only validation here.
+    """
+
+    discover = serializers.CharField(required=False, allow_blank=True, max_length=32)
+
+
+class CampaignListQuerySerializer(serializers.Serializer):
+    """Query params for the business campaign list (campaigns-restructure §5).
+
+    Validates only the *shape* of the optional filters; the service owns the rules
+    and ignores any value that is not a real type/status token so a bad param
+    degrades to "no filter" rather than 400-ing the list.
+    """
+
+    type = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    status = serializers.CharField(required=False, allow_blank=True, max_length=32)
 
 
 class CampaignParticipantSerializer(serializers.ModelSerializer):
@@ -474,20 +550,53 @@ class CampaignRewardVoucherSerializer(serializers.ModelSerializer):
         return getattr(staff, "name", "") or ""
 
 
-class GroupSessionSerializer(serializers.ModelSerializer):
-    """A group session with its members flattened for the group screen (read-only)."""
+class GroupSerializer(serializers.ModelSerializer):
+    """A group session flattened for the customer group screen (read-only).
+
+    Emits everything the group-detail UI binds to: the owning campaign (flattened
+    to ``campaign`` id + ``campaign_name`` + ``business_name`` + ``business_logo_url``
+    so the card renders the brand without a second round-trip), the lifecycle
+    ``status``, ``required_size`` and the live ``joined_count`` (members still
+    JOINED/CHECKED_IN), the member roster (each with ``name``, ``is_leader`` and
+    their ``status``), the invite token surfaced both as ``invite_token`` (legacy
+    key) and ``invite_code`` plus the scannable ``invite_url``, the ``checkin_token``
+    the leader shows once the group is FULL, and the leader-chosen ``visit_time`` /
+    group ``name`` / ``note``. All fields are read-only.
+    """
 
     members = serializers.SerializerMethodField()
+    joined_count = serializers.SerializerMethodField()
+    # The invite token is the canonical short code; surface it under both keys so
+    # the FE can read either. `invite_code` is the alias the group screen binds to.
+    invite_code = serializers.CharField(source="invite_token", read_only=True)
+    invite_url = serializers.SerializerMethodField()
+    # The QR the leader presents for the coordinated check-in once the group fills.
+    # There is no separate check-in token in the model — the GROUP_INVITE token is
+    # reused at check-in — so this exposes `invite_token` only while FULL, else null.
+    checkin_token = serializers.SerializerMethodField()
+    campaign_name = serializers.CharField(source="campaign.name", read_only=True)
+    business_name = serializers.CharField(source="campaign.business.name", read_only=True)
+    business_logo_url = serializers.SerializerMethodField()
 
     class Meta:
-        model = GroupSession
+        model = Group
         fields = (
             "id",
             "campaign",
+            "campaign_name",
+            "business_name",
+            "business_logo_url",
             "group_leader",
             "status",
             "required_size",
+            "joined_count",
             "invite_token",
+            "invite_code",
+            "invite_url",
+            "checkin_token",
+            "visit_time",
+            "name",
+            "note",
             "expires_at",
             "completed_at",
             "members",
@@ -495,17 +604,72 @@ class GroupSessionSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
-    def get_members(self, obj: GroupSession) -> list[dict]:
+    def get_members(self, obj: Group) -> list[dict]:
+        leader_id = obj.group_leader_id
         return [
             {
                 "id": str(member.id),
                 "customer": str(member.customer_id),
+                "name": getattr(member.customer, "name", "") or "",
+                "is_leader": member.customer_id == leader_id,
                 "status": member.status,
                 "joined_at": member.joined_at,
                 "checked_in_at": member.checked_in_at,
             }
             for member in obj.members.all()
         ]
+
+    def get_joined_count(self, obj: Group) -> int:
+        """Count members still in the group (JOINED/CHECKED_IN); LEFT/NO_SHOW excluded."""
+        active = {GroupMember.Status.JOINED, GroupMember.Status.CHECKED_IN}
+        return sum(1 for member in obj.members.all() if member.status in active)
+
+    def get_invite_url(self, obj: Group) -> str | None:
+        """The scannable invite URL, built against the requesting origin when present."""
+        request = self.context.get("request")
+        if request is None:
+            return None
+        return f"{frontend_base_url(request)}/q/{obj.invite_token}"
+
+    def get_checkin_token(self, obj: Group) -> str | None:
+        """The GROUP_INVITE token to present at check-in, only once the group is FULL."""
+        if obj.status == Group.Status.FULL:
+            return obj.invite_token
+        return None
+
+    def get_business_logo_url(self, obj: Group) -> str | None:
+        business = getattr(obj.campaign, "business", None)
+        logo = getattr(business, "logo", None)
+        return logo.url if logo else None
+
+
+class CampaignTypeStatsSerializer(serializers.Serializer):
+    """Shape of the :class:`CampaignAnalyticsService.CampaignTypeStats` triplet."""
+
+    campaign_id = serializers.CharField()
+    campaign_type = serializers.CharField()
+    stat_a = serializers.IntegerField()
+    stat_b = serializers.IntegerField()
+    stat_c = serializers.IntegerField()
+    labels = serializers.DictField(child=serializers.CharField())
+
+
+class CampaignDetailTabsSerializer(serializers.Serializer):
+    """Tabbed business campaign-detail payload (campaigns-restructure design §5).
+
+    Pass-through of pre-serialized tab payloads assembled in the view:
+    ``overview`` + ``settings`` (the campaign), ``participants``,
+    ``reward_usage`` (vouchers), ``groups`` (GROUP only; empty otherwise), and
+    ``analytics`` (metrics + the per-type stat triplet). Listed explicitly so the
+    response is a documented contract, not an ad-hoc dict.
+    """
+
+    overview = serializers.DictField()
+    settings = serializers.DictField()
+    participants = serializers.ListField(child=serializers.DictField())
+    reward_usage = serializers.ListField(child=serializers.DictField())
+    groups = serializers.ListField(child=serializers.DictField())
+    analytics = serializers.DictField()
 
 
 class CampaignMetricsSerializer(serializers.Serializer):
@@ -527,6 +691,19 @@ class CampaignMetricsSerializer(serializers.Serializer):
 
 
 # --- Write input serializers (action endpoints) -----------------------------
+
+
+class GroupSessionStartSerializer(serializers.Serializer):
+    """Leader's group-start input — all optional (richer customer GROUP flow).
+
+    Shape-only validation of the optional ``visit_time`` (ISO 8601 datetime slot),
+    ``name`` (group label, max 80 to match ``Group.name``), and ``note`` (message
+    to invited friends). Any business rules about the values live in the service.
+    """
+
+    visit_time = serializers.DateTimeField(required=False, allow_null=True)
+    name = serializers.CharField(required=False, allow_blank=True, max_length=80)
+    note = serializers.CharField(required=False, allow_blank=True)
 
 
 class CancelVoucherSerializer(serializers.Serializer):
@@ -598,6 +775,17 @@ class ConfirmGroupSerializer(serializers.Serializer):
     group_session_id = serializers.UUIDField()
 
 
+class ConfirmSocialSerializer(serializers.Serializer):
+    """Staff confirm-social input — the customer QR token + target campaign (§5/§7).
+
+    The staff scans the customer's personal QR (``token``) and selects the SOCIAL
+    campaign (``campaign_id``) to verify the follow/tag proof against.
+    """
+
+    token = serializers.CharField(max_length=128)
+    campaign_id = serializers.UUIDField()
+
+
 # --- Read serializers for service dataclasses (staff scan results) -----------
 
 
@@ -665,18 +853,14 @@ def _mask_phone(phone: str | None) -> str:
 class UnifiedScanResultSerializer(serializers.Serializer):
     """Shape of a :class:`StaffScannerService.UnifiedScanResult` (unified scan).
 
-    Emits exactly: ``customer`` (name + masked phone), the passthrough
-    ``staff_collect`` ``loyalty`` dict (or ``null``) with its
-    ``loyalty_skipped`` reason code, the list of advanced campaign
-    ``ProgressResult`` shapes (``campaigns``), and the list of
+    Emits exactly: ``customer`` (name + masked phone), the list of advanced
+    campaign ``ProgressResult`` shapes (``campaigns``), and the list of
     ``skipped_campaigns`` (each ``campaign_id`` + ``name`` + ``reason_code``).
-    The legs are independent — the loyalty leg may be present while every
-    campaign is skipped, or vice versa.
+    Post-restructure there is no loyalty leg — a loyalty card is now an INDIVIDUAL
+    campaign, so it advances through ``campaigns`` like any other.
     """
 
     customer = serializers.SerializerMethodField()
-    loyalty = serializers.SerializerMethodField()
-    loyalty_skipped = serializers.SerializerMethodField()
     campaigns = serializers.SerializerMethodField()
     skipped_campaigns = serializers.SerializerMethodField()
 
@@ -685,13 +869,6 @@ class UnifiedScanResultSerializer(serializers.Serializer):
             "name": getattr(obj.customer, "name", None),
             "phone": _mask_phone(getattr(obj.customer, "phone", None)),
         }
-
-    def get_loyalty(self, obj) -> dict | None:
-        # The staff_collect dict is passed through verbatim (already a plain dict).
-        return obj.loyalty
-
-    def get_loyalty_skipped(self, obj) -> str | None:
-        return obj.loyalty_skipped_reason
 
     def get_campaigns(self, obj) -> list:
         return ProgressResultSerializer(
@@ -740,7 +917,7 @@ class GroupConfirmResultSerializer(serializers.Serializer):
     many members were checked in so the staff UI can show the table size.
     """
 
-    session = GroupSessionSerializer()
+    session = GroupSerializer()
     member_count = serializers.IntegerField()
     voucher = serializers.SerializerMethodField()
 

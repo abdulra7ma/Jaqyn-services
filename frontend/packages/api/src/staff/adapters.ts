@@ -19,7 +19,6 @@ import type {
   RedeemCampaignVoucherResult,
   ScanCustomerResult,
   ScanDispatchResult,
-  StaffCollectResult,
   UnifiedScanResult,
 } from "./types";
 
@@ -34,10 +33,10 @@ function ruleSub(campaign: Raw): string {
   const required = rule.required_count ?? null;
   if (campaign.campaign_type === "group") {
     if (rule.required_group_size != null) parts.push(`Group of ${rule.required_group_size}`);
+  } else if (rule.mechanic === "spend" && rule.required_spend != null) {
+    parts.push(`Spend ${rule.required_spend}`);
   } else if (required != null) {
-    let line = `Visit ${required}×`;
-    if (rule.window_before_time) line += ` before ${rule.window_before_time}`;
-    parts.push(line);
+    parts.push(`Visit ${required}×`);
   }
   return parts.join(" · ");
 }
@@ -121,8 +120,6 @@ export function adaptUnifiedScan(raw: Raw): UnifiedScanResult {
       name: raw.customer?.name ?? "",
       phone: raw.customer?.phone ?? "",
     },
-    loyalty: raw.loyalty ? (raw.loyalty as StaffCollectResult) : null,
-    loyalty_skipped: raw.loyalty_skipped ?? null,
     campaigns: campaigns.map(adaptConfirmVisitResult),
     skipped_campaigns: skipped.map((s) => ({
       campaign_id: s.campaign_id ?? "",

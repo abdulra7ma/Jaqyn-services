@@ -1,5 +1,5 @@
 """Seed a complete demo dataset for local/staging: one business owner, two staff,
-three customers, plus real data across loyalty, campaigns and group deals.
+three customers, plus real data across campaigns (individual / group / social).
 
 Idempotent — safe to re-run. Existing users are reported (and their passwords are
 reset to the documented value so the credentials below always work). Run with:
@@ -30,9 +30,9 @@ from apps.campaigns.models import (
     CampaignReward,
     CampaignRewardVoucher,
     CampaignRule,
+    Group,
+    GroupMember,
 )
-from apps.groups.models import GroupDeal, GroupMember, GroupOffer
-from apps.loyalty.models import CustomerRewardProgress, RewardProgram, RewardRedemption
 from apps.qr.models import QRCodeToken, ScanLog
 from apps.staff.models import StaffMember
 
@@ -75,7 +75,6 @@ class Command(BaseCommand):
             owner, staff_users, customers, biz = self._seed_accounts(rows)
             counts = {}
             counts["staff"] = self._seed_staff(biz, staff_users, customers, rows)
-            counts["loyalty"] = self._seed_loyalty(biz, customers)
             counts["campaigns"] = self._seed_campaigns(biz, owner, customers)
             counts["groups"] = self._seed_groups(biz, customers)
             counts["storefronts"] = self._seed_extra_storefronts()
@@ -213,41 +212,6 @@ class Command(BaseCommand):
                 scan_count += 1
         return {"members": 3, "invited": 1, "suspended": 1, "scans": scan_count}
 
-    # ----- loyalty --------------------------------------------------------
-    def _seed_loyalty(self, biz, customers):
-        program, _ = RewardProgram.objects.get_or_create(
-            business=biz, title="Coffee Club", defaults=dict(
-                type=RewardProgram.Type.STAMP,
-                description="Collect 6 stamps, the 7th coffee is on us.",
-                required_count=6, reward_description="Free coffee", expiry_days=30,
-                terms="One stamp per visit.", is_active=True))
-        program.is_active = True
-        program.save()
-
-        # Customer 0: fully stamped + unlocked, with a pending voucher to redeem.
-        # Customer 1: mid-progress. Customer 2: just started.
-        plan = [(customers[0], 6, CustomerRewardProgress.Status.UNLOCKED),
-                (customers[1], 3, CustomerRewardProgress.Status.ACTIVE),
-                (customers[2], 1, CustomerRewardProgress.Status.ACTIVE)]
-        vouchers = 0
-        for cust, count, status in plan:
-            prog, _ = CustomerRewardProgress.objects.get_or_create(
-                customer=cust, business=biz, reward_program=program,
-                defaults=dict(current_count=count, target_count=6, status=status))
-            prog.current_count = count
-            prog.target_count = 6
-            prog.status = status
-            if status == CustomerRewardProgress.Status.UNLOCKED:
-                prog.unlocked_at = timezone.now()
-            prog.save()
-            if status == CustomerRewardProgress.Status.UNLOCKED:
-                _, created = RewardRedemption.objects.get_or_create(
-                    customer=cust, business=biz, reward_program=program, progress=prog,
-                    status=RewardRedemption.Status.PENDING,
-                    defaults=dict(code=_code(), expires_at=timezone.now() + timedelta(days=30)))
-                vouchers += int(created)
-        return {"program": program.title, "progress_rows": len(plan), "pending_vouchers": vouchers}
-
     # ----- extra demo businesses (campaigns-redesign) ---------------------
     def _upsert_business(self, *, owner_phone, owner_name, name, glyph, area, description,
                          latitude, longitude, category="cafe"):
@@ -356,40 +320,53 @@ class Command(BaseCommand):
             description="Desserts and weekend hangouts by Ala-Too Square, Bishkek.",
             latitude=Decimal("42.876900"), longitude=Decimal("74.603600"))
 
-        def mk(business, name, desc, ctype, rule_type, required, *, window=None, group_size=None,
+        def mk(business, name, desc, ctype, *, mechanic=None, required=1, status=Campaign.Status.ACTIVE,
+               group_size=None, required_spend=None, instagram_handle=None,
                reward_title="", reward_desc="", max_rewards=200):
             c, _ = Campaign.objects.get_or_create(business=business, name=name, defaults=dict(
                 created_by=owner, description=desc, campaign_type=ctype,
-                status=Campaign.Status.ACTIVE, start_at=now - timedelta(days=2),
+                status=status, start_at=now - timedelta(days=2),
                 end_at=now + timedelta(days=5), active_days=[], max_participants=1000,
                 max_rewards=max_rewards, completion_limit_per_customer=Campaign.CompletionLimit.ONCE,
-                auto_join_enabled=True, allow_multiple_campaign_counting=False))
+                auto_join_enabled=True, allow_multiple_campaign_counting=False,
+                instagram_handle=instagram_handle))
+            rule_type = (
+                CampaignRule.RuleType.GROUP_CHECKIN if ctype == Campaign.CampaignType.GROUP
+                else CampaignRule.RuleType.VISIT_COUNT
+            )
             CampaignRule.objects.get_or_create(campaign=c, defaults=dict(
-                rule_type=rule_type, required_count=required,
+                rule_type=rule_type, mechanic=mechanic, required_count=required,
+                required_spend=required_spend,
                 minimum_time_between_actions=timedelta(hours=1), max_count_per_day=1,
                 required_group_size=group_size,
-                group_checkin_window_minutes=(15 if group_size else None), window_before_time=window))
+                group_checkin_window_minutes=(15 if group_size else None)))
             CampaignReward.objects.get_or_create(campaign=c, defaults=dict(
                 reward_type=CampaignReward.RewardType.FREE_ITEM, title=reward_title,
                 description=reward_desc, estimated_cost=Decimal("90.00"), expiry_days_after_unlock=7,
                 max_redemptions=max_rewards, reward_receiver_type=RT.LEADER))
             return c
 
-        # Spread across all three businesses and all three types so every filter
-        # chip on the redesigned page (visit / time_window / group) returns rows.
+        # Spread across all three businesses and all three types. Per the
+        # campaigns-restructure plan §7 the demo emits one ACTIVE Social, one DRAFT
+        # Group, and one COMPLETED Individual so the Status filter has rows.
         c1 = mk(biz, "Morning Coffee Challenge",
-                "Visit 3 times before 12:00 this week and get a free croissant.",
-                Campaign.CampaignType.TIME_WINDOW, CampaignRule.RuleType.TIME_WINDOW, 3, window=time(12, 0),
+                "Visit 3 times this week and get a free croissant.",
+                Campaign.CampaignType.INDIVIDUAL, mechanic=CampaignRule.Mechanic.VISIT, required=3,
                 reward_title="Free croissant", reward_desc="Any croissant up to 150 KGS")
-        c2 = mk(bublik, "Lunch Loyalty Streak", "Visit 5 times this month and get 20% off your order.",
-                Campaign.CampaignType.VISIT, CampaignRule.RuleType.VISIT_COUNT, 5,
+        c2 = mk(bublik, "Lunch Loyalty Streak", "Collect 5 stamps this month and get 20% off your order.",
+                Campaign.CampaignType.INDIVIDUAL, mechanic=CampaignRule.Mechanic.STAMP, required=5,
                 reward_title="20% off your order", reward_desc="Up to 400 KGS off", max_rewards=500)
+        # ACTIVE Social campaign (Instagram follow/tag → bonus).
+        mk(luna, "Tag Us for a Treat", "Follow and tag us on Instagram for a free dessert.",
+           Campaign.CampaignType.SOCIAL, instagram_handle="@cafe.luna",
+           reward_title="Free dessert", reward_desc="One shared dessert", max_rewards=120)
+        # DRAFT Group campaign (bring friends).
         mk(luna, "Weekend Friends Deal", "Come with 3 friends and unlock a free dessert for the table.",
-           Campaign.CampaignType.GROUP, CampaignRule.RuleType.GROUP_CHECKIN, 1, group_size=4,
+           Campaign.CampaignType.GROUP, status=Campaign.Status.DRAFT, group_size=4,
            reward_title="Free dessert for the table", reward_desc="One shared dessert", max_rewards=120)
-        # A plain visit campaign at Manas so the home business also has a visit type.
+        # A stamp (loyalty) card at Manas → seeded as COMPLETED below.
         c4 = mk(biz, "Coffee Lovers Punch Card", "Buy 4 coffees this week and the 5th is free.",
-                Campaign.CampaignType.VISIT, CampaignRule.RuleType.VISIT_COUNT, 4,
+                Campaign.CampaignType.INDIVIDUAL, mechanic=CampaignRule.Mechanic.STAMP, required=4,
                 reward_title="Free coffee", reward_desc="Any drink up to 200 KGS", max_rewards=300)
 
         # Participants. Aibek (customers[0]) is JOINED + in-progress across two
@@ -432,33 +409,39 @@ class Command(BaseCommand):
                 issued_at=now, expires_at=now + timedelta(days=7))
             vouchers = 1
 
-        return {"campaigns": 4, "businesses": 3, "participants": 6, "active_voucher": vouchers}
+        return {"campaigns": 5, "businesses": 3, "participants": 6, "active_voucher": vouchers}
 
-    # ----- group deals ----------------------------------------------------
+    # ----- group runtime --------------------------------------------------
     def _seed_groups(self, biz, customers):
-        now = timezone.now()
-        today = timezone.localdate()
-        offer, _ = GroupOffer.objects.get_or_create(
-            business=biz, title="Bring 3 Friends", defaults=dict(
-                description="Come as a group of 4 and unlock a free dessert for the table.",
-                category="cafe", min_group_size=4, max_group_size=6,
-                reward_type=GroupOffer.RewardType.FREE_SHARED_ITEM,
-                reward_description="Free dessert for the table",
-                valid_from=today, valid_to=today + timedelta(days=30), valid_days=[],
-                time_start=time(14, 0), time_end=time(20, 0), checkin_window_minutes=15,
-                status=GroupOffer.Status.ACTIVE))
-        offer.status = GroupOffer.Status.ACTIVE
-        offer.save()
+        """Seed one forming Group inside an ACTIVE GROUP campaign at ``biz``.
 
-        deal, created = GroupDeal.objects.get_or_create(
-            group_offer=offer, leader=customers[0], defaults=dict(
-                visit_time=now + timedelta(days=1), invite_token=secrets.token_urlsafe(12),
-                status=GroupDeal.Status.FORMING))
+        Post-restructure a group lives inside a GROUP campaign (no separate group
+        offer). Creates an ACTIVE group campaign and a FORMING Group with members.
+        """
+        now = timezone.now()
+        campaign, _ = Campaign.objects.get_or_create(
+            business=biz, name="Bring 3 Friends", defaults=dict(
+                description="Come as a group of 4 and unlock a free dessert for the table.",
+                campaign_type=Campaign.CampaignType.GROUP, status=Campaign.Status.ACTIVE,
+                max_rewards=120, completion_limit_per_customer=Campaign.CompletionLimit.ONCE))
+        campaign.status = Campaign.Status.ACTIVE
+        campaign.save(update_fields=["status", "updated_at"])
+        CampaignRule.objects.get_or_create(campaign=campaign, defaults=dict(
+            rule_type=CampaignRule.RuleType.GROUP_CHECKIN, required_group_size=4,
+            group_checkin_window_minutes=15))
+        CampaignReward.objects.get_or_create(campaign=campaign, defaults=dict(
+            reward_type=CampaignReward.RewardType.FREE_ITEM, title="Free dessert for the table",
+            description="One shared dessert", reward_receiver_type=CampaignReward.ReceiverType.LEADER))
+
+        group, created = Group.objects.get_or_create(
+            campaign=campaign, group_leader=customers[0], defaults=dict(
+                required_size=4, invite_token=secrets.token_urlsafe(12),
+                expires_at=now + timedelta(days=1), status=Group.Status.FORMING))
         if created:
             for cust in customers:  # leader + 2 others joined, 1 slot open
-                GroupMember.objects.get_or_create(group_deal=deal, customer=cust,
-                                                   defaults={"status": GroupMember.Status.JOINED})
-        return {"offer": offer.title, "deals": 1, "members": deal.members.count()}
+                GroupMember.objects.get_or_create(group=group, customer=cust,
+                                                  defaults={"status": GroupMember.Status.JOINED, "joined_at": now})
+        return {"offer": campaign.name, "deals": 1, "members": group.members.count()}
 
     # ----- report ---------------------------------------------------------
     def _report(self, rows, counts):
@@ -477,9 +460,6 @@ class Command(BaseCommand):
           f"({counts['staff']['suspended']} suspended), "
           f"{counts['staff']['invited']} pending invite(s), "
           f"{counts['staff']['scans']} scan log(s)")
-        w(f"Loyalty   : program '{counts['loyalty']['program']}', "
-          f"{counts['loyalty']['progress_rows']} progress rows, "
-          f"{counts['loyalty']['pending_vouchers']} pending voucher(s)")
         w(f"Campaigns : {counts['campaigns']['campaigns']} campaigns across "
           f"{counts['campaigns']['businesses']} businesses "
           f"(Manas Coffee, Bublik Bistro, Cafe Luna), "

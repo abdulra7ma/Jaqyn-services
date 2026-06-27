@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.businesses.models import Business, CatalogItem
-from apps.loyalty.models import RewardProgram
+from apps.campaigns.models import Campaign, CampaignReward, CampaignRule
 from core.logging import emit_event
 
 # Fixed password for seeded demo owners. Safe to document: these only ever back
@@ -71,10 +71,22 @@ def create_demo_business(name: Optional[str] = None) -> DemoBusinessResult:
         verified_at=now, published_at=now,
     )
 
-    RewardProgram.objects.create(
-        business=business, type=RewardProgram.Type.STAMP, title="Demo Coffee Club",
+    # A loyalty stamp card is now an ACTIVE INDIVIDUAL (STAMP) campaign.
+    demo_campaign = Campaign.objects.create(
+        business=business, created_by=owner, name="Demo Coffee Club",
         description="Collect 6 stamps, the 7th coffee is on us.",
-        required_count=6, reward_description="Free coffee", expiry_days=30, is_active=True,
+        campaign_type=Campaign.CampaignType.INDIVIDUAL,
+        status=Campaign.Status.ACTIVE,
+        completion_limit_per_customer=Campaign.CompletionLimit.REPEATABLE,
+        auto_join_enabled=True,
+    )
+    CampaignRule.objects.create(
+        campaign=demo_campaign, rule_type=CampaignRule.RuleType.VISIT_COUNT,
+        mechanic=CampaignRule.Mechanic.STAMP, required_count=6,
+    )
+    CampaignReward.objects.create(
+        campaign=demo_campaign, reward_type=CampaignReward.RewardType.FREE_ITEM,
+        title="Free coffee", description="Free coffee", expiry_days_after_unlock=30,
     )
     for order, (item_name, price) in enumerate(_DEMO_CATALOG):
         CatalogItem.objects.create(

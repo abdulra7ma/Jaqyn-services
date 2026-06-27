@@ -30,6 +30,25 @@ const STATUS_TONE: Record<CampaignStatus, "brand" | "ok" | "neutral" | "warn" | 
   draft: "neutral",
 };
 
+/** Campaign type → Badge tone, glyph, and left-accent stripe. Group vs
+ * Individual (vs Social) must read at a glance in the discover feed: green for
+ * group, amber for individual, terracotta for social. */
+const TYPE_TONE: Record<CampaignType, "ok" | "warn" | "brand"> = {
+  group: "ok",
+  individual: "warn",
+  social: "brand",
+};
+const TYPE_GLYPH: Record<CampaignType, string> = {
+  group: "👥",
+  individual: "👤",
+  social: "📸",
+};
+const TYPE_ACCENT: Record<CampaignType, string> = {
+  group: "border-l-sage",
+  individual: "border-l-amber",
+  social: "border-l-brand",
+};
+
 /** Voucher status → Badge tone. */
 const VOUCHER_TONE: Record<CampaignVoucherStatus, "ok" | "neutral" | "danger"> = {
   active: "ok",
@@ -40,15 +59,16 @@ const VOUCHER_TONE: Record<CampaignVoucherStatus, "ok" | "neutral" | "danger"> =
   cancelled: "neutral",
 };
 
-/** Human "challenge" line per campaign type (design `cd.mission`). */
+/** Human "challenge" line per campaign type/mechanic (design `cd.mission`). */
 export function missionLine(t: Translate, c: Campaign): string {
   if (c.campaign_type === "group") {
     return t("cmp.mission.group").replace("{size}", String(c.rule.required_group_size ?? 0));
   }
-  if (c.campaign_type === "timewindow") {
-    return t("cmp.mission.timewindow")
-      .replace("{count}", String(c.rule.required_count ?? 0))
-      .replace("{time}", c.rule.window_before_time ?? "");
+  if (c.campaign_type === "social") {
+    return t("cmp.mission.social").replace("{handle}", c.instagram_handle ?? "");
+  }
+  if (c.rule.mechanic === "spend") {
+    return t("cmp.mission.spend").replace("{amount}", c.rule.required_spend ?? "");
   }
   return t("cmp.mission.visit").replace("{count}", String(c.rule.required_count ?? 0));
 }
@@ -82,18 +102,20 @@ export function ruleLines(t: Translate, c: Campaign): string[] {
       lines.push(t("cmp.rule.groupSize").replace("{size}", String(r.required_group_size)));
     if (r.group_checkin_window)
       lines.push(t("cmp.rule.checkin").replace("{window}", r.group_checkin_window));
-  } else {
-    if (r.required_count != null)
+  } else if (c.campaign_type === "individual") {
+    if (r.mechanic === "spend" && r.required_spend != null) {
+      lines.push(t("cmp.mission.spend").replace("{amount}", r.required_spend));
+    } else if (r.required_count != null) {
       lines.push(t("cmp.rule.visits").replace("{count}", String(r.required_count)));
+    }
     if (r.max_count_per_day != null)
       lines.push(t("cmp.rule.perDay").replace("{count}", String(r.max_count_per_day)));
     if (r.min_time_between) lines.push(t("cmp.rule.minGap").replace("{gap}", r.min_time_between));
-    if (r.window_before_time)
-      lines.push(t("cmp.rule.before").replace("{time}", r.window_before_time));
   }
-  lines.push(
-    t("cmp.rule.window").replace("{days}", c.active_days).replace("{hours}", c.active_hours),
-  );
+  if (c.active_days || c.active_hours)
+    lines.push(
+      t("cmp.rule.window").replace("{days}", c.active_days).replace("{hours}", c.active_hours),
+    );
   lines.push(t(c.repeat_policy === "repeatable" ? "cmp.rule.repeatable" : "cmp.rule.repeatOnce"));
   return lines;
 }
@@ -143,30 +165,41 @@ export function GlyphTile({
 /** Discover-list card: glyph, name+status, blurb, progress, reward + CTA. */
 export function CampaignCard({ campaign }: { campaign: Campaign }) {
   const t = useT();
+  const type = campaign.campaign_type;
   const p = campaign.my_progress;
   const target = p?.target_count ?? campaign.rule.required_count ?? 0;
-  const hasProgress = !!p?.joined && target > 0;
-  const cta = p?.completed
-    ? t("cmp.card.view")
-    : hasProgress
+  // Only individual campaigns track per-customer visit/stamp/spend progress.
+  // Group "progress" is people-joining (shown inside the group flow, not here).
+  const hasProgress = type === "individual" && !!p?.joined && target > 0;
+  // CTA differs by type/state: group cards always "View" the offer; an
+  // in-progress individual says "Continue"; otherwise "View"/"Join".
+  const cta =
+    type === "group" || p?.completed
       ? t("cmp.card.view")
-      : t("cmp.card.join");
+      : hasProgress
+        ? t("cmp.card.continue")
+        : t("cmp.card.join");
 
   return (
     <Link
       href={`/campaigns/${campaign.id}`}
-      className="block rounded-2xl border border-line bg-card p-4 shadow-card transition active:scale-[.99]"
+      className={cn(
+        "block rounded-2xl border border-line border-l-4 bg-card p-4 shadow-card transition active:scale-[.99]",
+        TYPE_ACCENT[type],
+      )}
     >
       <div className="flex items-center gap-3">
         <GlyphTile glyph={campaign.glyph} image={campaign.business.logo_url} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-display text-base font-bold text-ink">{campaign.name}</span>
+          <span className="font-display text-base font-bold text-ink">{campaign.name}</span>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <Badge tone={TYPE_TONE[type]} className="gap-1">
+              <span aria-hidden>{TYPE_GLYPH[type]}</span>
+              {t(`cmp.type.${type}`)}
+            </Badge>
             <Badge tone={STATUS_TONE[campaign.status]}>{t(`cmp.status.${campaign.status}`)}</Badge>
           </div>
-          <p className="mt-0.5 truncate text-[12.5px] text-subtle">
-            {campaign.business.name} · {t(`cmp.type.${campaign.campaign_type}`)}
-          </p>
+          <p className="mt-1 truncate text-[12.5px] text-subtle">{campaign.business.name}</p>
         </div>
       </div>
 

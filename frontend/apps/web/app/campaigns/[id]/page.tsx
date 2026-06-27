@@ -5,6 +5,7 @@ import { useT } from "@jaqyn/i18n";
 import { useParams, useRouter } from "next/navigation";
 import { CustomerShell } from "../../_components/CustomerShell";
 import { QueryBoundary } from "../../_components/QueryBoundary";
+import { GroupCampaignDetail } from "../../_components/group-detail";
 import { howItWorks, missionLine, ruleLines } from "../../_components/campaigns";
 import { useRequireAuth } from "../../_lib/auth";
 
@@ -82,6 +83,10 @@ export default function CampaignDetailPage() {
       {!isAuthenticated ? null : (
         <QueryBoundary query={campaign}>
           {(c) => {
+            // Group campaigns get a dedicated, prototype-matching layout
+            // (striped hero, info grid, group rules, "Create Group" CTA).
+            if (c.campaign_type === "group") return <GroupCampaignDetail campaign={c} />;
+
             const p = c.my_progress;
             const target = p?.target_count ?? c.rule.required_count ?? 0;
             const pct =

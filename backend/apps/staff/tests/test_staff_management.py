@@ -11,10 +11,10 @@ from django.contrib.auth.hashers import check_password
 
 from apps.accounts.models import User
 from apps.businesses.models import Business, StaffInvite
-from apps.loyalty.models import (
-    CustomerRewardProgress,
-    RewardProgram,
-    RewardRedemption,
+from apps.campaigns.models import (
+    Campaign,
+    CampaignReward,
+    CampaignRewardVoucher,
 )
 from apps.qr.models import ScanLog
 from apps.staff.models import StaffMember
@@ -126,17 +126,17 @@ def test_list_stats_count_scans_redemptions_signups(api_client):
     ScanLog.objects.create(business=biz, staff=member, customer=c2, action="x", status=ScanLog.Status.SUCCESS)
     ScanLog.objects.create(business=biz, staff=member, customer=c1, action="x", status=ScanLog.Status.FAILED)
 
-    program = RewardProgram.objects.create(
-        business=biz, type=RewardProgram.Type.STAMP, title="R", description="d",
-        required_count=1, reward_description="p",
+    campaign = Campaign.objects.create(
+        business=biz, name="R", campaign_type=Campaign.CampaignType.INDIVIDUAL,
+        status=Campaign.Status.ACTIVE,
     )
-    progress = CustomerRewardProgress.objects.create(
-        customer=c1, business=biz, reward_program=program, current_count=1, target_count=1,
-        status=CustomerRewardProgress.Status.REDEEMED,
+    reward = CampaignReward.objects.create(
+        campaign=campaign, reward_type=CampaignReward.RewardType.FREE_ITEM, title="p",
     )
-    RewardRedemption.objects.create(
-        customer=c1, business=biz, reward_program=program, progress=progress,
-        code="ABC123", status=RewardRedemption.Status.REDEEMED, redeemed_by=member,
+    CampaignRewardVoucher.objects.create(
+        campaign=campaign, customer=c1, business=biz, reward=reward,
+        voucher_code="ABC123", status=CampaignRewardVoucher.Status.REDEEMED,
+        redeemed_by_staff=member,
     )
 
     login(api_client, owner)
@@ -163,10 +163,10 @@ def test_list_query_count_is_bounded(api_client, django_assert_num_queries):
         )
 
     login(api_client, owner)
-    # Members(+user join) + invites + 4 stat aggregates (scan, last-active,
-    # redemptions ×2, signups). Fixed count regardless of staff/invite volume —
-    # the key N+1 invariant: it does NOT grow with the number of rows.
-    with django_assert_num_queries(6):
+    # Members(+user join) + invites + stat aggregates (scan/last-active,
+    # campaign-voucher redemptions, signups). Fixed count regardless of
+    # staff/invite volume — the key N+1 invariant: it does NOT grow with rows.
+    with django_assert_num_queries(5):
         resp = api_client.get("/api/business/staff/")
     assert resp.status_code == 200
     assert len(resp.data["data"]["members"]) == 8

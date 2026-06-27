@@ -8,6 +8,7 @@ and never reach into a sibling module's internals.
 from apps.campaigns.services.analytics import (
     CampaignAnalyticsService,
     CampaignMetrics,
+    CampaignTypeStats,
 )
 from apps.campaigns.services.campaign import (
     CampaignService,
@@ -59,4 +60,5 @@ __all__ = [
     "GroupConfirmResult",
     "CampaignAnalyticsService",
     "CampaignMetrics",
+    "CampaignTypeStats",
 ]

@@ -66,8 +66,15 @@ def make_campaign(
     business: Business,
     *,
     status: str = Campaign.Status.ACTIVE,
-    campaign_type: str = Campaign.CampaignType.VISIT,
+    campaign_type: str = Campaign.CampaignType.INDIVIDUAL,
+    mechanic: str | None = CampaignRule.Mechanic.VISIT,
     required_count: int = 1,
+    required_spend=None,
+    min_spend=None,
+    max_banked: int | None = None,
+    required_group_size: int | None = None,
+    group_checkin_window_minutes: int | None = None,
+    instagram_handle: str | None = None,
     completion_limit: str = Campaign.CompletionLimit.ONCE,
     auto_join: bool = True,
     allow_multiple: bool = False,
@@ -83,8 +90,11 @@ def make_campaign(
 ) -> Campaign:
     """Build a campaign with a rule (and optionally a reward) wired up.
 
-    Defaults to an ACTIVE visit campaign requiring one visit with auto-join on,
-    an all-day/every-day window, and a free-item reward.
+    Defaults to an ACTIVE INDIVIDUAL visit campaign requiring one visit with
+    auto-join on, an all-day/every-day window, and a free-item reward. Pass
+    ``mechanic`` (VISIT/STAMP/SPEND), ``required_spend``/``min_spend``/
+    ``max_banked``, ``required_group_size`` (GROUP), or ``instagram_handle``
+    (SOCIAL) to build the other shapes.
     """
     campaign = Campaign.objects.create(
         business=business,
@@ -101,11 +111,23 @@ def make_campaign(
         allow_multiple_campaign_counting=allow_multiple,
         max_rewards=max_rewards,
         max_participants=max_participants,
+        instagram_handle=instagram_handle,
+    )
+    rule_type = (
+        CampaignRule.RuleType.GROUP_CHECKIN
+        if campaign_type == Campaign.CampaignType.GROUP
+        else CampaignRule.RuleType.VISIT_COUNT
     )
     CampaignRule.objects.create(
         campaign=campaign,
-        rule_type=CampaignRule.RuleType.VISIT_COUNT,
+        rule_type=rule_type,
+        mechanic=mechanic if campaign_type == Campaign.CampaignType.INDIVIDUAL else None,
         required_count=required_count,
+        required_spend=required_spend,
+        min_spend=min_spend,
+        max_banked=max_banked,
+        required_group_size=required_group_size,
+        group_checkin_window_minutes=group_checkin_window_minutes,
         minimum_time_between_actions=minimum_gap,
         max_count_per_day=max_count_per_day,
     )

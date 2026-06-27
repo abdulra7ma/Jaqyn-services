@@ -36,6 +36,23 @@ def expire_campaign_vouchers(self) -> int:
     retry_backoff=True,
     time_limit=TASK_TIME_LIMIT_SECONDS,
 )
+def expire_old_groups(self) -> int:
+    """Expire FORMING/FULL groups past their check-in window (hourly).
+
+    Replaces the deleted ``apps.qr.tasks.expire_old_groups`` /
+    ``groups.services.expire_old_groups``. Returns the count expired.
+    """
+    from apps.campaigns.services import CampaignGroupService
+
+    return CampaignGroupService.expire_old_groups()
+
+
+@shared_task(
+    bind=True,
+    max_retries=TASK_MAX_RETRIES,
+    retry_backoff=True,
+    time_limit=TASK_TIME_LIMIT_SECONDS,
+)
 def transition_campaign_lifecycle(self) -> dict[str, int]:
     """Advance scheduled→active and active→ended by clock (every ~15 min).
 

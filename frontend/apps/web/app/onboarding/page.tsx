@@ -1,11 +1,11 @@
 "use client";
 
-import { useRewards, useUpdateProfile } from "@jaqyn/api";
+import { useUpdateProfile } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Button } from "@jaqyn/ui";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { GiftIcon, PinIcon, ScanIcon, UserIcon, UsersIcon } from "../_components/icons";
 
 type SlideKey = "welcome" | "show_qr" | "track" | "discover" | "groups" | "done";
@@ -77,18 +77,6 @@ function OnboardingFlow() {
   const isLast = i === SLIDE_DEFS.length - 1;
   const def = SLIDE_DEFS[i]!;
 
-  // Poll rewards to auto-tick the "collect first stamp" task on the last slide.
-  const rewards = useRewards({ refetchInterval: 3000 });
-  const hasStamp = (rewards.data ?? []).some((p) => p.current_count > 0);
-
-  // Auto-finish once the stamp is earned (only if we're on the last slide already).
-  useEffect(() => {
-    if (hasStamp && isLast) {
-      finish();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasStamp, isLast]);
-
   // Mark the tour seen, then send the user where they were headed.
   const finish = () =>
     updateProfile.mutate(
@@ -151,21 +139,17 @@ function OnboardingFlow() {
             <div className="mt-6 w-full rounded-2xl border border-line bg-card px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
-                  <span className={`text-lg ${hasStamp ? "text-brand" : "text-subtle"}`}>
-                    {hasStamp ? "✓" : "○"}
-                  </span>
+                  <span className="text-lg text-subtle">○</span>
                   <span className="text-sm font-semibold text-ink">
                     {t("onboarding.taskCollectStamp")}
                   </span>
                 </div>
-                {!hasStamp && (
-                  <Link
-                    href="/collect"
-                    className="rounded-pill bg-brand-gradient px-3 py-1.5 text-xs font-bold text-brand-fg shadow-glow"
-                  >
-                    {t("collect.title")}
-                  </Link>
-                )}
+                <Link
+                  href="/collect"
+                  className="rounded-pill bg-brand-gradient px-3 py-1.5 text-xs font-bold text-brand-fg shadow-glow"
+                >
+                  {t("collect.title")}
+                </Link>
               </div>
             </div>
           )}

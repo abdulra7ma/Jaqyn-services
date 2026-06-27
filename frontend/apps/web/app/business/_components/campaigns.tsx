@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  BusinessCampaignMechanic,
   BusinessCampaignStatus,
   BusinessCampaignType,
   CampaignPayload,
@@ -9,12 +10,10 @@ import type {
 import { useT } from "@jaqyn/i18n";
 import { Badge } from "@jaqyn/ui";
 
-// Shared business-campaign vocabulary for the OwnerShell screens (list / wizard /
-// detail), lifted from "Jaqyn Campaign Rewards.dc.html" BUSINESS section. Primitives
-// compose from @jaqyn/ui; copy goes through @jaqyn/i18n. Tokens from the Tailwind
-// preset — no new hex.
-
-type Translate = ReturnType<typeof useT>;
+// Shared business-campaign vocabulary for the OwnerShell screens (list / create /
+// detail). Primitives compose from @jaqyn/ui; copy goes through @jaqyn/i18n. Tokens
+// from the Tailwind preset — no new hex. Campaigns-restructure design §5/§6/§6a:
+// type discriminator is individual/group/social with an Individual mechanic.
 
 /** Campaign status → Badge tone (design status pills). */
 export const STATUS_TONE: Record<
@@ -39,15 +38,28 @@ export const VOUCHER_TONE: Record<CampaignVoucherStatus, "ok" | "neutral" | "dan
 
 /** Glyph emoji for a campaign type, used when a campaign has no image (design). */
 export const TYPE_GLYPH: Record<BusinessCampaignType, string> = {
-  visit: "🔁",
-  timewindow: "🕒",
+  individual: "🔁",
   group: "👥",
+  social: "✦",
 };
+
+/** The three campaign types, in the order the chooser renders them. */
+export const CAMPAIGN_TYPES: BusinessCampaignType[] = ["individual", "group", "social"];
 
 /** Status pill matching the desktop table cells. */
 export function StatusPill({ status }: { status: BusinessCampaignStatus }) {
   const t = useT();
   return <Badge tone={STATUS_TONE[status]}>{t(`cmp.status.${status}`)}</Badge>;
+}
+
+/** Type badge (campaigns-restructure design §5 — type badge on each card). */
+export function TypeBadge({ type }: { type: BusinessCampaignType }) {
+  const t = useT();
+  return (
+    <Badge tone="brand">
+      {TYPE_GLYPH[type]} {t(`cmp.biz.type.${type}`)}
+    </Badge>
+  );
 }
 
 /** Voucher-status pill. */
@@ -56,7 +68,7 @@ export function VoucherStatusPill({ status }: { status: CampaignVoucherStatus })
   return <Badge tone={VOUCHER_TONE[status]}>{t(`cmp.biz.vouch.status.${status}`)}</Badge>;
 }
 
-/** A KPI card (design `bSummary`): label, big value, optional sub line. */
+/** A KPI card (design `bSummary`): label, big value. */
 export function KpiCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[18px] border border-line bg-card p-[18px]">
@@ -68,83 +80,74 @@ export function KpiCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** One-line "challenge" summary for a campaign type (design `ruleSummary`). */
-export function ruleSummary(t: Translate, type: BusinessCampaignType, rule: CampaignPayload): string {
-  if (type === "group") {
-    return t("cmp.mission.group").replace("{size}", String(rule.required_group_size ?? 0));
-  }
-  if (type === "timewindow") {
-    return t("cmp.mission.timewindow")
-      .replace("{count}", String(rule.required_count ?? 0))
-      .replace("{time}", rule.window_before_time ?? "");
-  }
-  return t("cmp.mission.visit").replace("{count}", String(rule.required_count ?? 0));
-}
+// ---- Create flow (campaigns-restructure design §6 / §6a) -------------------
 
-// ---- Wizard ----------------------------------------------------------------
-
-export const WIZARD_STEPS = ["type", "rules", "reward", "limits", "review"] as const;
-export type WizardStep = (typeof WIZARD_STEPS)[number];
-
-export const CAMPAIGN_TYPES: BusinessCampaignType[] = ["visit", "timewindow", "group"];
-
-// Reward types mirror CampaignReward.reward_type on the backend (plan §1.1).
-export const REWARD_TYPES = ["free_item", "discount", "upgrade", "custom"] as const;
-export type RewardType = (typeof REWARD_TYPES)[number];
-
-// Wizard form shape — a superset of CampaignPayload kept as plain strings for the
-// inputs. Coerced to a CampaignPayload by toPayload() at submit (the boundary).
-export type WizardForm = {
+// A starter template prefills type + mechanic + sensible defaults (editable in
+// step 2). Config-only — a typed constant, never DB rows (design §6a Change 2).
+export type CampaignTemplate = {
+  id: string;
+  labelKey: string;
   type: BusinessCampaignType;
+  mechanic?: BusinessCampaignMechanic;
+  // Field prefills applied to the create form.
+  requiredCount?: number;
+  requiredSpend?: string;
+  groupSize?: number;
+};
+
+export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
+  { id: "visit5", labelKey: "cmp.biz.new.tpl.visit5", type: "individual", mechanic: "visit", requiredCount: 5 },
+  { id: "friends3", labelKey: "cmp.biz.new.tpl.friends3", type: "group", groupSize: 3 },
+  { id: "spend1000", labelKey: "cmp.biz.new.tpl.spend1000", type: "individual", mechanic: "spend", requiredSpend: "1000" },
+  { id: "story", labelKey: "cmp.biz.new.tpl.story", type: "social" },
+];
+
+// The single adaptive create form, kept as plain strings for the inputs. Coerced
+// into a CampaignPayload by toPayload() at submit (the validated boundary).
+export type CampaignForm = {
+  type: BusinessCampaignType;
+  mechanic: BusinessCampaignMechanic;
   name: string;
-  description: string;
-  // rules
-  visits: string;
-  perDay: string;
-  minGap: string;
-  windowBefore: string;
+  // individual
+  requiredCount: string;
+  requiredSpend: string;
+  // group
   groupSize: string;
-  checkin: string;
-  start: string;
-  end: string;
-  days: string;
-  hours: string;
+  checkinWindow: string;
+  // social
+  instagram: string;
   // reward
-  rewardType: RewardType;
   rewardTitle: string;
-  rewardDescription: string;
-  expiryDays: string;
-  maxRewards: string;
   // limits
   maxParticipants: string;
-  repeatPolicy: "once" | "repeatable";
-  staffApproval: boolean;
+  repeatable: boolean;
 };
 
-// Defaults mirror the design's wizDefault() (Jaqyn Campaign Rewards.dc.html).
-export const WIZARD_DEFAULT: WizardForm = {
-  type: "visit",
+export const CAMPAIGN_FORM_DEFAULT: CampaignForm = {
+  type: "individual",
+  mechanic: "visit",
   name: "",
-  description: "",
-  visits: "3",
-  perDay: "1",
-  minGap: "4 hours",
-  windowBefore: "",
-  groupSize: "4",
-  checkin: "15 min",
-  start: "",
-  end: "",
-  days: "Mon–Fri",
-  hours: "08:00 – 12:00",
-  rewardType: "free_item",
+  requiredCount: "5",
+  requiredSpend: "1000",
+  groupSize: "3",
+  checkinWindow: "15",
+  instagram: "",
   rewardTitle: "",
-  rewardDescription: "",
-  expiryDays: "7", // default voucher window, design wizDefault.expiryDays
-  maxRewards: "200",
   maxParticipants: "1000",
-  repeatPolicy: "once",
-  staffApproval: true,
+  repeatable: false,
 };
+
+/** Apply a starter template's prefills onto the default form (design §6a). */
+export function applyTemplate(tpl: CampaignTemplate): CampaignForm {
+  return {
+    ...CAMPAIGN_FORM_DEFAULT,
+    type: tpl.type,
+    mechanic: tpl.mechanic ?? "visit",
+    requiredCount: tpl.requiredCount != null ? String(tpl.requiredCount) : CAMPAIGN_FORM_DEFAULT.requiredCount,
+    requiredSpend: tpl.requiredSpend ?? CAMPAIGN_FORM_DEFAULT.requiredSpend,
+    groupSize: tpl.groupSize != null ? String(tpl.groupSize) : CAMPAIGN_FORM_DEFAULT.groupSize,
+  };
+}
 
 const num = (v: string): number | null => {
   const n = Number.parseInt(v, 10);
@@ -152,106 +155,41 @@ const num = (v: string): number | null => {
 };
 
 /**
- * Coerce the string-backed wizard form into the typed CampaignPayload sent to the
- * service. This is the validated boundary (the codebase's adapter idiom in place of
- * zod); past here the payload is trusted. Rule fields irrelevant to the chosen type
- * are omitted so the backend doesn't receive stray values.
+ * Coerce the string-backed create form into the typed CampaignPayload sent to the
+ * service (the codebase's adapter idiom in place of zod). Only the fields the
+ * chosen type/mechanic uses are sent so the backend never receives stray values.
  */
-// The wizard collects schedule/constraint values as free text; these helpers
-// parse them best-effort into the structured shapes the backend accepts
-// (CampaignWriteSerializer). Unparseable input yields undefined/null so we never
-// POST garbage — the field is simply omitted rather than dropped silently.
-const DAY_IDX: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
-function parseDays(s: string): number[] | undefined {
-  const t = s.trim().toLowerCase().replace(/[–—]/g, "-");
-  if (!t) return undefined;
-  const idx = (d: string): number | undefined => DAY_IDX[d.trim().slice(0, 3)];
-  if (t.includes("-")) {
-    const [a, b] = t.split("-").map((x) => idx(x));
-    if (a == null || b == null) return undefined;
-    const out: number[] = [];
-    for (let i = a; i <= b; i++) out.push(i);
-    return out.length ? out : undefined;
-  }
-  const days = t
-    .split(",")
-    .map((x) => idx(x))
-    .filter((n): n is number => n != null);
-  return days.length ? days : undefined;
-}
-function parseHours(s: string): { start?: string; end?: string } {
-  const m = s
-    .trim()
-    .replace(/[–—]/g, "-")
-    .match(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/);
-  return m ? { start: m[1], end: m[2] } : {};
-}
-// "4 hours" / "30 min" → ISO 8601 duration ("PT4H" / "PT30M"); empty → null.
-function parseDuration(s: string): string | null {
-  const m = s.trim().toLowerCase().match(/(\d+)\s*(h|m)/);
-  if (!m) return null;
-  return m[2] === "h" ? `PT${m[1]}H` : `PT${m[1]}M`;
-}
-function parseMinutes(s: string): number | null {
-  const m = s.trim().match(/(\d+)/);
-  return m && m[1] ? parseInt(m[1], 10) : null;
-}
-
-export function toPayload(form: WizardForm): CampaignPayload {
+export function toPayload(form: CampaignForm): CampaignPayload {
   const base: CampaignPayload = {
     type: form.type,
     name: form.name.trim(),
-    description: form.description.trim() || undefined,
-    start_at: form.start.trim() || undefined,
-    end_at: form.end.trim() || undefined,
-    active_days: parseDays(form.days),
-    reward_type: form.rewardType,
     reward_title: form.rewardTitle.trim(),
-    reward_description: form.rewardDescription.trim() || undefined,
-    expiry_days_after_unlock: num(form.expiryDays) ?? undefined,
-    max_rewards: num(form.maxRewards),
     max_participants: num(form.maxParticipants),
-    repeat_policy: form.repeatPolicy,
+    repeat_policy: form.repeatable ? "repeatable" : "once",
   };
-  const hours = parseHours(form.hours);
-  if (hours.start) base.active_start_time = hours.start;
-  if (hours.end) base.active_end_time = hours.end;
   if (form.type === "group") {
     base.required_group_size = num(form.groupSize);
-    base.group_checkin_window_minutes = parseMinutes(form.checkin);
-  } else {
-    base.required_count = num(form.visits);
-    base.max_count_per_day = num(form.perDay);
-    base.minimum_time_between_actions = parseDuration(form.minGap);
-    if (form.type === "timewindow") base.window_before_time = form.windowBefore.trim() || null;
+    base.group_checkin_window_minutes = num(form.checkinWindow);
+  } else if (form.type === "individual") {
+    base.mechanic = form.mechanic;
+    if (form.mechanic === "spend") {
+      base.required_spend = form.requiredSpend.trim() || null;
+    } else {
+      base.required_count = num(form.requiredCount);
+    }
+  } else if (form.type === "social") {
+    base.instagram_handle = form.instagram.trim() || null;
   }
   return base;
 }
 
 /**
- * Client-side publish validation mirroring the backend publish rules (plan §23):
- * a name, a reward title, a positive reward cap, a valid completion target for the
- * type, and an end after start. The service is the authority — this is UX-only and
- * returns the first failing i18n key (or null when valid). Pure & framework-free so
- * it is unit-testable.
+ * Client-side create validation mirroring the backend publish rules (UX-only; the
+ * service is the authority). Returns the first failing i18n key, or null when valid.
+ * Pure & framework-free so it is unit-testable.
  */
-export function publishError(form: WizardForm): string | null {
-  if (!form.name.trim()) return "cmp.biz.wiz.invalid.name";
-  if (form.type === "group") {
-    const size = num(form.groupSize);
-    if (size == null || size < 2) return "cmp.biz.wiz.invalid.groupSize";
-  } else {
-    const count = num(form.visits);
-    if (count == null || count < 1) return "cmp.biz.wiz.invalid.count";
-  }
-  if (!form.rewardTitle.trim()) return "cmp.biz.wiz.invalid.reward";
-  const max = num(form.maxRewards);
-  if (max == null || max < 1) return "cmp.biz.wiz.invalid.maxRewards";
-  // Dates are free-text in the design; only enforce ordering when both parse.
-  const startT = Date.parse(form.start);
-  const endT = Date.parse(form.end);
-  if (!Number.isNaN(startT) && !Number.isNaN(endT) && endT <= startT) {
-    return "cmp.biz.wiz.invalid.dates";
-  }
+export function createError(form: CampaignForm): string | null {
+  if (!form.name.trim()) return "cmp.biz.form.invalid.name";
+  if (!form.rewardTitle.trim()) return "cmp.biz.form.invalid.reward";
   return null;
 }

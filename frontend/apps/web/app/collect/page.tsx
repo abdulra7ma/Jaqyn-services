@@ -1,11 +1,11 @@
 "use client";
 
-import { useMe, useMyQr, useRewards } from "@jaqyn/api";
+import { useMe, useMyQr } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Card } from "@jaqyn/ui";
 import { CustomerShell } from "../_components/CustomerShell";
 import { QueryBoundary } from "../_components/QueryBoundary";
-import { InitialTile, StampRow, UserAvatar } from "../_components/kit";
+import { InitialTile, UserAvatar } from "../_components/kit";
 import { useRequireAuth } from "../_lib/auth";
 
 export default function CollectPage() {
@@ -13,7 +13,6 @@ export default function CollectPage() {
   const { isAuthenticated } = useRequireAuth();
   const me = useMe(isAuthenticated);
   const qr = useMyQr(isAuthenticated);
-  const rewards = useRewards({ refetchInterval: 3000 });
 
   return (
     <CustomerShell title={t("collect.title")} hideChromeTitle back="/">
@@ -45,39 +44,6 @@ export default function CollectPage() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={data.png} alt="my QR" className="h-56 w-56" />
               </Card>
-            )}
-          </QueryBoundary>
-
-          {/* live progress strip */}
-          <QueryBoundary query={rewards} isEmpty={(r) => r.filter((p) => p.status === "active").length === 0}>
-            {(list) => (
-              <div className="w-full max-w-sm space-y-3">
-                {list
-                  .filter((p) => p.status === "active")
-                  .map((p) => {
-                    const target = p.target_count ?? p.reward_program.required_count ?? 0;
-                    return (
-                      <div
-                        key={p.id}
-                        className="rounded-2xl border border-line bg-card px-4 py-3 shadow-card"
-                      >
-                        <div className="mb-2 flex items-center justify-between">
-                          <p className="text-sm font-semibold text-ink">
-                            {p.business.name || p.reward_program.title}
-                          </p>
-                          {target > 0 && (
-                            <span className="text-xs text-subtle">
-                              {t("collect.progress")
-                                .replace("{count}", String(p.current_count))
-                                .replace("{total}", String(target))}
-                            </span>
-                          )}
-                        </div>
-                        {target > 0 && <StampRow current={p.current_count} target={target} />}
-                      </div>
-                    );
-                  })}
-              </div>
             )}
           </QueryBoundary>
         </div>

@@ -82,10 +82,9 @@ def test_campaign_list_happy_path_and_query_count(django_assert_num_queries):
         make_campaign(business)
     client = owner_client(business)
     # The count is fixed regardless of how many campaigns exist — the service
-    # select_related's rule/reward so the page does not grow a query per row
-    # (that is the N+1 gate). Auth (user), owned_business, count, the page
-    # query, and the single KPI-summary aggregate make up the constant total.
-    with django_assert_num_queries(8):
+    # select_related's rule/reward/business so the annotated page does not grow a
+    # query per row (that is the N+1 gate).
+    with django_assert_num_queries(5):
         response = client.get("/api/business/campaigns/")
     assert response.status_code == 200
     assert response.data["data"]["count"] == 3
@@ -106,7 +105,7 @@ def test_campaign_create_happy_path():
     client = owner_client(business)
     payload = {
         "name": "Coffee streak",
-        "campaign_type": Campaign.CampaignType.VISIT,
+        "campaign_type": Campaign.CampaignType.INDIVIDUAL,
         "active_days": [],
         "rule": {"rule_type": "visit_count", "required_count": 5},
         "reward": {"reward_type": "free_item", "title": "Free latte"},
@@ -134,7 +133,20 @@ def test_campaign_detail_and_edit():
 
     detail = client.get(f"/api/business/campaigns/{campaign.id}/")
     assert detail.status_code == 200
-    assert detail.data["data"]["id"] == str(campaign.id)
+    # Detail is now a tabbed payload (design §5).
+    data = detail.data["data"]
+    assert set(data.keys()) == {
+        "overview",
+        "settings",
+        "participants",
+        "reward_usage",
+        "groups",
+        "analytics",
+    }
+    assert data["overview"]["id"] == str(campaign.id)
+    # Non-group campaign → empty groups tab.
+    assert data["groups"] == []
+    assert "type_stats" in data["analytics"]
 
     edit = client.put(
         f"/api/business/campaigns/{campaign.id}/",
@@ -583,17 +595,17 @@ def test_list_my_progress_no_n_plus_one(django_assert_num_queries):
 def test_list_filter_by_type():
     """?type= narrows the list to one campaign_type; unknown values are ignored."""
     business = make_business()
-    make_campaign(business, campaign_type=Campaign.CampaignType.VISIT)
-    make_campaign(business, campaign_type=Campaign.CampaignType.TIME_WINDOW)
+    make_campaign(business, campaign_type=Campaign.CampaignType.INDIVIDUAL)
+    make_campaign(business, campaign_type=Campaign.CampaignType.SOCIAL)
     make_campaign(business, campaign_type=Campaign.CampaignType.GROUP)
     client = customer_client(make_customer())
 
-    visit = client.get("/api/customer/campaigns/?type=visit")
-    assert visit.data["data"]["count"] == 1
-    assert visit.data["data"]["results"][0]["campaign_type"] == "visit"
+    individual = client.get("/api/customer/campaigns/?type=individual")
+    assert individual.data["data"]["count"] == 1
+    assert individual.data["data"]["results"][0]["campaign_type"] == "individual"
 
-    tw = client.get("/api/customer/campaigns/?type=time_window")
-    assert tw.data["data"]["count"] == 1
+    social = client.get("/api/customer/campaigns/?type=social")
+    assert social.data["data"]["count"] == 1
 
     group = client.get("/api/customer/campaigns/?type=group")
     assert group.data["data"]["count"] == 1

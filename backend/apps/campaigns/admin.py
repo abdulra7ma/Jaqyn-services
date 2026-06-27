@@ -8,8 +8,8 @@ from apps.campaigns.models import (
     CampaignReward,
     CampaignRewardVoucher,
     CampaignRule,
-    GroupSession,
-    GroupSessionMember,
+    Group,
+    GroupMember,
 )
 
 
@@ -61,17 +61,17 @@ class CampaignRewardVoucherAdmin(ModelAdmin):
     list_select_related = ("customer", "campaign")
 
 
-@admin.register(GroupSession)
-class GroupSessionAdmin(ModelAdmin):
+@admin.register(Group)
+class GroupAdmin(ModelAdmin):
     list_display = ("invite_token", "campaign", "group_leader", "status", "required_size", "expires_at")
     list_filter = ("status",)
     search_fields = ("invite_token", "campaign__name", "group_leader__phone")
     list_select_related = ("campaign", "group_leader")
 
 
-@admin.register(GroupSessionMember)
-class GroupSessionMemberAdmin(ModelAdmin):
-    list_display = ("customer", "group_session", "status", "joined_at", "checked_in_at")
+@admin.register(GroupMember)
+class GroupMemberAdmin(ModelAdmin):
+    list_display = ("customer", "group", "status", "joined_at", "checked_in_at")
     list_filter = ("status",)
     search_fields = ("customer__phone",)
-    list_select_related = ("customer", "group_session")
+    list_select_related = ("customer", "group")

@@ -5,6 +5,7 @@ import { API_URL, api } from "../client";
 import { tokenStore } from "../tokens";
 import {
   adaptBusinessCampaign,
+  adaptCampaignDetailTabs,
   adaptCampaignList,
   adaptParticipant,
   adaptSocialPost,
@@ -15,12 +16,13 @@ import type {
   ActivateResponse,
   ApprovalCode,
   BusinessCampaign,
+  BusinessCampaignListParams,
   BusinessCampaignListResponse,
-  BusinessGroupDeal,
   BusinessProfile,
   BusinessRegisterPayload,
   BusinessReport,
   BusinessType,
+  CampaignDetailTabs,
   CampaignLifecycleAction,
   CampaignParticipantRow,
   CampaignPayload,
@@ -30,8 +32,6 @@ import type {
   CatalogItemPayload,
   Dashboard,
   GalleryImage,
-  GroupOfferFull,
-  GroupOfferPayload,
   InviteValidation,
   MaskedCustomer,
   MerchantQr,
@@ -39,8 +39,6 @@ import type {
   OnboardingState,
   ReportPeriod,
   ReportRange,
-  RewardProgramFull,
-  RewardProgramPayload,
   StaffInvite,
   StaffInviteList,
   StaffInvitePayload,
@@ -51,6 +49,15 @@ import type {
 } from "./types";
 
 type Paginated<T> = { results: T[] };
+
+function queryString(params?: Record<string, unknown>): string {
+  const search = new URLSearchParams();
+  Object.entries(params ?? {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
+  });
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
 
 // Shared multipart upload for the brand/background images. The backend expects
 // the file under the `image` field and returns the owner business in the
@@ -86,32 +93,6 @@ export const businessApi = {
   qr: () => api.get<MerchantQr>("/api/business/qr/"),
   regenerateApprovalCode: () =>
     api.post<ApprovalCode>("/api/business/approval-code/regenerate/"),
-
-  listRewards: () =>
-    api.get<Paginated<RewardProgramFull>>("/api/business/rewards/").then((d) => d.results),
-  createReward: (payload: RewardProgramPayload) =>
-    api.post<RewardProgramFull>("/api/business/rewards/", payload),
-  getReward: (id: string) => api.get<RewardProgramFull>(`/api/business/rewards/${id}/`),
-  updateReward: (id: string, patch: Partial<RewardProgramPayload>) =>
-    api.patch<RewardProgramFull>(`/api/business/rewards/${id}/`, patch),
-  pauseReward: (id: string) => api.post<RewardProgramFull>(`/api/business/rewards/${id}/pause/`),
-  activateReward: (id: string) =>
-    api.post<RewardProgramFull>(`/api/business/rewards/${id}/activate/`),
-
-  listOffers: () =>
-    api.get<Paginated<GroupOfferFull>>("/api/business/group-offers/").then((d) => d.results),
-  listGroupDeals: () =>
-    api.get<Paginated<BusinessGroupDeal>>("/api/business/group-deals/").then((d) => d.results),
-  createOffer: (payload: GroupOfferPayload) =>
-    api.post<GroupOfferFull>("/api/business/group-offers/", payload),
-  updateOffer: (id: string, patch: Partial<GroupOfferPayload>) =>
-    api.patch<GroupOfferFull>(`/api/business/group-offers/${id}/`, patch),
-  submitOffer: (id: string) =>
-    api.post<GroupOfferFull>(`/api/business/group-offers/${id}/submit-for-approval/`),
-  deleteOffer: (id: string) => api.delete<unknown>(`/api/business/group-offers/${id}/`),
-  pauseOffer: (id: string) => api.post<GroupOfferFull>(`/api/business/group-offers/${id}/pause/`),
-  activateOffer: (id: string) =>
-    api.post<GroupOfferFull>(`/api/business/group-offers/${id}/activate/`),
 
   reports: (period: ReportPeriod = "month", range?: ReportRange) => {
     const params = new URLSearchParams({ period });
@@ -214,10 +195,14 @@ export const businessApi = {
   removeStaffMember: (id: string) => api.delete<unknown>(`/api/business/staff/${id}/`),
 
   // ---- campaigns (apps.campaigns — plan §1.3) ----
-  listCampaigns: (): Promise<BusinessCampaignListResponse> =>
-    api.get<any>("/api/business/campaigns/").then(adaptCampaignList),
-  getCampaign: (id: string): Promise<BusinessCampaign> =>
-    api.get<any>(`/api/business/campaigns/${id}/`).then(adaptBusinessCampaign),
+  // List supports ?type=individual|group|social & ?status=active|draft|completed
+  // (campaigns-restructure design §5).
+  listCampaigns: (params?: BusinessCampaignListParams): Promise<BusinessCampaignListResponse> =>
+    api.get<any>(`/api/business/campaigns/${queryString(params)}`).then(adaptCampaignList),
+  // Detail returns the tabbed payload (overview/settings/participants/reward_usage/
+  // groups/analytics) — campaigns-restructure design §5.
+  getCampaign: (id: string): Promise<CampaignDetailTabs> =>
+    api.get<any>(`/api/business/campaigns/${id}/`).then(adaptCampaignDetailTabs),
   createCampaign: (payload: CampaignPayload): Promise<BusinessCampaign> =>
     api
       .post<any>("/api/business/campaigns/", toCampaignWritePayload(payload))

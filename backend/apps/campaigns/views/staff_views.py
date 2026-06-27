@@ -15,8 +15,10 @@ from rest_framework.views import APIView
 from apps.campaigns.serializers import (
     CampaignRewardVoucherSerializer,
     ConfirmGroupSerializer,
+    ConfirmSocialSerializer,
     CustomerScanResultSerializer,
     GroupConfirmResultSerializer,
+    ProgressResultSerializer,
     ScanCustomerSerializer,
     ScanDispatchSerializer,
     ScanVoucherSerializer,
@@ -24,7 +26,7 @@ from apps.campaigns.serializers import (
     UnifiedScanResultSerializer,
 )
 from apps.campaigns.services import StaffScannerService
-from apps.loyalty.services import get_staff_for_user
+from apps.staff.services import get_staff_for_user
 from core.permissions import IsStaff
 from core.response import success_response
 
@@ -158,4 +160,30 @@ class ConfirmGroupView(_StaffScanView):
         )
         return success_response(
             GroupConfirmResultSerializer(result, context={"request": request}).data
+        )
+
+
+class ConfirmSocialView(_StaffScanView):
+    """Confirm staff-verified social proof for a SOCIAL campaign (design §5/§7).
+
+    Parses the customer token + target ``campaign_id``, calls
+    ``StaffScannerService.confirm_social`` (resolve customer → complete the SOCIAL
+    campaign → mint the voucher), and returns the ``ProgressResult`` shape with the
+    minted voucher.
+    """
+
+    serializer_class = ConfirmSocialSerializer
+
+    def post(self, request):
+        serializer = ConfirmSocialSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        staff = get_staff_for_user(request.user)
+        result = StaffScannerService.confirm_social(
+            staff,
+            serializer.validated_data["token"],
+            campaign_id=serializer.validated_data["campaign_id"],
+            request=request,
+        )
+        return success_response(
+            ProgressResultSerializer(result, context={"request": request}).data
         )

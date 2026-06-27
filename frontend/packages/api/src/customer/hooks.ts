@@ -2,28 +2,31 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customerApi } from "./api";
-import type { CampaignListParams, NearbyParams, ProfilePatch, RequestEmailOtpPayload } from "./types";
+import type {
+  CampaignFeedFilter,
+  CampaignListParams,
+  NearbyParams,
+  ProfilePatch,
+  RequestEmailOtpPayload,
+  StartGroupSessionInput,
+} from "./types";
 
 export const qk = {
   me: ["me"] as const,
   myQr: ["my-qr"] as const,
-  rewards: ["rewards"] as const,
-  reward: (id: string) => ["rewards", id] as const,
-  wallet: ["wallet"] as const,
-  businessRewardCard: (businessId: string) => ["business-reward-card", businessId] as const,
-  groupOffers: ["group-offers"] as const,
-  groupOffer: (id: string) => ["group-offers", id] as const,
-  group: (token: string) => ["group", token] as const,
-  myGroups: ["my-groups"] as const,
   nearby: (params?: NearbyParams) => ["nearby", params ?? {}] as const,
   categories: ["categories"] as const,
   business: (id: string) => ["business", id] as const,
   qr: (token: string) => ["qr", token] as const,
   campaigns: (params?: CampaignListParams) => ["campaigns", params ?? {}] as const,
+  // The {followed, discover} feed, keyed by the discover filter so each filter
+  // caches independently (campaigns-restructure design §6).
+  campaignFeed: (filter?: CampaignFeedFilter) => ["campaign-feed", filter ?? "all"] as const,
   campaign: (id: string) => ["campaigns", id] as const,
   campaignWallet: ["campaign-wallet"] as const,
   campaignVoucher: (id: string) => ["campaign-vouchers", id] as const,
   groupSession: (id: string) => ["group-sessions", id] as const,
+  myGroups: ["my-groups-list"] as const,
 };
 
 // ---- queries ----
@@ -37,28 +40,6 @@ export const useMyQr = (enabled = true, opts?: { refetchInterval?: number }) =>
     enabled,
     refetchInterval: opts?.refetchInterval,
   });
-
-export const useRewards = (opts?: { refetchInterval?: number }) =>
-  useQuery({
-    queryKey: qk.rewards,
-    queryFn: () => customerApi.listRewards(),
-    refetchInterval: opts?.refetchInterval,
-  });
-
-export const useReward = (id: string) =>
-  useQuery({ queryKey: qk.reward(id), queryFn: () => customerApi.getReward(id), enabled: !!id });
-
-export const useGroupOffers = () =>
-  useQuery({ queryKey: qk.groupOffers, queryFn: () => customerApi.listGroupOffers() });
-
-export const useGroupOffer = (id: string) =>
-  useQuery({ queryKey: qk.groupOffer(id), queryFn: () => customerApi.getGroupOffer(id), enabled: !!id });
-
-export const useGroup = (token: string) =>
-  useQuery({ queryKey: qk.group(token), queryFn: () => customerApi.getGroup(token), enabled: !!token });
-
-export const useMyGroups = () =>
-  useQuery({ queryKey: qk.myGroups, queryFn: () => customerApi.listMyGroups() });
 
 export const useNearby = (params?: NearbyParams) =>
   useQuery({ queryKey: qk.nearby(params), queryFn: () => customerApi.listNearby(params) });
@@ -77,21 +58,6 @@ export const useBusiness = (id: string) =>
 export const useQrResolve = (token: string) =>
   useQuery({ queryKey: qk.qr(token), queryFn: () => customerApi.resolveQr(token), enabled: !!token });
 
-export const useWallet = (opts?: { refetchInterval?: number }) =>
-  useQuery({
-    queryKey: qk.wallet,
-    queryFn: () => customerApi.wallet(),
-    refetchInterval: opts?.refetchInterval,
-  });
-
-export const useBusinessRewardCard = (businessId: string, opts?: { refetchInterval?: number }) =>
-  useQuery({
-    queryKey: qk.businessRewardCard(businessId),
-    queryFn: () => customerApi.businessRewardCard(businessId),
-    enabled: !!businessId,
-    refetchInterval: opts?.refetchInterval,
-  });
-
 // ---- campaign queries ----
 // `params` filters the list server-side (?type / ?joined); it is folded into the
 // query key so each filter caches independently. Calling with no args keeps the
@@ -103,6 +69,18 @@ export const useCampaigns = (
   useQuery({
     queryKey: qk.campaigns(params),
     queryFn: () => customerApi.listCampaigns(params),
+    refetchInterval: opts?.refetchInterval,
+  });
+
+// The unified customer campaigns feed (campaigns-restructure design §6): the
+// "From places you go" (followed) row + the filterable "Discover more" list.
+export const useCampaignFeed = (
+  filter?: CampaignFeedFilter,
+  opts?: { refetchInterval?: number },
+) =>
+  useQuery({
+    queryKey: qk.campaignFeed(filter),
+    queryFn: () => customerApi.campaignFeed(filter),
     refetchInterval: opts?.refetchInterval,
   });
 
@@ -130,6 +108,26 @@ export const useCampaignVoucher = (id: string, opts?: { refetchInterval?: number
     refetchInterval: opts?.refetchInterval,
   });
 
+// Poll the live group session so demo-fill / real joins reflect without a manual
+// refetch (mirrors the detail page's live polling).
+export const useGroupSession = (id: string, opts?: { refetchInterval?: number }) =>
+  useQuery({
+    queryKey: qk.groupSession(id),
+    queryFn: () => customerApi.getGroupSession(id),
+    enabled: !!id,
+    refetchInterval: opts?.refetchInterval,
+  });
+
+// The customer's own groups. Used to (a) surface the "Your active group" feed
+// banner and (b) find an existing active group for a campaign so the group route
+// renders the forming view instead of the create form.
+export const useMyGroups = (opts?: { refetchInterval?: number }) =>
+  useQuery({
+    queryKey: qk.myGroups,
+    queryFn: () => customerApi.listMyGroups(),
+    refetchInterval: opts?.refetchInterval,
+  });
+
 // ---- campaign mutations ----
 export const useJoinCampaign = () => {
   const qc = useQueryClient();
@@ -137,8 +135,9 @@ export const useJoinCampaign = () => {
     mutationFn: (id: string) => customerApi.joinCampaign(id),
     onSuccess: (campaign) => {
       qc.setQueryData(qk.campaign(campaign.id), campaign);
-      // Prefix-match invalidates every filtered campaigns list at once.
+      // Prefix-match invalidates every filtered campaigns list + feed at once.
       qc.invalidateQueries({ queryKey: ["campaigns"] });
+      qc.invalidateQueries({ queryKey: ["campaign-feed"] });
     },
   });
 };
@@ -157,9 +156,11 @@ export const usePresentVoucher = () => {
 export const useStartGroupSession = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (campaignId: string) => customerApi.startGroupSession(campaignId),
+    mutationFn: (input: StartGroupSessionInput) => customerApi.startGroupSession(input),
     onSuccess: (session) => {
       qc.setQueryData(qk.groupSession(session.id), session);
+      // A new/updated group changes the my-groups list (feed banner + lookup).
+      qc.invalidateQueries({ queryKey: qk.myGroups });
     },
   });
 };
@@ -170,6 +171,29 @@ export const useInviteToGroupSession = () => {
     mutationFn: (id: string) => customerApi.inviteToGroupSession(id),
     onSuccess: (session) => {
       qc.setQueryData(qk.groupSession(session.id), session);
+    },
+  });
+};
+
+export const useLeaveGroupSession = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => customerApi.leaveGroupSession(id),
+    onSuccess: (_res, id) => {
+      qc.removeQueries({ queryKey: qk.groupSession(id) });
+      qc.invalidateQueries({ queryKey: qk.myGroups });
+    },
+  });
+};
+
+// DEV/testing aid: backend gates this on DEBUG and 403s in prod.
+export const useDemoFillGroup = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => customerApi.demoFillGroup(id),
+    onSuccess: (session) => {
+      qc.setQueryData(qk.groupSession(session.id), session);
+      qc.invalidateQueries({ queryKey: qk.myGroups });
     },
   });
 };
@@ -240,74 +264,3 @@ export const useUploadAvatar = () => {
   });
 };
 
-export const useCollect = (token: string) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (approvalCode: string) => customerApi.collect(token, approvalCode),
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.rewards }),
-  });
-};
-
-export const useGenerateRedemptionCode = (id: string) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => customerApi.generateRedemptionCode(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.reward(id) }),
-  });
-};
-
-export const usePresentRedemption = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => customerApi.presentRedemption(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.wallet });
-      qc.invalidateQueries({ queryKey: qk.me });
-    },
-  });
-};
-
-export const useCreateGroup = () =>
-  useMutation({
-    mutationFn: ({ offerId, visitTime }: { offerId: string; visitTime: string }) =>
-      customerApi.createGroup(offerId, visitTime),
-  });
-
-export const useJoinGroup = (token: string) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => customerApi.joinGroup(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.group(token) }),
-  });
-};
-
-export const useLeaveGroup = (token: string) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => customerApi.leaveGroup(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.group(token) });
-      qc.invalidateQueries({ queryKey: qk.myGroups });
-    },
-  });
-};
-
-export const useCancelGroup = (token: string) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => customerApi.cancelGroup(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.group(token) });
-      qc.invalidateQueries({ queryKey: qk.myGroups });
-    },
-  });
-};
-
-export const useCheckInGroup = (token: string) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, approvalCode }: { id: string; approvalCode?: string }) =>
-      customerApi.checkInGroup(id, approvalCode),
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.group(token) }),
-  });
-};

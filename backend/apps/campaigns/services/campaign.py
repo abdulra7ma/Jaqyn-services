@@ -173,9 +173,17 @@ class CampaignService:
     def _assert_publishable(campaign: Campaign) -> None:
         """Raise ``CAMPAIGN_NOT_PUBLISHABLE`` unless the campaign meets §23 rules.
 
-        Requires: a configured reward; a rule with ``required_count >= 1``; if
-        both dates are set, ``end_at`` strictly after ``start_at``; and, when set,
-        ``max_rewards >= 1``. The reason detail names the first failed rule.
+        Requires a configured reward and, when both dates are set, ``end_at``
+        strictly after ``start_at``, plus ``max_rewards >= 1`` when set. The rule
+        requirement is type-aware (campaigns-restructure design §3):
+
+        * INDIVIDUAL — a rule with ``required_count >= 1`` for VISIT/STAMP, or a
+          positive ``required_spend`` for SPEND.
+        * GROUP — a rule with ``required_group_size >= 2`` (a group needs members).
+        * SOCIAL — no completion-rule fields (completion is staff-verified proof);
+          only the reward is required.
+
+        The reason detail names the first failed rule.
         """
         reward = getattr(campaign, "reward", None)
         if reward is None:
@@ -185,12 +193,35 @@ class CampaignService:
                 status.HTTP_409_CONFLICT,
             )
         rule = getattr(campaign, "rule", None)
-        if rule is None or rule.required_count < 1:
-            raise JaqynAPIException(
-                "CAMPAIGN_NOT_PUBLISHABLE",
-                "A completion rule with a required count is needed",
-                status.HTTP_409_CONFLICT,
-            )
+        if campaign.campaign_type == Campaign.CampaignType.INDIVIDUAL:
+            mechanic = rule.mechanic if rule is not None else None
+            if rule is None:
+                raise JaqynAPIException(
+                    "CAMPAIGN_NOT_PUBLISHABLE",
+                    "A completion rule is needed",
+                    status.HTTP_409_CONFLICT,
+                )
+            if mechanic == CampaignRule.Mechanic.SPEND:
+                if not rule.required_spend or rule.required_spend <= 0:
+                    raise JaqynAPIException(
+                        "CAMPAIGN_NOT_PUBLISHABLE",
+                        "A positive required spend is needed",
+                        status.HTTP_409_CONFLICT,
+                    )
+            elif rule.required_count < 1:
+                raise JaqynAPIException(
+                    "CAMPAIGN_NOT_PUBLISHABLE",
+                    "A completion rule with a required count is needed",
+                    status.HTTP_409_CONFLICT,
+                )
+        elif campaign.campaign_type == Campaign.CampaignType.GROUP:
+            if rule is None or not rule.required_group_size or rule.required_group_size < 2:
+                raise JaqynAPIException(
+                    "CAMPAIGN_NOT_PUBLISHABLE",
+                    "A group size of at least two is needed",
+                    status.HTTP_409_CONFLICT,
+                )
+        # SOCIAL: no completion-rule fields required (staff-verified proof).
         if (
             campaign.start_at is not None
             and campaign.end_at is not None
@@ -324,14 +355,41 @@ class CampaignService:
             "campaign_cancelled",
         )
 
-    @staticmethod
-    def list_for_business(business: Business):
-        """Return all of a business's campaigns, newest first (queryset)."""
-        return (
+    # Maps the business-list ``?status=`` filter token to the underlying
+    # ``Campaign.Status`` set. "active" is the live ACTIVE status; "draft" covers
+    # the pre-publish DRAFT/SCHEDULED states; "completed" covers the terminal
+    # ENDED/CANCELLED states. Source: campaigns-restructure design §5.
+    _STATUS_FILTERS = {
+        "active": [Campaign.Status.ACTIVE],
+        "draft": [Campaign.Status.DRAFT, Campaign.Status.SCHEDULED],
+        "completed": [Campaign.Status.ENDED, Campaign.Status.CANCELLED],
+    }
+
+    @classmethod
+    def list_for_business(
+        cls,
+        business: Business,
+        campaign_type: str | None = None,
+        status_filter: str | None = None,
+    ):
+        """Return a business's campaigns, newest first, optionally filtered (§5).
+
+        ``campaign_type`` (``individual``/``group``/``social``) restricts to that
+        type; an unknown/absent value applies no type filter. ``status_filter``
+        (``active``/``draft``/``completed``) maps to the underlying status set via
+        :attr:`_STATUS_FILTERS`; an unknown/absent value applies no status filter.
+        Both degrade gracefully so a bad query param never 400s the list.
+        """
+        qs = (
             Campaign.objects.filter(business=business)
-            .select_related("rule", "reward")
+            .select_related("rule", "reward", "business")
             .order_by("-created_at")
         )
+        if campaign_type in Campaign.CampaignType.values:
+            qs = qs.filter(campaign_type=campaign_type)
+        if status_filter in cls._STATUS_FILTERS:
+            qs = qs.filter(status__in=cls._STATUS_FILTERS[status_filter])
+        return qs
 
     @staticmethod
     def get_for_business(campaign_id, business: Business) -> Campaign:
@@ -412,8 +470,8 @@ class CampaignService:
 
         Optional filters back the redesigned customer campaigns page:
 
-        * ``campaign_type`` — when one of ``Campaign.CampaignType`` (``visit`` /
-          ``time_window`` / ``group``), restrict to that type. ``None`` or any
+        * ``campaign_type`` — when one of ``Campaign.CampaignType`` (``individual``
+          / ``group`` / ``social``), restrict to that type. ``None`` or any
           unknown value is ignored (no filter applied) so a bad query param
           degrades gracefully rather than erroring.
         * ``joined_only`` — when ``True``, restrict to campaigns the requesting
@@ -450,6 +508,55 @@ class CampaignService:
                 participants__status__in=cls._JOINED_FILTER_STATUSES,
             )
         return qs
+
+    # Discover-filter tokens for the customer feed (campaigns-restructure §6).
+    # "group" → GROUP campaigns; "neighborhood" → all (geo filtering is a later
+    # phase, so it currently behaves like "all"); "ended" → recently ENDED
+    # campaigns; "all"/unknown → the default active discover set.
+    @classmethod
+    def feed_for_customer(
+        cls,
+        customer,
+        discover_filter: str = "all",
+        now: datetime | None = None,
+    ) -> tuple[list[Campaign], list[Campaign]]:
+        """Return the ``(followed, discover)`` split for the customer feed (§6).
+
+        ``followed`` is the customer's in-progress campaigns (JOINED/IN_PROGRESS
+        participant) — the "From places you go" row. ``discover`` is the
+        discoverable set, filtered by ``discover_filter``:
+
+        * ``group`` — only GROUP campaigns from the active discover set.
+        * ``neighborhood`` — same as ``all`` for now (geo filtering is a later
+          phase); kept as a distinct token so the contract is stable.
+        * ``ended`` — recently ENDED campaigns (so the feed can show "missed it").
+        * ``all`` / unknown — the full active discover set.
+
+        ``discover`` excludes campaigns already in ``followed`` so a row never
+        appears twice. Both are materialised lists (the view paginates/serialises
+        them) with rule/reward/business selected to avoid N+1.
+        """
+        now = now or timezone.now()
+        followed = list(
+            cls.discover_for_customer(customer, now=now, joined_only=True)
+        )
+        followed_ids = {c.id for c in followed}
+
+        if discover_filter == "ended":
+            discover_qs = (
+                Campaign.objects.filter(status=Campaign.Status.ENDED)
+                .select_related("rule", "reward", "business")
+                .order_by("-updated_at")
+            )
+        else:
+            campaign_type = (
+                Campaign.CampaignType.GROUP if discover_filter == "group" else None
+            )
+            discover_qs = cls.discover_for_customer(
+                customer, now=now, campaign_type=campaign_type
+            )
+        discover = [c for c in discover_qs if c.id not in followed_ids]
+        return followed, discover
 
     @staticmethod
     def progress_context_for(customer, campaigns) -> CustomerProgressContext:

@@ -13,12 +13,8 @@ app.conf.beat_schedule = {
         "task": "apps.qr.tasks.rotate_approval_codes",
         "schedule": 60 * 60 * 24,
     },
-    "expire-rewards-hourly": {
-        "task": "apps.loyalty.tasks.expire_rewards",
-        "schedule": 60 * 60,
-    },
     "expire-old-groups-hourly": {
-        "task": "apps.qr.tasks.expire_old_groups",
+        "task": "apps.campaigns.tasks.expire_old_groups",
         "schedule": 60 * 60,
     },
     "expire-campaign-vouchers-hourly": {

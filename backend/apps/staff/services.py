@@ -31,9 +31,10 @@ from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.utils import timezone
 
+from rest_framework import status
+
 from apps.businesses.models import Business, StaffInvite
 from apps.campaigns.models import CampaignRewardVoucher
-from apps.loyalty.models import RewardRedemption
 from apps.qr.models import ScanLog
 from apps.staff.models import StaffMember
 from core.exceptions import JaqynAPIException
@@ -50,7 +51,7 @@ class StaffStats:
     """Lifetime performance counters for one staff member.
 
     ``scans`` counts SUCCESS scan logs attributed to the member; ``redemptions``
-    counts loyalty + campaign vouchers redeemed by the member; ``signups`` is a
+    counts campaign vouchers redeemed by the member; ``signups`` is a
     best-effort count of distinct customers first seen through this member's
     successful scans (see :func:`_signup_counts` for the heuristic and its
     limits).
@@ -177,21 +178,14 @@ def _scan_and_last_active(business: Business) -> dict[int, tuple[int, datetime |
 
 
 def _redemption_counts(business: Business) -> dict[int, int]:
-    """Map staff_id → redemption count (loyalty + campaign vouchers).
+    """Map staff_id → campaign-voucher redemption count.
 
-    Two grouped aggregates (one per voucher table), summed per staff id. Both
-    are keyed by the StaffMember FK on the redeemed record, so there is no
-    per-row query.
+    One grouped aggregate over ``CampaignRewardVoucher``, keyed by the
+    ``redeemed_by_staff`` FK, so there is no per-row query. Loyalty redemptions
+    folded into campaign vouchers post-restructure (a loyalty card is now an
+    INDIVIDUAL campaign), so this is the single source of redemption counts.
     """
     counts: dict[int, int] = {}
-    loyalty = (
-        RewardRedemption.objects.filter(business=business, redeemed_by__isnull=False)
-        .values("redeemed_by_id")
-        .annotate(n=Count("id"))
-    )
-    for row in loyalty:
-        counts[row["redeemed_by_id"]] = counts.get(row["redeemed_by_id"], 0) + row["n"]
-
     campaign = (
         CampaignRewardVoucher.objects.filter(business=business, redeemed_by_staff__isnull=False)
         .values("redeemed_by_staff_id")
@@ -200,6 +194,21 @@ def _redemption_counts(business: Business) -> dict[int, int]:
     for row in campaign:
         counts[row["redeemed_by_staff_id"]] = counts.get(row["redeemed_by_staff_id"], 0) + row["n"]
     return counts
+
+
+def get_staff_for_user(user) -> StaffMember:
+    """Return the user's active StaffMember, or raise ``PERMISSION_DENIED``.
+
+    Relocated here from the deleted loyalty app (campaigns-restructure clean cut):
+    resolving a StaffMember for a logged-in user belongs with the staff app.
+    Selects the related business so callers can read ``staff.business`` without an
+    extra query. Raises ``PERMISSION_DENIED`` (403) when the user has no active
+    staff membership.
+    """
+    try:
+        return user.staff_memberships.select_related("business").get(is_active=True)
+    except StaffMember.DoesNotExist:
+        raise JaqynAPIException("PERMISSION_DENIED", status_code=status.HTTP_403_FORBIDDEN)
 
 
 def _signup_counts(business: Business) -> dict[int, int]:

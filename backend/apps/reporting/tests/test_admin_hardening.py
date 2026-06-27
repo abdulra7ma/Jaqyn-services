@@ -3,8 +3,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.businesses.models import Business
-from apps.groups.models import GroupDeal, GroupOffer
-from apps.loyalty.models import RewardProgram, RewardTransaction
+from apps.campaigns.models import Campaign, CampaignAction, CampaignRule, Group
 from apps.qr.models import QRCodeToken, ScanLog
 from apps.qr.services import get_or_create_merchant_collect_token
 from apps.reporting.models import AdminAuditLog
@@ -32,29 +31,27 @@ def make_admin():
 
 
 def make_program(business):
-    return RewardProgram.objects.create(
-        business=business,
-        type=RewardProgram.Type.STAMP,
-        title="Adjust",
-        description="Desc",
-        required_count=5,
-        reward_description="Prize",
+    campaign = Campaign.objects.create(
+        business=business, name="Adjust", campaign_type=Campaign.CampaignType.INDIVIDUAL,
+        status=Campaign.Status.ACTIVE,
     )
+    CampaignRule.objects.create(
+        campaign=campaign, rule_type=CampaignRule.RuleType.VISIT_COUNT,
+        mechanic=CampaignRule.Mechanic.VISIT, required_count=5,
+    )
+    return campaign
 
 
 def make_group(business):
     customer = User.objects.create_user(phone="+996709900001", role=User.Role.CUSTOMER, is_phone_verified=True)
-    offer = GroupOffer.objects.create(
-        business=business,
-        title="Admin group",
-        description="Desc",
-        category="cafe",
-        min_group_size=1,
-        reward_description="Reward",
-        valid_days=["mon"],
-        status=GroupOffer.Status.ACTIVE,
+    campaign = Campaign.objects.create(
+        business=business, name="Admin group", campaign_type=Campaign.CampaignType.GROUP,
+        status=Campaign.Status.ACTIVE,
     )
-    return GroupDeal.objects.create(group_offer=offer, leader=customer, visit_time=timezone.now(), invite_token="admin-group")
+    return Group.objects.create(
+        campaign=campaign, group_leader=customer, required_size=1,
+        invite_token="admin-group", status=Group.Status.FORMING,
+    )
 
 
 def test_manual_adjustment_and_block_user(api_client):
@@ -72,8 +69,8 @@ def test_manual_adjustment_and_block_user(api_client):
     blocked = api_client.post(f"/api/admin/users/{customer.id}/block/", {"reason": "abuse"}, format="json")
 
     assert adjustment.status_code == 200
-    assert adjustment.data["data"]["current_count"] == 2
-    assert RewardTransaction.objects.filter(action=RewardTransaction.Action.ADJUSTED, source=RewardTransaction.Source.ADMIN_ADJUSTMENT).exists()
+    assert adjustment.data["data"]["progress_count"] == 2
+    assert CampaignAction.objects.filter(verification_method=CampaignAction.VerificationMethod.STAFF_MANUAL).exists()
     assert blocked.data["data"]["is_active"] is False
     assert AdminAuditLog.objects.filter(action="manual_adjustment").exists()
     assert AdminAuditLog.objects.filter(action="block_user").exists()
@@ -100,7 +97,7 @@ def test_disable_business_disables_qr_and_disable_token(api_client):
 def test_group_remediation_and_suspicious_scans(api_client):
     business = make_business()
     group = make_group(business)
-    customer = group.leader
+    customer = group.group_leader
     for _ in range(3):
         ScanLog.objects.create(customer=customer, business=business, action="collect", status=ScanLog.Status.BLOCKED, failure_reason="SCAN_LIMIT_REACHED")
     admin = make_admin()
@@ -110,8 +107,8 @@ def test_group_remediation_and_suspicious_scans(api_client):
     completed = api_client.post(f"/api/admin/groups/{group.id}/complete/", {"reason": "manual proof"}, format="json")
     suspicious = api_client.get("/api/admin/scan-logs/")
 
-    assert failed.data["data"]["status"] == GroupDeal.Status.FAILED
-    assert completed.data["data"]["status"] == GroupDeal.Status.COMPLETED
+    assert failed.data["data"]["status"] == Group.Status.CANCELLED
+    assert completed.data["data"]["status"] == Group.Status.COMPLETED
     assert suspicious.data["data"]["suspicious"][0]["total"] == 3
     assert AdminAuditLog.objects.filter(action="mark_group_failed").exists()
     assert AdminAuditLog.objects.filter(action="mark_group_completed").exists()

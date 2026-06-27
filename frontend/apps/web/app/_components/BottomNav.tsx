@@ -4,7 +4,7 @@ import { useT } from "@jaqyn/i18n";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
-import { FlagIcon, GiftIcon, HomeIcon, PinIcon, UserIcon, UsersIcon } from "./icons";
+import { FlagIcon, GiftIcon, HomeIcon, PinIcon, ScanIcon, UserIcon } from "./icons";
 
 export type NavItem = {
   href: string;
@@ -13,44 +13,72 @@ export type NavItem = {
   match: (p: string) => boolean;
 };
 
-// Shared between the mobile bottom nav and the desktop sidebar (CustomerShell).
+// Desktop sidebar nav (CustomerShell). The mobile bottom bar is a curated 5-slot
+// layout (see BottomNav) with a raised center Scan button, so it is built
+// separately. Groups is gone — group campaigns live inside the Campaigns feed.
 export const CUSTOMER_NAV: NavItem[] = [
   { href: "/", key: "nav.home", Icon: HomeIcon, match: (p) => p === "/" },
-  { href: "/rewards", key: "nav.rewards", Icon: GiftIcon, match: (p) => p.startsWith("/rewards") },
-  { href: "/group-offers", key: "nav.groups", Icon: UsersIcon, match: (p) => p.startsWith("/group") },
-  { href: "/nearby", key: "nav.nearby", Icon: PinIcon, match: (p) => p.startsWith("/nearby") },
+  // Rewards = earned vouchers (the campaign wallet). Campaigns = things to join.
+  {
+    href: "/rewards",
+    key: "nav.rewards",
+    Icon: GiftIcon,
+    match: (p) => p.startsWith("/rewards") || p.startsWith("/campaign-wallet"),
+  },
   {
     href: "/campaigns",
     key: "nav.campaigns",
     Icon: FlagIcon,
-    // Keep the Campaigns tab active across the voucher wallet too — it lives under
-    // /campaign-wallet but is reached from within the Campaigns tab (no sub-nav).
-    match: (p) => p.startsWith("/campaigns") || p.startsWith("/campaign-wallet"),
+    match: (p) => p.startsWith("/campaigns"),
   },
+  { href: "/nearby", key: "nav.nearby", Icon: PinIcon, match: (p) => p.startsWith("/nearby") },
   { href: "/profile", key: "nav.profile", Icon: UserIcon, match: (p) => p.startsWith("/profile") },
 ];
 
+// The two nav items shown on each side of the raised center Scan button, in order.
+const LEFT_ITEMS: NavItem[] = [CUSTOMER_NAV[0]!, CUSTOMER_NAV[1]!];
+const RIGHT_ITEMS: NavItem[] = [CUSTOMER_NAV[2]!, CUSTOMER_NAV[4]!];
+
+function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+  const t = useT();
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className={`flex flex-col items-center gap-1 py-2 text-[11px] font-medium ${
+        active ? "text-brand" : "text-subtle"
+      }`}
+    >
+      <item.Icon className="h-[22px] w-[22px]" />
+      {t(item.key)}
+    </Link>
+  );
+}
+
+// Mobile bottom bar: Home · Rewards · [Scan center] · Campaigns · Profile. The
+// scan control is a raised center button in the bar itself (campaigns-restructure
+// design §6) rather than a separate floating FAB.
 export function BottomNav() {
   const pathname = usePathname();
   const t = useT();
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-line bg-cream/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-      {CUSTOMER_NAV.map(({ href, key, Icon, match }) => {
-        const active = match(pathname);
-        return (
-          <Link
-            key={href}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className={`flex flex-col items-center gap-1 py-2 text-[11px] font-medium ${
-              active ? "text-brand" : "text-subtle"
-            }`}
-          >
-            <Icon className="h-[22px] w-[22px]" />
-            {t(key)}
-          </Link>
-        );
-      })}
+    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 items-end border-t border-line bg-cream/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      {LEFT_ITEMS.map((item) => (
+        <NavLink key={item.href} item={item} active={item.match(pathname)} />
+      ))}
+      {/* raised center scan button */}
+      <div className="flex justify-center">
+        <Link
+          href="/qr"
+          aria-label={t("nav.scan")}
+          className="-mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-brand-gradient text-brand-fg shadow-glow ring-4 ring-cream/95 transition active:scale-95"
+        >
+          <ScanIcon className="h-7 w-7" />
+        </Link>
+      </div>
+      {RIGHT_ITEMS.map((item) => (
+        <NavLink key={item.href} item={item} active={item.match(pathname)} />
+      ))}
     </nav>
   );
 }

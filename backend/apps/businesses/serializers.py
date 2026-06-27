@@ -154,41 +154,79 @@ class PublicBusinessSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    def _active_individual_campaigns(self, obj):
+        """ACTIVE INDIVIDUAL campaigns for a business, newest first (≤3).
+
+        Post-restructure a loyalty reward program is an INDIVIDUAL campaign, so the
+        public reward surface reads from campaigns. Filters in memory off the
+        prefetched ``campaigns`` to keep the discovery payload N+1-free.
+        """
+        from apps.campaigns.models import Campaign
+
+        rows = [
+            c
+            for c in obj.campaigns.all()
+            if c.status == Campaign.Status.ACTIVE
+            and c.campaign_type == Campaign.CampaignType.INDIVIDUAL
+        ]
+        rows.sort(key=lambda c: c.created_at, reverse=True)
+        return rows[:3]
+
     def get_reward(self, obj):
-        program = obj.reward_programs.filter(is_active=True).order_by("-created_at").first()
-        return program.reward_description if program else None
+        campaigns = self._active_individual_campaigns(obj)
+        if not campaigns:
+            return None
+        reward = getattr(campaigns[0], "reward", None)
+        return reward.description if reward is not None else None
 
     def get_rewards(self, obj):
-        return [
-            {
-                "id": str(program.id),
-                "type": program.type,
-                "title": program.title,
-                "description": program.description,
-                "required_count": program.required_count,
-                "reward_description": program.reward_description,
-                "terms": program.terms,
-            }
-            for program in obj.reward_programs.filter(is_active=True).order_by("-created_at")[:3]
-        ]
+        result = []
+        for campaign in self._active_individual_campaigns(obj):
+            rule = getattr(campaign, "rule", None)
+            reward = getattr(campaign, "reward", None)
+            result.append(
+                {
+                    "id": str(campaign.id),
+                    "type": getattr(rule, "mechanic", None) or campaign.campaign_type,
+                    "title": campaign.name,
+                    "description": campaign.description or "",
+                    "required_count": getattr(rule, "required_count", None),
+                    "reward_description": reward.description if reward is not None else "",
+                    "terms": "",
+                }
+            )
+        return result
 
     def get_group_offers(self, obj):
-        return [
-            {
-                "id": str(offer.id),
-                "title": offer.title,
-                "description": offer.description,
-                "reward_type": offer.reward_type,
-                "reward_description": offer.reward_description,
-                "min_group_size": offer.min_group_size,
-                "max_group_size": offer.max_group_size,
-                "time_start": offer.time_start.strftime("%H:%M"),
-                "time_end": offer.time_end.strftime("%H:%M"),
-                "terms": offer.terms,
-                "status": offer.status,
-            }
-            for offer in obj.group_offers.filter(status="active").order_by("-created_at")[:3]
+        from apps.campaigns.models import Campaign
+
+        rows = [
+            c
+            for c in obj.campaigns.all()
+            if c.status == Campaign.Status.ACTIVE
+            and c.campaign_type == Campaign.CampaignType.GROUP
         ]
+        rows.sort(key=lambda c: c.created_at, reverse=True)
+        result = []
+        for campaign in rows[:3]:
+            rule = getattr(campaign, "rule", None)
+            reward = getattr(campaign, "reward", None)
+            result.append(
+                {
+                    "id": str(campaign.id),
+                    "title": campaign.name,
+                    "description": campaign.description or "",
+                    "reward_type": getattr(reward, "reward_type", None),
+                    "reward_description": reward.description if reward is not None else "",
+                    "min_group_size": getattr(rule, "required_group_size", None),
+                    "max_group_size": getattr(rule, "required_group_size", None),
+                    "time_start": campaign.active_start_time.strftime("%H:%M"),
+                    "time_end": campaign.active_end_time.strftime("%H:%M"),
+                    "terms": "",
+                    "status": campaign.status,
+                }
+            )
+        return result
 
     def get_catalog_sections(self, obj):
         sections = {}

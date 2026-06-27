@@ -1,101 +1,252 @@
 "use client";
 
-import { useInviteToGroupSession, useStartGroupSession } from "@jaqyn/api";
+import {
+  useCampaign,
+  useDemoFillGroup,
+  useGroupSession,
+  useLeaveGroupSession,
+  useMyGroups,
+  useStartGroupSession,
+  type Campaign,
+  type GroupSession,
+} from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { ErrorState, Loading } from "@jaqyn/ui";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useMemo, useState } from "react";
 import QRCode from "react-qr-code";
 import { CustomerShell } from "../../../_components/CustomerShell";
-import { GroupMemberRow } from "../../../_components/campaigns";
-import { useCopy } from "../../../_components/groups";
+import { GlyphTile, GroupMemberRow } from "../../../_components/campaigns";
+import { AvatarSlots, buildVisitSlots, hhmm, inviteUrl, useCopy } from "../../../_components/groups";
 import { useRequireAuth } from "../../../_lib/auth";
 
-function GroupBody({ campaignId }: { campaignId: string }) {
+// Groups still in motion (not completed / expired / cancelled). Matches the feed.
+const ACTIVE_STATUSES: GroupSession["status"][] = ["forming", "full", "checking_in", "checked_in"];
+
+// DEV/testing aid: the "simulate friends" button is hidden unless this is set.
+// The backend also gates the endpoint on DEBUG, so prod never exposes it.
+const DEMO_MODE = !!process.env.NEXT_PUBLIC_DEMO_MODE;
+
+// ---------------------------------------------------------------------------
+// SCREEN 3 — Create group form (no active group for this campaign yet).
+// ---------------------------------------------------------------------------
+function CreateGroupForm({ campaign }: { campaign: Campaign }) {
   const t = useT();
-  const router = useRouter();
   const start = useStartGroupSession();
-  const invite = useInviteToGroupSession();
-  const { copied, copy } = useCopy();
 
-  // Source of truth for the session is the mutation result, not local state:
-  // the invite mutation supersedes the start result. Reading from `data`
-  // survives React Strict Mode's mount/unmount/mount cycle, where an
-  // effect-stored `onSuccess` value would be lost.
-  const session = invite.data ?? start.data ?? null;
+  const slots = useMemo(
+    () =>
+      buildVisitSlots(
+        campaign.active_start_time,
+        campaign.active_end_time,
+        campaign.rule.group_checkin_window_minutes,
+      ),
+    [campaign.active_start_time, campaign.active_end_time, campaign.rule.group_checkin_window_minutes],
+  );
+  // First slot selected by default (index into `slots`).
+  const [selected, setSelected] = useState(0);
+  const [name, setName] = useState("");
+  const [note, setNote] = useState("");
 
-  // Start a session for this campaign once. Keyed on `isIdle` so the live
-  // observer fires after a Strict-Mode remount rather than being blocked by a ref.
-  useEffect(() => {
-    if (start.isIdle) start.mutate(campaignId);
-  }, [campaignId, start]);
+  const size = campaign.rule.required_group_size ?? 0;
+  const window = `${campaign.active_start_time || "—"}–${campaign.active_end_time || "—"}`;
 
-  if (start.isError) {
-    return (
-      <ErrorState
-        message={t("common.error")}
-        onRetry={() => start.reset()}
-        retryLabel={t("common.retry")}
-      />
-    );
-  }
-  if (!session) return <Loading label={t("common.loading")} />;
-
-  const pct =
-    session.required_size > 0
-      ? Math.min(100, Math.round((session.joined_count / session.required_size) * 100))
-      : 0;
-  const inviteLink = `jaqyn.kg/g/${session.invite_code}`;
-  const isFull = session.status === "full" || session.joined_count >= session.required_size;
-  const isDone = session.status === "completed";
+  const onSubmit = () => {
+    const slot = slots[selected];
+    start.mutate({
+      campaignId: campaign.id,
+      visit_time: slot ? slot.toISOString() : undefined,
+      name: name.trim() || undefined,
+      note: note.trim() || undefined,
+    });
+    // On success useMyGroups is invalidated; the page re-resolves to the forming
+    // view (the started session id is also written into the cache by the hook).
+  };
 
   return (
     <>
-      <h1 className="font-display text-[22px] font-bold text-ink">{session.campaign.name}</h1>
-      <p className="mt-1 text-[13.5px] text-subtle">{t("cmp.group.blurb")}</p>
+      <h1 className="font-display text-[22px] font-bold text-ink">{t("cmp.group.create.title")}</h1>
 
-      {/* progress + members */}
-      <div className="mt-4 rounded-[20px] border border-line bg-card p-4">
-        <div className="flex items-center justify-between">
-          <span className="text-[13px] font-semibold text-subtle">{t("cmp.group.progress")}</span>
-          <span className="font-display text-[17px] font-bold text-ink">
-            {t("cmp.group.joinedLabel")
-              .replace("{count}", String(session.joined_count))
-              .replace("{size}", String(session.required_size))}
-          </span>
-        </div>
-        <div className="mt-3 h-2.5 overflow-hidden rounded-pill bg-board">
-          <div className="h-full rounded-pill bg-brand" style={{ width: `${pct}%` }} />
-        </div>
-        <div className="mt-4 flex flex-col gap-2.5">
-          {session.members.map((m) => (
-            <GroupMemberRow key={m.id} member={m} />
-          ))}
+      {/* business summary card */}
+      <div className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-card p-4 shadow-card">
+        <GlyphTile glyph="👥" size={46} image={campaign.business.logo_url} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-[15px] font-bold text-ink">{campaign.business.name}</p>
+          <p className="mt-0.5 truncate text-[12.5px] text-subtle">
+            {t("cmp.group.create.summary")
+              .replace("{reward}", campaign.reward.title)
+              .replace("{count}", String(size))}
+          </p>
         </div>
       </div>
 
-      {/* invite link + fill (forming) */}
-      {!isFull && !isDone && (
+      {/* visit-time slots */}
+      <h2 className="mt-6 text-[13px] font-semibold text-subtle">
+        {t("cmp.group.create.pickTime")
+          .replace("{start}", campaign.active_start_time || "—")
+          .replace("{end}", campaign.active_end_time || "—")}
+      </h2>
+      {slots.length === 0 ? (
+        <p className="mt-2 text-[13px] text-subtle">{window}</p>
+      ) : (
+        <div className="mt-3 grid grid-cols-2 gap-2.5" role="radiogroup" aria-label={t("cmp.group.create.pickTime")}>
+          {slots.map((slot, i) => {
+            const isSel = i === selected;
+            return (
+              <button
+                key={slot.toISOString()}
+                type="button"
+                role="radio"
+                aria-checked={isSel}
+                onClick={() => setSelected(i)}
+                className={
+                  isSel
+                    ? "rounded-xl border-2 border-brand bg-brand-muted px-3 py-3 text-[14px] font-bold text-brand transition"
+                    : "rounded-xl border border-line bg-card px-3 py-3 text-[14px] font-semibold text-ink transition active:scale-[.98]"
+                }
+              >
+                {t("cmp.group.create.slotLabel").replace("{time}", hhmm(slot))}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* group name */}
+      <label className="mt-6 block text-[13px] font-semibold text-subtle" htmlFor="group-name">
+        {t("cmp.group.create.name")}
+      </label>
+      <input
+        id="group-name"
+        type="text"
+        value={name}
+        maxLength={80}
+        onChange={(e) => setName(e.target.value)}
+        placeholder={t("cmp.group.create.namePlaceholder")}
+        className="mt-2 w-full rounded-xl border border-line bg-card px-4 py-3 text-[14px] text-ink outline-none placeholder:text-subtle focus:border-brand"
+      />
+
+      {/* note to friends */}
+      <label className="mt-4 block text-[13px] font-semibold text-subtle" htmlFor="group-note">
+        {t("cmp.group.create.note")}
+      </label>
+      <textarea
+        id="group-note"
+        value={note}
+        rows={3}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder={t("cmp.group.create.notePlaceholder")}
+        className="mt-2 w-full resize-none rounded-xl border border-line bg-card px-4 py-3 text-[14px] text-ink outline-none placeholder:text-subtle focus:border-brand"
+      />
+
+      {start.isError && (
+        <p className="mt-3 text-[13px] text-danger">{t("common.error")}</p>
+      )}
+
+      {/* sticky CTA */}
+      <div className="sticky bottom-0 -mx-4 mt-6 bg-gradient-to-t from-cream from-[26%] to-transparent px-4 pb-[calc(16px+env(safe-area-inset-bottom))] pt-3.5 sm:-mx-6 sm:px-6">
+        <button
+          onClick={onSubmit}
+          disabled={start.isPending}
+          className="w-full rounded-2xl bg-brand-gradient py-4 text-base font-bold text-white shadow-glow transition active:scale-[.99] disabled:opacity-60"
+        >
+          {t("cmp.group.create.submit")}
+        </button>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SCREEN 4 — Forming / full / completed group session.
+// ---------------------------------------------------------------------------
+function GroupSessionView({ campaignId, sessionId }: { campaignId: string; sessionId: string }) {
+  const t = useT();
+  const router = useRouter();
+  // Poll so demo-fill / real joins reflect live (mirrors the detail page).
+  const query = useGroupSession(sessionId, { refetchInterval: 4000 });
+  const demoFill = useDemoFillGroup();
+  const leave = useLeaveGroupSession();
+  const { copied, copy } = useCopy();
+
+  if (query.isError) {
+    return (
+      <ErrorState message={t("common.error")} onRetry={() => query.refetch()} retryLabel={t("common.retry")} />
+    );
+  }
+  if (!query.data) return <Loading label={t("common.loading")} />;
+
+  const session = query.data;
+  const remaining = Math.max(0, session.required_size - session.joined_count);
+  const isFull = session.status === "full" || session.joined_count >= session.required_size;
+  const isDone = session.status === "completed";
+  // Display the branded short link (prototype "jaqyn.kg/g/<code>"); the real
+  // deep link resolves it. Matches SCREEN 4/5 of the prototype.
+  const link = inviteUrl(session.invite_code);
+
+  return (
+    <>
+      {/* gradient header card */}
+      <div className="overflow-hidden rounded-3xl bg-[linear-gradient(150deg,#C25E3C,#E7A23E)] p-5 text-white shadow-glow">
+        <div className="flex items-center gap-3">
+          <GlyphTile glyph="👥" size={44} image={session.business_logo_url} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold opacity-90">{session.business_name}</p>
+            {session.visit_time && (
+              <p className="text-[12.5px] opacity-85">
+                {t("cmp.group.visitAt").replace("{time}", hhmm(session.visit_time))}
+              </p>
+            )}
+          </div>
+        </div>
+        <h1 className="mt-3.5 font-display text-2xl font-bold tracking-tight">{session.campaign.name}</h1>
+        <div className="mt-4">
+          <AvatarSlots members={session.members} requiredSize={session.required_size} />
+        </div>
+        <p className="mt-3 text-[13px] font-semibold opacity-95">
+          {isFull
+            ? t("cmp.group.ready")
+            : t("cmp.group.needMore").replace("{count}", String(remaining))}
+        </p>
+      </div>
+
+      {/* member list */}
+      <div className="mt-4 flex flex-col gap-2.5 rounded-[20px] border border-line bg-card p-4">
+        {session.members.map((m) => (
+          <GroupMemberRow key={m.id} member={m} />
+        ))}
+      </div>
+
+      {/* invite link + actions (forming / full, not done) */}
+      {!isDone && (
         <>
           <div className="mt-3.5 flex items-center gap-2.5 rounded-2xl border border-dashed border-line bg-cream px-4 py-3.5">
             <span aria-hidden>🔗</span>
-            <span className="flex-1 truncate font-mono text-[13px] font-semibold text-subtle">
-              {inviteLink}
-            </span>
+            <span className="flex-1 truncate font-mono text-[13px] font-semibold text-subtle">{link}</span>
             <button
-              onClick={() => copy(inviteLink)}
+              onClick={() => copy(link)}
               className="flex-none rounded-lg bg-brand-muted px-3 py-1.5 text-xs font-bold text-brand"
             >
               {copied ? t("common.copied") : t("common.copy")}
             </button>
           </div>
+
           <button
-            onClick={() => invite.mutate(session.id)}
-            disabled={invite.isPending}
-            className="mt-3 w-full rounded-[15px] bg-brand-gradient py-3.5 text-[15px] font-bold text-brand-fg shadow-glow transition active:scale-[.99] disabled:opacity-60"
+            onClick={() => router.push(`/campaigns/${campaignId}/group/invite`)}
+            className="mt-3 w-full rounded-[15px] bg-brand-gradient py-3.5 text-[15px] font-bold text-brand-fg shadow-glow transition active:scale-[.99]"
           >
-            {t("cmp.group.invite")}
+            {t("cmp.group.inviteFriends")}
           </button>
+
+          {DEMO_MODE && (
+            <button
+              onClick={() => demoFill.mutate(session.id)}
+              disabled={demoFill.isPending}
+              className="mt-2.5 w-full rounded-[15px] border border-line bg-card py-3 text-[14px] font-semibold text-subtle transition active:scale-[.99] disabled:opacity-60"
+            >
+              {t("cmp.group.demoFill")}
+            </button>
+          )}
         </>
       )}
 
@@ -117,9 +268,7 @@ function GroupBody({ campaignId }: { campaignId: string }) {
               ✓
             </span>
             <div>
-              <p className="font-display text-[15px] font-bold text-sage">
-                {t("cmp.group.unlocked")}
-              </p>
+              <p className="font-display text-[15px] font-bold text-sage">{t("cmp.group.unlocked")}</p>
               <p className="mt-0.5 text-[12.5px] text-sage-deep">{t("cmp.group.unlockedHint")}</p>
             </div>
           </div>
@@ -131,8 +280,54 @@ function GroupBody({ campaignId }: { campaignId: string }) {
           </button>
         </>
       )}
+
+      {/* leave group (forming / full, not done) */}
+      {!isDone && (
+        <button
+          onClick={() =>
+            leave.mutate(session.id, {
+              onSuccess: () => router.push(`/campaigns/${campaignId}`),
+            })
+          }
+          disabled={leave.isPending}
+          className="mx-auto mt-5 block text-[13px] font-semibold text-subtle underline-offset-2 hover:text-brand hover:underline disabled:opacity-60"
+        >
+          {t("cmp.group.leave")}
+        </button>
+      )}
     </>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Route: resolve the active group for this campaign, then branch.
+// ---------------------------------------------------------------------------
+function GroupBody({ campaignId }: { campaignId: string }) {
+  const t = useT();
+  const myGroups = useMyGroups();
+  const campaign = useCampaign(campaignId);
+
+  // An active group for THIS campaign means render the forming view; else create.
+  const activeGroup = myGroups.data?.find(
+    (g) => g.campaign_id === campaignId && ACTIVE_STATUSES.includes(g.status),
+  );
+
+  if (myGroups.isLoading || campaign.isLoading) return <Loading label={t("common.loading")} />;
+  if (myGroups.isError || campaign.isError || !campaign.data) {
+    return (
+      <ErrorState
+        message={t("common.error")}
+        onRetry={() => {
+          myGroups.refetch();
+          campaign.refetch();
+        }}
+        retryLabel={t("common.retry")}
+      />
+    );
+  }
+
+  if (activeGroup) return <GroupSessionView campaignId={campaignId} sessionId={activeGroup.id} />;
+  return <CreateGroupForm campaign={campaign.data} />;
 }
 
 export default function GroupSessionPage() {

@@ -74,27 +74,23 @@ class SkippedCampaign:
 
 @dataclass(frozen=True)
 class UnifiedScanResult:
-    """Result of a single staff scan that advances loyalty + campaigns (§14).
+    """Result of a single staff scan that advances eligible campaigns (§14).
 
-    One staff action drives independent legs:
+    Post-restructure there is no separate loyalty leg — a loyalty card is now an
+    INDIVIDUAL (STAMP) campaign, so one staff scan advances campaigns only:
 
-    * ``loyalty`` — the baseline leg, always attempted. Holds the
-      ``staff_collect`` result dict on success, else ``None`` with
-      ``loyalty_skipped_reason`` carrying the domain error code.
     * ``campaigns`` — every campaign that advanced this scan: all eligible
       campaigns with ``allow_multiple_campaign_counting`` set, plus the single
-      prioritized eligible default campaign (one visit, one default stamp). Each
+      prioritized eligible default campaign (one visit / one default stamp). Each
       element is a :class:`~apps.campaigns.services.progress.ProgressResult`.
     * ``skipped_campaigns`` — campaigns that were candidates but were blocked
       (e.g. min-gap), each carrying its reason code.
 
-    The legs are independent: no leg's failure aborts another. Only an invalid /
-    non-CUSTOMER_PROFILE token hard-fails (raised before this is built).
+    No campaign's failure aborts another. Only an invalid / non-CUSTOMER_PROFILE
+    token hard-fails (raised before this is built).
     """
 
     customer: object
-    loyalty: dict | None
-    loyalty_skipped_reason: str | None
     campaigns: list[ProgressResult]
     skipped_campaigns: list[SkippedCampaign]
 
@@ -359,32 +355,21 @@ class StaffScannerService:
         request=None,
         now: datetime | None = None,
     ) -> "UnifiedScanResult":
-        """Advance loyalty (baseline) + one prioritized campaign in one scan (§14).
+        """Advance every eligible campaign for a customer in one staff scan (§14).
 
         Resolves the customer's ``CUSTOMER_PROFILE`` token to the customer; an
         invalid / non-CUSTOMER_PROFILE / customer-less token is the **only** hard
         failure (``INVALID_QR_TOKEN``). Guards the business is active.
 
-        LOYALTY leg (baseline, always attempted): delegates to
-        ``apps.loyalty.services.staff_collect``. Its result dict is returned on
-        success; on a ``JaqynAPIException`` the code is captured in
-        ``loyalty_skipped_reason`` and the scan continues — a loyalty failure
-        never aborts the campaign leg.
-
-        CAMPAIGN leg (conditional): advances every eligible campaign that opts
-        into ``allow_multiple_campaign_counting`` plus the single prioritized
-        eligible default campaign (§14). An explicit ``campaign_id`` overrides
-        this and targets only that campaign. Each advance runs its own
-        atomic/lock seam via :meth:`confirm_visit`; a campaign blocked by the
-        eligibility/fraud gate is recorded in ``skipped_campaigns`` and never
-        aborts the others or the loyalty award.
-
-        The two legs are independent — each runs its own atomic/lock seam inside
-        its own service. They are deliberately NOT wrapped in one outer
-        transaction, so skipping one leg never rolls back the other.
+        Advances every eligible campaign that opts into
+        ``allow_multiple_campaign_counting`` plus the single prioritized eligible
+        default campaign (§14). An explicit ``campaign_id`` overrides this and
+        targets only that campaign. Each advance runs its own atomic/lock seam via
+        :meth:`confirm_visit`; a campaign blocked by the eligibility/fraud gate is
+        recorded in ``skipped_campaigns`` and never aborts the others. The advances
+        are deliberately NOT wrapped in one outer transaction, so skipping one
+        never rolls back another.
         """
-        from apps.loyalty import services as loyalty_services
-
         now = now or timezone.now()
         qr_token = resolve_qr_token(raw_token, request, action="unified_confirm_visit")
         if (
@@ -397,17 +382,7 @@ class StaffScannerService:
         customer = qr_token.customer
         ensure_business_active(staff.business)
 
-        # --- LOYALTY leg (baseline) -----------------------------------------
-        loyalty: dict | None = None
-        loyalty_skipped_reason: str | None = None
-        try:
-            loyalty = loyalty_services.staff_collect(
-                staff=staff, raw_token=raw_token, program_id=None, request=request
-            )
-        except JaqynAPIException as exc:
-            loyalty_skipped_reason = exc.code
-
-        # --- CAMPAIGN leg (conditional) -------------------------------------
+        # --- CAMPAIGN advances ----------------------------------------------
         # One visit advances: every eligible campaign that opts into stacking
         # (allow_multiple_campaign_counting), plus exactly one prioritized
         # eligible *default* campaign (§14 — a visit counts toward one default
@@ -472,8 +447,6 @@ class StaffScannerService:
 
         return UnifiedScanResult(
             customer=customer,
-            loyalty=loyalty,
-            loyalty_skipped_reason=loyalty_skipped_reason,
             campaigns=campaigns,
             skipped_campaigns=skipped,
         )
@@ -496,8 +469,60 @@ class StaffScannerService:
         )
 
     @staticmethod
+    def confirm_social(
+        staff: StaffMember,
+        raw_token: str,
+        campaign_id: UUID,
+        request=None,
+        now: datetime | None = None,
+    ) -> ProgressResult:
+        """Confirm staff-verified social proof for a SOCIAL campaign (design §5/§7).
+
+        Resolves the customer's ``CUSTOMER_PROFILE`` token (``INVALID_QR_TOKEN`` for
+        a non-customer token), loads the campaign and asserts it belongs to the
+        staff member's business (``WRONG_BUSINESS``), then delegates to
+        ``CampaignProgressService.confirm_social_proof`` (which validates the
+        campaign is SOCIAL, completes the participant idempotently, and mints the
+        voucher). Logs the scan outcome to ``ScanLog`` either way.
+        """
+        now = now or timezone.now()
+        qr_token = resolve_qr_token(raw_token, request, action="campaign_confirm_social")
+        if (
+            qr_token.type != QRCodeToken.Type.CUSTOMER_PROFILE
+            or qr_token.customer is None
+        ):
+            raise JaqynAPIException(
+                "INVALID_QR_TOKEN", status_code=status.HTTP_400_BAD_REQUEST
+            )
+        customer = qr_token.customer
+        campaign = _load_campaign_for_staff(campaign_id, staff)
+        try:
+            result = CampaignProgressService.confirm_social_proof(
+                campaign, customer, staff=staff, now=now
+            )
+        except JaqynAPIException as exc:
+            log_scan(
+                staff=staff,
+                business=staff.business,
+                customer=customer,
+                action="campaign_confirm_social",
+                status=ScanLog.Status.BLOCKED,
+                failure_reason=exc.code,
+            )
+            raise
+        log_scan(
+            staff=staff,
+            business=staff.business,
+            customer=customer,
+            action="campaign_confirm_social",
+            status=ScanLog.Status.SUCCESS,
+            metadata={"campaign_id": str(campaign.id), "voucher_id": str(result.voucher.id)},
+        )
+        return result
+
+    @staticmethod
     def confirm_group_visit(
-        staff: StaffMember, group_session_id, request=None, now: datetime | None = None
+        staff: StaffMember, group_id, request=None, now: datetime | None = None
     ) -> GroupConfirmResult:
         """Confirm a coordinated group check-in and issue the leader voucher (§11/Q4).
 
@@ -511,7 +536,7 @@ class StaffScannerService:
         now = now or timezone.now()
         try:
             result = CampaignGroupService.confirm_group_visit(
-                staff, group_session_id, now=now
+                staff, group_id, now=now
             )
         except JaqynAPIException as exc:
             log_scan(
@@ -530,7 +555,7 @@ class StaffScannerService:
             action="campaign_confirm_group",
             status=ScanLog.Status.SUCCESS,
             metadata={
-                "group_session_id": str(result.session.id),
+                "group_id": str(result.session.id),
                 "voucher_id": str(result.voucher.id),
                 "member_count": result.member_count,
             },

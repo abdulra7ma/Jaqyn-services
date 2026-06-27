@@ -4,13 +4,15 @@ import { LanguageSwitch, useT } from "@jaqyn/i18n";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, ReactNode } from "react";
-import { ChartIcon, GiftIcon, MoreIcon, ScanIcon, UsersIcon } from "../../_components/icons";
+import { ChartIcon, FlagIcon, GiftIcon, MoreIcon, ScanIcon } from "../../_components/icons";
 
+// Mobile business shell nav. Group Deals is gone (campaigns-restructure §6);
+// Campaigns is the grow surface, Rewards is now the redemption-tracking view.
 const NAV: { href: string; key: string; Icon: ComponentType<{ className?: string }>; exact?: boolean }[] = [
-  { href: "/business", key: "biz.nav.dashboard", Icon: ChartIcon, exact: true },
-  { href: "/business/rewards", key: "biz.nav.rewards", Icon: GiftIcon },
-  { href: "/business/offers", key: "biz.nav.offers", Icon: UsersIcon },
-  { href: "/business/qr", key: "biz.nav.qr", Icon: ScanIcon },
+  { href: "/business", key: "owner.nav.dashboard", Icon: ChartIcon, exact: true },
+  { href: "/business/campaigns", key: "owner.nav.campaigns", Icon: FlagIcon },
+  { href: "/business/rewards", key: "owner.nav.rewards", Icon: GiftIcon },
+  { href: "/business/qr", key: "owner.nav.qr", Icon: ScanIcon },
   { href: "/business/more", key: "biz.nav.more", Icon: MoreIcon },
 ];
 

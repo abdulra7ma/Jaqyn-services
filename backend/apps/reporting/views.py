@@ -4,10 +4,8 @@ from django.shortcuts import get_object_or_404
 
 from apps.businesses.models import Business
 from apps.businesses.serializers import BusinessSerializer
-from apps.groups.models import GroupDeal
-from apps.groups.serializers import GroupDealSerializer
-from apps.loyalty.models import RewardProgram
-from apps.loyalty.serializers import CustomerRewardProgressSerializer
+from apps.campaigns.models import Campaign, Group
+from apps.campaigns.serializers import CampaignProgressSerializer, GroupSerializer
 from apps.qr.models import QRCodeToken
 from apps.reporting.business_reports import build_business_report, resolve_period
 from apps.reporting.services import admin_metrics, business_customers
@@ -68,15 +66,18 @@ class AdminManualAdjustmentView(APIView):
         serializer.is_valid(raise_exception=True)
         User = get_user_model()
         customer = get_object_or_404(User, id=serializer.validated_data["customer"])
-        program = get_object_or_404(RewardProgram, id=serializer.validated_data["program"])
-        progress, _transaction = manual_adjustment(
+        campaign = get_object_or_404(
+            Campaign.objects.select_related("rule"),
+            id=serializer.validated_data["program"],
+        )
+        participant, _action = manual_adjustment(
             request.user,
             customer,
-            program,
+            campaign,
             serializer.validated_data["amount_count"],
             serializer.validated_data["reason"],
         )
-        return success_response(CustomerRewardProgressSerializer(progress).data)
+        return success_response(CampaignProgressSerializer(participant).data)
 
 
 class AdminBlockUserView(APIView):
@@ -115,8 +116,8 @@ class AdminGroupFailView(APIView):
     def post(self, request, group_id):
         serializer = AdminReasonSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        group = mark_group_failed(get_object_or_404(GroupDeal, id=group_id), request.user, serializer.validated_data.get("reason"))
-        return success_response(GroupDealSerializer(group).data)
+        group = mark_group_failed(get_object_or_404(Group, id=group_id), request.user, serializer.validated_data.get("reason"))
+        return success_response(GroupSerializer(group).data)
 
 
 class AdminGroupCompleteView(APIView):
@@ -125,8 +126,8 @@ class AdminGroupCompleteView(APIView):
     def post(self, request, group_id):
         serializer = AdminReasonSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        group = mark_group_completed(get_object_or_404(GroupDeal, id=group_id), request.user, serializer.validated_data.get("reason"))
-        return success_response(GroupDealSerializer(group).data)
+        group = mark_group_completed(get_object_or_404(Group, id=group_id), request.user, serializer.validated_data.get("reason"))
+        return success_response(GroupSerializer(group).data)
 
 
 class AdminScanLogsView(APIView):

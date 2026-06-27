@@ -20,7 +20,7 @@ def test_create_campaign_starts_as_draft():
     campaign = CampaignService.create_campaign(
         business,
         business.owner,
-        {"name": "New", "campaign_type": Campaign.CampaignType.VISIT, "status": "active"},
+        {"name": "New", "campaign_type": Campaign.CampaignType.INDIVIDUAL, "status": "active"},
     )
 
     # status in data is ignored — always DRAFT.

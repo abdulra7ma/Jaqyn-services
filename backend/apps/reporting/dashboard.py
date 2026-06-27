@@ -37,9 +37,7 @@ from apps.businesses.models import (
     StaffInvite,
 )
 from apps.businesses.trial_services import expiring_trials, trial_status
-from apps.campaigns.models import Campaign, CampaignRewardVoucher
-from apps.groups.models import GroupOffer
-from apps.loyalty.models import RewardProgram, RewardRedemption
+from apps.campaigns.models import Campaign, CampaignParticipant, CampaignRewardVoucher, Group
 from apps.qr.models import ScanLog
 from apps.reporting.models import AdminAuditLog
 from apps.staff.models import StaffMember
@@ -140,12 +138,11 @@ def _build_nav_sections() -> list[dict[str, Any]]:
             _nav_item("accounts_customerprofile", "Customer profiles", CustomerProfile.objects.count()),
             _nav_item("staff_staffmember", "Staff members", StaffMember.objects.count(), add=True),
         ]},
-        {"title": "Loyalty & campaigns", "items": [
-            _nav_item("loyalty_rewardprogram", "Reward programs", RewardProgram.objects.count(), add=True),
-            _nav_item("loyalty_rewardredemption", "Redemptions", RewardRedemption.objects.count()),
+        {"title": "Campaigns", "items": [
             _nav_item("campaigns_campaign", "Campaigns", Campaign.objects.count(), add=True),
+            _nav_item("campaigns_campaignparticipant", "Participants", CampaignParticipant.objects.count()),
             _nav_item("campaigns_campaignrewardvoucher", "Campaign vouchers", CampaignRewardVoucher.objects.count()),
-            _nav_item("groups_groupoffer", "Group offers", GroupOffer.objects.count(), add=True),
+            _nav_item("campaigns_group", "Groups", Group.objects.count()),
         ]},
         {"title": "System & audit", "items": [
             _nav_item("qr_scanlog", "Scan log"),

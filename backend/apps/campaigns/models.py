@@ -7,9 +7,13 @@ from core.fields import TimeStampedModel
 
 class Campaign(TimeStampedModel):
     class CampaignType(models.TextChoices):
-        VISIT = "visit", "Visit"
-        TIME_WINDOW = "time_window", "Time window"
+        # One unified offer model with a type discriminator. INDIVIDUAL absorbs the
+        # legacy loyalty programs (visit/stamp/spend); GROUP is the friends-together
+        # offer; SOCIAL is the Instagram follow/tag bonus. Source:
+        # 2026-06-26 campaigns-restructure design §3.
+        INDIVIDUAL = "individual", "Individual"
         GROUP = "group", "Group"
+        SOCIAL = "social", "Social"
 
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
@@ -40,6 +44,10 @@ class Campaign(TimeStampedModel):
     completion_limit_per_customer = models.CharField(max_length=32, choices=CompletionLimit.choices, default=CompletionLimit.ONCE)
     auto_join_enabled = models.BooleanField(default=False)
     allow_multiple_campaign_counting = models.BooleanField(default=False)
+    # Instagram handle the customer must follow/tag for a SOCIAL campaign. Nullable
+    # because only SOCIAL campaigns set it. Source: campaigns-restructure design §3
+    # (Campaign.instagram_handle nullable; SOCIAL only).
+    instagram_handle = models.CharField(max_length=255, blank=True, null=True)
     # Set when the "campaign ending soon" nudge has been scheduled, so the
     # periodic notify task warns each campaign at most once. Source: plan §1.4
     # (notify campaign ending) — idempotency marker, not a business field.
@@ -62,9 +70,29 @@ class CampaignRule(TimeStampedModel):
         TIME_WINDOW = "time_window", "Time window"
         GROUP_CHECKIN = "group_checkin", "Group check-in"
 
+    class Mechanic(models.TextChoices):
+        # INDIVIDUAL sub-discriminator: how an individual campaign advances. VISIT
+        # counts visits, STAMP counts stamps (honoring max_banked), SPEND
+        # accumulates a money threshold. Source: campaigns-restructure design §3.
+        VISIT = "visit", "Visit"
+        STAMP = "stamp", "Stamp"
+        SPEND = "spend", "Spend"
+
     campaign = models.OneToOneField(Campaign, on_delete=models.CASCADE, related_name="rule")
     rule_type = models.CharField(max_length=32, choices=RuleType.choices)
+    # INDIVIDUAL mechanic. Nullable because GROUP/SOCIAL campaigns have no per-visit
+    # mechanic. Source: campaigns-restructure design §3 (CampaignRule.mechanic).
+    mechanic = models.CharField(max_length=32, choices=Mechanic.choices, blank=True, null=True)
     required_count = models.PositiveIntegerField(default=1)
+    # SPEND-mechanic threshold (money the customer must spend to complete) and the
+    # minimum per-action spend that counts. Decimal for exact money. Nullable —
+    # only SPEND campaigns set them. Source: campaigns-restructure design §3.
+    required_spend = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    min_spend = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    # STAMP-mechanic cap on concurrently-banked unredeemed reward cycles. Nullable
+    # (unlimited) and only meaningful for STAMP. Source: campaigns-restructure
+    # design §3 (CampaignRule.max_banked).
+    max_banked = models.PositiveIntegerField(blank=True, null=True)
     minimum_time_between_actions = models.DurationField(blank=True, null=True)
     max_count_per_day = models.PositiveIntegerField(blank=True, null=True)
     required_group_size = models.PositiveIntegerField(blank=True, null=True)
@@ -111,6 +139,14 @@ class CampaignParticipant(TimeStampedModel):
     customer = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="campaign_participations")
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.JOINED)
     progress_count = models.PositiveIntegerField(default=0)
+    # Accumulated spend toward a SPEND-mechanic INDIVIDUAL campaign. Decimal for
+    # exact money; default 0. Untouched by VISIT/STAMP/GROUP/SOCIAL campaigns.
+    # Source: campaigns-restructure design §3 (CampaignParticipant.current_spend).
+    current_spend = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Self-entered Instagram follower count at join for a SOCIAL campaign. Feeds the
+    # analytics "reach" triplet (sum of follower_count). Nullable — only SOCIAL
+    # participants set it. Source: campaigns-restructure design §3.
+    follower_count = models.PositiveIntegerField(blank=True, null=True)
     # Completion cycle counter. For REPEATABLE campaigns the participant row is
     # re-used across cycles; this distinguishes one completion from the next and
     # backs the uniqueness story for repeatable progress. Source: plan §1.1.
@@ -139,6 +175,10 @@ class CampaignAction(TimeStampedModel):
     class ActionType(models.TextChoices):
         VISIT = "visit", "Visit"
         GROUP_CHECKIN = "group_checkin", "Group check-in"
+        # Staff-verified Instagram follow/tag proof for a SOCIAL campaign. Source:
+        # campaigns-restructure design §3 (CampaignAction.action_type adds
+        # SOCIAL_PROOF).
+        SOCIAL_PROOF = "social_proof", "Social proof"
         REFERRAL = "referral", "Referral"
 
     class VerificationMethod(models.TextChoices):
@@ -209,7 +249,10 @@ class CampaignRewardVoucher(TimeStampedModel):
         return f"{self.voucher_code} ({self.status})"
 
 
-class GroupSession(TimeStampedModel):
+class Group(TimeStampedModel):
+    # A customer-formed group inside a GROUP campaign. Merges the legacy
+    # groups.GroupDeal + campaigns.GroupSession into one table keyed by campaign.
+    # Source: campaigns-restructure design §3 (Group; was GroupSession).
     class Status(models.TextChoices):
         FORMING = "forming", "Forming"
         FULL = "full", "Full"
@@ -218,11 +261,22 @@ class GroupSession(TimeStampedModel):
         EXPIRED = "expired", "Expired"
         CANCELLED = "cancelled", "Cancelled"
 
-    campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT, related_name="group_sessions")
-    group_leader = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="led_group_sessions")
+    campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT, related_name="groups")
+    group_leader = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="led_groups")
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.FORMING)
     required_size = models.PositiveIntegerField()
     invite_token = models.CharField(max_length=128, unique=True)
+    # Leader-chosen visit slot for the group ("we'll come Friday 8pm"). Optional —
+    # a group can form without a fixed time. Source: richer customer GROUP flow
+    # (leader picks a visit time when creating the group).
+    visit_time = models.DateTimeField(blank=True, null=True)
+    # Optional leader-given group name surfaced to invited friends ("Birthday
+    # dinner"). max_length 80 keeps it a short label, not free text. Source:
+    # richer customer GROUP flow (name the group).
+    name = models.CharField(max_length=80, blank=True, default="")
+    # Optional note from the leader to invited friends ("meet at the door").
+    # Source: richer customer GROUP flow (note to friends).
+    note = models.TextField(blank=True, default="")
     expires_at = models.DateTimeField(blank=True, null=True)
     completed_at = models.DateTimeField(blank=True, null=True)
 
@@ -235,23 +289,25 @@ class GroupSession(TimeStampedModel):
         return f"Group {self.invite_token[:8]} ({self.status})"
 
 
-class GroupSessionMember(TimeStampedModel):
+class GroupMember(TimeStampedModel):
+    # Merges legacy groups.GroupMember + campaigns.GroupSessionMember. Source:
+    # campaigns-restructure design §3 (GroupMember; was GroupSessionMember).
     class Status(models.TextChoices):
         JOINED = "joined", "Joined"
         CHECKED_IN = "checked_in", "Checked in"
         LEFT = "left", "Left"
         NO_SHOW = "no_show", "No show"
 
-    group_session = models.ForeignKey(GroupSession, on_delete=models.CASCADE, related_name="members")
-    customer = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="group_session_memberships")
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="members")
+    customer = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="group_memberships")
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.JOINED)
     joined_at = models.DateTimeField(blank=True, null=True)
     checked_in_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["group_session", "customer"], name="unique_group_session_member"),
+            models.UniqueConstraint(fields=["group", "customer"], name="unique_group_member"),
         ]
 
     def __str__(self):
-        return f"{self.customer} in {self.group_session_id}"
+        return f"{self.customer} in {self.group_id}"

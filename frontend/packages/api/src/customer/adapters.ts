@@ -9,16 +9,14 @@ import { session } from "./session";
 import type {
   Business,
   Campaign,
+  CampaignFeed,
   CampaignProgress,
   CampaignVoucher,
   CampaignWallet,
-  GroupDeal,
-  GroupMember,
-  GroupOffer,
   GroupSession,
   GroupSessionMember,
+  MyGroup,
   RewardProgram,
-  RewardProgress,
 } from "./types";
 
 type Raw = Record<string, any>;
@@ -78,6 +76,9 @@ export function adaptBusiness(raw: Raw): Business {
   };
 }
 
+// The public business profile embeds its reward programs as a read-only catalog
+// (distinct from the removed customer-progress endpoints). Kept for the public
+// /businesses/{id}/ card.
 export function adaptProgram(raw: Raw): RewardProgram {
   return {
     id: raw.id,
@@ -90,94 +91,27 @@ export function adaptProgram(raw: Raw): RewardProgram {
   };
 }
 
-export function adaptProgress(raw: Raw): RewardProgress {
-  const program = adaptProgram(raw.reward_program ?? {});
-  return {
-    id: raw.id,
-    business: {
-      id: typeof raw.business === "string" ? raw.business : raw.business?.id,
-      name: raw.business_name ?? (typeof raw.business === "object" ? raw.business?.name : "") ?? "",
-      category: "other",
-      logo_url: null,
-      area: raw.business_area ?? "",
-    },
-    reward_program: program,
-    current_count: raw.current_count ?? 0,
-    target_count: raw.target_count ?? program.required_count ?? null,
-    status: raw.status,
-    unlocked_at: raw.unlocked_at ?? null,
-    expires_at: raw.expires_at ?? null,
-  };
-}
-
-export function adaptOffer(raw: Raw): GroupOffer {
-  const biz = typeof raw.business === "object" ? raw.business : null;
-  return {
-    id: raw.id,
-    business: {
-      id: biz?.id ?? raw.business,
-      name: raw.business_name ?? biz?.name ?? "",
-      category: "other",
-      area: raw.business_area ?? biz?.area ?? "",
-      logo_url: null,
-    },
-    title: raw.title,
-    description: raw.description ?? "",
-    reward_type: raw.reward_type,
-    reward_description: raw.reward_description ?? "",
-    min_group_size: raw.min_group_size,
-    max_group_size: raw.max_group_size ?? null,
-    valid_from: raw.valid_from,
-    valid_to: raw.valid_to,
-    time_start: (raw.time_start ?? "").slice(0, 5),
-    time_end: (raw.time_end ?? "").slice(0, 5),
-    checkin_window_minutes: raw.checkin_window_minutes ?? 30,
-    requires_staff_code: raw.requires_staff_code ?? true,
-    terms: raw.terms ?? null,
-    status: raw.status,
-  };
-}
-
-function adaptMember(raw: Raw, leaderId: string | null): GroupMember {
-  const customerId: string = raw.customer ?? raw.id;
-  return {
-    id: raw.id,
-    name: raw.customer_name || raw.name || `#${String(customerId).slice(0, 6)}`,
-    status: raw.status,
-    is_leader: leaderId != null && customerId === leaderId,
-  };
-}
-
-export function adaptDeal(raw: Raw): GroupDeal {
-  const uid = session.getUserId();
-  const leaderId: string | null = raw.leader ?? null;
-  const members = (raw.members ?? []).map((m: Raw) => adaptMember(m, leaderId));
-  const selfRaw = (raw.members ?? []).find((m: Raw) => (m.customer ?? m.id) === uid);
-  return {
-    id: raw.id,
-    invite_token: raw.invite_token,
-    group_offer: adaptOffer(raw.group_offer ?? {}),
-    visit_time: raw.visit_time,
-    status: raw.status,
-    reward_code: raw.reward_code ?? null,
-    members,
-    is_member: !!selfRaw,
-    is_leader: uid != null && leaderId === uid,
-    checked_in: selfRaw?.status === "checked_in",
-  };
-}
-
 // ---- Campaigns ---------------------------------------------------------------
 // Boundary validation for campaign payloads. The backend may send `business` as
 // a bare UUID (like rewards/offers) — businessRef fills a placeholder the cards
 // tolerate. Progress is relative to the authenticated user.
 
-// The backend campaign_type enum is "time_window" (underscored); the UI type is
-// "timewindow". Normalize so the screens' type checks match.
+// Normalize the backend campaign_type onto the UI discriminator. The backend now
+// emits individual/group/social (campaigns-restructure design §3); the legacy
+// visit/time_window values map onto INDIVIDUAL so old rows degrade gracefully.
 function normalizeCampaignType(raw: string | undefined): Campaign["campaign_type"] {
-  if (raw === "time_window" || raw === "timewindow") return "timewindow";
   if (raw === "group") return "group";
-  return "visit";
+  if (raw === "social") return "social";
+  return "individual";
+}
+
+// Normalize the INDIVIDUAL completion mechanic (campaigns-restructure design §3).
+// Null for non-individual campaigns (group/social have no mechanic).
+function normalizeMechanic(raw: string | undefined): Campaign["rule"]["mechanic"] {
+  if (raw === "stamp") return "stamp";
+  if (raw === "spend") return "spend";
+  if (raw === "visit") return "visit";
+  return null;
 }
 
 function adaptCampaignProgress(raw: Raw | null | undefined): CampaignProgress | null {
@@ -242,9 +176,10 @@ export function adaptCampaign(raw: Raw): Campaign {
     business: {
       id: biz?.id ?? raw.business,
       name: raw.business_name ?? biz?.name ?? "",
-      category: biz?.category ?? "other",
+      category: raw.business_category ?? biz?.category ?? "other",
       logo_url: raw.business_logo_url ?? biz?.logo_url ?? null,
       area: raw.business_area ?? biz?.area ?? "",
+      address: raw.business_address ?? biz?.address ?? "",
     },
     // No backend `glyph` field — fall through to empty string so GlyphTile
     // degrades to the logo/initial fallback without reading undefined.
@@ -260,30 +195,42 @@ export function adaptCampaign(raw: Raw): Campaign {
     end_label: formatDateLabel(raw.end_at) ?? raw.end ?? "",
     // Derive from end_at; the backend does not emit a days_left field.
     days_left: computeDaysLeft(raw.end_at),
-    active_days: raw.active_days ?? raw.days ?? "",
+    // Backend `active_days` is a JSON array of weekday codes. Coerce to a display
+    // string: empty when every day / none is set (the UI then shows "Daily"),
+    // otherwise the joined codes. (Field is typed `string` downstream.)
+    active_days: Array.isArray(raw.active_days)
+      ? raw.active_days.length === 0 || raw.active_days.length >= 7
+        ? ""
+        : raw.active_days.join(", ")
+      : (raw.active_days ?? raw.days ?? ""),
     // Backend emits separate active_start_time / active_end_time fields
     // (HH:MM:SS); derive a combined display string. No single active_hours field.
     active_hours: deriveActiveHours(raw.active_start_time, raw.active_end_time),
+    // Raw HH:MM window bounds — the group create screen builds visit slots from these.
+    active_start_time: (raw.active_start_time ?? "").slice(0, 5),
+    active_end_time: (raw.active_end_time ?? "").slice(0, 5),
     // Backend field is completion_limit_per_customer, not repeat_policy.
     // Fall back through both names so mock objects using the UI name still work.
     repeat_policy:
       raw.repeat_policy ?? raw.completion_limit_per_customer ?? raw.repeat ?? "once",
     max_participants: raw.max_participants ?? null,
     rule: {
-      // Backend keys: minimum_time_between_actions (ISO duration string),
-      // group_checkin_window_minutes (int), window_before_time (HH:MM:SS).
+      // Backend keys: mechanic (visit/stamp/spend), required_spend (decimal),
+      // minimum_time_between_actions (ISO duration), group_checkin_window_minutes.
+      mechanic: normalizeMechanic(rule.mechanic),
       required_count: rule.required_count ?? rule.visits ?? null,
+      required_spend:
+        rule.required_spend != null ? String(rule.required_spend) : (rule.requiredSpend ?? null),
       max_count_per_day: rule.max_count_per_day ?? rule.perDay ?? null,
       min_time_between: rule.minimum_time_between_actions ?? rule.min_time_between ?? rule.minGap ?? null,
-      window_before_time:
-        (rule.window_before_time ?? rule.windowBefore ?? null)?.slice?.(0, 5) ??
-        rule.window_before_time ??
-        null,
       required_group_size: rule.required_group_size ?? rule.groupSize ?? null,
       group_checkin_window:
         rule.group_checkin_window_minutes != null
           ? `${rule.group_checkin_window_minutes} min`
           : (rule.group_checkin_window ?? rule.checkin ?? null),
+      // GROUP per-member minimum spend (decimal string) — null when no minimum.
+      min_spend: rule.min_spend != null ? String(rule.min_spend) : (rule.minSpend ?? null),
+      group_checkin_window_minutes: rule.group_checkin_window_minutes ?? null,
     },
     reward: {
       // Backend serializes reward_type / reward_receiver_type (not type / receiver).
@@ -295,7 +242,17 @@ export function adaptCampaign(raw: Raw): Campaign {
       receiver: reward.reward_receiver_type ?? reward.receiver ?? undefined,
     },
     my_progress: adaptCampaignProgress(raw.my_progress),
+    instagram_handle: raw.instagram_handle ?? null,
     auto_join_link: raw.auto_join_link ?? null,
+  };
+}
+
+// Maps the {followed, discover} feed payload (campaigns-restructure design §6) into
+// two adapted Campaign lists. Tolerates missing arrays so an empty feed is safe.
+export function adaptCampaignFeed(raw: Raw): CampaignFeed {
+  return {
+    followed: (raw.followed ?? []).map(adaptCampaign),
+    discover: (raw.discover ?? []).map(adaptCampaign),
   };
 }
 
@@ -375,6 +332,7 @@ function adaptGroupSessionMember(raw: Raw, leaderId: string | null, uid: string 
     is_leader: raw.is_leader ?? (leaderId != null && customerId === leaderId),
     is_you: raw.is_you ?? (uid != null && customerId === uid),
     checked_in: raw.checked_in ?? raw.status === "checked_in",
+    status: raw.status ?? null,
   };
 }
 
@@ -389,20 +347,44 @@ export function adaptGroupSession(raw: Raw): GroupSession {
   return {
     id: raw.id,
     campaign: {
+      // Backend emits the campaign FK as a bare id plus a denormalized
+      // `campaign_name`. Fall through an embedded object for the typed mocks.
       id: camp?.id ?? raw.campaign ?? "",
       name: raw.campaign_name ?? camp?.name ?? "",
       glyph: raw.glyph ?? camp?.glyph ?? "",
     },
-    // Backend GroupSessionSerializer emits `invite_token`; the UI surfaces it as
-    // `invite_code` (the short code rendered into the jaqyn.kg/g/<code> link).
-    invite_code: raw.invite_token ?? raw.invite_code ?? raw.code ?? "",
+    business_name: raw.business_name ?? "",
+    business_logo_url: raw.business_logo_url ?? null,
+    group_leader: leaderId,
+    // Backend GroupSessionSerializer emits `invite_code` (and a full `invite_url`).
+    // Tolerate the legacy `invite_token` name for older mocks.
+    invite_code: raw.invite_code ?? raw.invite_token ?? raw.code ?? "",
+    invite_url: raw.invite_url ?? "",
     status: raw.status,
     required_size: raw.required_size ?? raw.size ?? members.length,
     joined_count: raw.joined_count ?? members.length,
     members,
-    // The group check-in QR token is not part of the session serializer yet
-    // (it's minted when the group fills); tolerate either `checkin_token` or a
-    // bare `token`, else null so the full-state QR simply doesn't render.
+    visit_time: raw.visit_time ?? null,
+    name: raw.name ?? null,
+    note: raw.note ?? null,
+    // The group check-in QR token is only present once the group is full
+    // (type GROUP_CHECKIN); else null so the full-state QR simply doesn't render.
     checkin_token: raw.checkin_token ?? raw.token ?? null,
+  };
+}
+
+// Maps a my-groups list row. Tolerates an embedded campaign object (mocks) or the
+// flat `campaign` id + `campaign_name` the backend list emits.
+export function adaptMyGroup(raw: Raw): MyGroup {
+  const camp = typeof raw.campaign === "object" ? raw.campaign : null;
+  return {
+    id: raw.id,
+    campaign_id: raw.campaign_id ?? camp?.id ?? raw.campaign ?? "",
+    campaign_name: raw.campaign_name ?? camp?.name ?? "",
+    business_name: raw.business_name ?? "",
+    business_logo_url: raw.business_logo_url ?? null,
+    status: raw.status,
+    required_size: raw.required_size ?? raw.size ?? 0,
+    joined_count: raw.joined_count ?? 0,
   };
 }

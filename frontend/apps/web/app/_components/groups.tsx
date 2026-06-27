@@ -1,129 +1,12 @@
 "use client";
 
-import type { GroupMember, GroupOffer } from "@jaqyn/api";
-import { useState, type ReactNode } from "react";
+import type { GroupSessionMember } from "@jaqyn/api";
+import { cn } from "@jaqyn/ui";
+import { useState } from "react";
 
-/** Emoji used on the deal cover — reward type wins, then business category. */
-export function dealEmoji(offer: Pick<GroupOffer, "reward_type" | "business">): string {
-  if (offer.reward_type === "free_shared_item") return "🍰";
-  switch (offer.business.category) {
-    case "cafe":
-      return "☕";
-    case "bakery":
-      return "🥐";
-    case "restaurant":
-      return "🍽️";
-    case "barber":
-      return "💈";
-    case "beauty":
-      return "💅";
-    case "retail":
-      return "🛍️";
-    default:
-      return "🎁";
-  }
-}
-
-/** Diagonal-striped cover with a centered emoji and overlaid badges (matches the design canvas). */
-export function OfferCover({
-  emoji,
-  topLeft,
-  topRight,
-  className = "",
-}: {
-  emoji: string;
-  topLeft?: ReactNode;
-  topRight?: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={`relative flex items-center justify-center overflow-hidden rounded-2xl bg-board/50 ${className}`}
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(135deg, rgba(255,255,255,.45) 0 14px, transparent 14px 28px)",
-      }}
-    >
-      <span className="text-[44px] drop-shadow-sm sm:text-[52px]">{emoji}</span>
-      {topLeft && <div className="absolute left-3 top-3">{topLeft}</div>}
-      {topRight && <div className="absolute right-3 top-3">{topRight}</div>}
-    </div>
-  );
-}
-
-/** Small white pill used for tags on the cover. */
-export function CoverTag({ children, tone = "ink" }: { children: ReactNode; tone?: "ink" | "amber" }) {
-  return (
-    <span
-      className={`rounded-pill bg-card px-2.5 py-1 text-[11px] font-bold shadow-card ${
-        tone === "amber" ? "text-amber-deep" : "text-ink"
-      }`}
-    >
-      {children}
-    </span>
-  );
-}
-
-/** Member avatar circles + empty (dashed) slots, sized to the offer's minimum. */
-export function AvatarSlots({
-  members,
-  size,
-  variant = "light",
-}: {
-  members: GroupMember[];
-  size: number;
-  variant?: "light" | "onBrand";
-}) {
-  const slots = Math.max(size, members.length);
-  const empties = Math.max(0, slots - members.length);
-  const ring = variant === "onBrand" ? "border-white/45 text-white/70" : "border-line text-subtle";
-  const filled =
-    variant === "onBrand" ? "bg-white/20 text-white" : "bg-brand-muted text-brand";
-  return (
-    <div className="flex flex-wrap gap-2.5">
-      {members.map((m) => (
-        <div
-          key={m.id}
-          title={m.name}
-          className={`flex h-12 w-12 items-center justify-center rounded-full font-display text-base font-bold ${filled}`}
-        >
-          {m.name.charAt(0).toUpperCase()}
-        </div>
-      ))}
-      {Array.from({ length: empties }).map((_, i) => (
-        <div
-          key={i}
-          className={`flex h-12 w-12 items-center justify-center rounded-full border-2 border-dashed text-xl ${ring}`}
-        >
-          +
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Visit-time slots ("15:00".."18:00" → 30-min steps), capped for a tidy grid. */
-export function timeSlots(start: string, end: string, max = 4): string[] {
-  const toMin = (s: string) => {
-    const [h, m] = s.split(":").map(Number);
-    return (h ?? 0) * 60 + (m ?? 0);
-  };
-  const out: string[] = [];
-  for (let t = toMin(start); t <= toMin(end) - 60 && out.length < max; t += 30) {
-    out.push(`${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`);
-  }
-  return out.length ? out : [start];
-}
-
-/** "HH:MM" today → ISO string for the createGroup payload. */
-export function slotToIso(hhmm: string): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  const d = new Date();
-  d.setHours(h ?? 0, m ?? 0, 0, 0);
-  return d.toISOString();
-}
-
-/** Copy-to-clipboard with a transient "copied" flag. */
+/** Copy-to-clipboard with a transient "copied" flag. Used by the campaign group
+ * flow's invite screen (the legacy group-deals helpers were removed with that
+ * surface in the campaigns restructure). */
 export function useCopy(): { copied: boolean; copy: (text: string) => void } {
   const [copied, setCopied] = useState(false);
   const copy = (text: string) => {
@@ -138,12 +21,104 @@ export function useCopy(): { copied: boolean; copy: (text: string) => void } {
   return { copied, copy };
 }
 
-export function inviteUrl(token: string): string {
-  if (typeof window !== "undefined") return `${window.location.origin}/groups/${token}`;
-  return `/groups/${token}`;
+/** Builds the shareable invite link, preferring the backend-supplied full URL and
+ * falling back to the canonical jaqyn.kg/g/<code> short link. */
+export function inviteUrl(code: string, url?: string): string {
+  return url && url.length > 0 ? url : `jaqyn.kg/g/${code}`;
 }
 
-/** Short display form of an invite link, e.g. "jaqyn.kg/g/mana-6047". */
-export function inviteShort(token: string): string {
-  return `jaqyn.kg/g/${token.replace(/[^a-z0-9]/gi, "").slice(-8)}`;
+/** Formats a Date (or ISO string) to a local 24h HH:MM, e.g. "14:30". */
+export function hhmm(value: Date | string | null | undefined): string {
+  if (!value) return "";
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return "";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/** Parses "HH:MM" into minutes-since-midnight; null when unparseable. */
+function parseMinutes(time: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(time);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+// Default check-in window (minutes) when the campaign omits one. Matches the
+// backend's group_checkin_window_minutes default referenced in the contract.
+const DEFAULT_CHECKIN_WINDOW_MIN = 30;
+// Slot granularity for the visit-time picker (minutes). 30-min steps per the spec.
+const SLOT_STEP_MIN = 30;
+
+/**
+ * Builds today's selectable visit-time slots, every {SLOT_STEP_MIN} minutes from
+ * the active window start up to (window end − check-in window). Returns Date
+ * objects for TODAY. Falls back to a single start slot when the window is too
+ * tight, so the picker is never empty for an active group campaign.
+ */
+export function buildVisitSlots(
+  startTime: string,
+  endTime: string,
+  checkinWindowMin: number | null,
+): Date[] {
+  const start = parseMinutes(startTime);
+  const end = parseMinutes(endTime);
+  if (start == null || end == null) return [];
+  const window = checkinWindowMin ?? DEFAULT_CHECKIN_WINDOW_MIN;
+  const lastSlot = end - window;
+  const slots: Date[] = [];
+  for (let m = start; m <= lastSlot; m += SLOT_STEP_MIN) {
+    const d = new Date();
+    d.setHours(Math.floor(m / 60), m % 60, 0, 0);
+    slots.push(d);
+  }
+  // Window too tight to fit a full check-in: still offer the start slot.
+  if (slots.length === 0) {
+    const d = new Date();
+    d.setHours(Math.floor(start / 60), start % 60, 0, 0);
+    slots.push(d);
+  }
+  return slots;
+}
+
+/**
+ * Row of group seats: one filled circle per joined member (leader shows their
+ * initial) and dashed "+" circles for the remaining seats. Rendered on the
+ * forming/full group screen above the "need N more" line.
+ */
+export function AvatarSlots({
+  members,
+  requiredSize,
+}: {
+  members: GroupSessionMember[];
+  requiredSize: number;
+}) {
+  const joined = members.slice(0, requiredSize);
+  const remaining = Math.max(0, requiredSize - joined.length);
+  return (
+    <div className="flex flex-wrap gap-2.5">
+      {joined.map((m) => (
+        <div
+          key={m.id}
+          className={cn(
+            "flex h-11 w-11 flex-none items-center justify-center rounded-full font-display text-base font-bold",
+            m.is_leader ? "bg-white text-brand" : "bg-white/85 text-brand",
+          )}
+          aria-hidden
+        >
+          {m.initial}
+        </div>
+      ))}
+      {Array.from({ length: remaining }).map((_, i) => (
+        <div
+          key={`empty-${i}`}
+          className="flex h-11 w-11 flex-none items-center justify-center rounded-full border-2 border-dashed border-white/55 text-lg font-bold text-white/70"
+          aria-hidden
+        >
+          +
+        </div>
+      ))}
+    </div>
+  );
 }
