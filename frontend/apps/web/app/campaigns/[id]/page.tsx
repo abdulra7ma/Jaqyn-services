@@ -156,7 +156,10 @@ export default function CampaignDetailPage() {
                       </span>
                     </div>
                     <div className="mt-3 h-2.5 overflow-hidden rounded-pill bg-board">
-                      <div className="h-full rounded-pill bg-brand" style={{ width: `${pct}%` }} />
+                      <div
+                        className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
+                        style={{ width: `${pct}%` }}
+                      />
                     </div>
                     <p className="mt-2.5 text-[12.5px] text-subtle">{t("cmp.detail.progressHint")}</p>
                   </div>

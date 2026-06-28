@@ -209,7 +209,7 @@ export function CampaignCard({ campaign }: { campaign: Campaign }) {
         <div className="mt-3.5">
           <div className="h-2 overflow-hidden rounded-pill bg-board">
             <div
-              className="h-full rounded-pill bg-brand"
+              className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
               style={{ width: `${Math.min(100, Math.round(((p?.current_count ?? 0) / target) * 100))}%` }}
             />
           </div>
@@ -263,7 +263,10 @@ export function CampaignCarouselCard({ campaign }: { campaign: Campaign }) {
 
       <div className="mt-3">
         <div className="h-2 overflow-hidden rounded-pill bg-board">
-          <div className="h-full rounded-pill bg-brand" style={{ width: `${pct}%` }} />
+          <div
+            className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
+            style={{ width: `${pct}%` }}
+          />
         </div>
         <div className="mt-2 flex items-center justify-between text-[12px] font-semibold text-subtle">
           <span>

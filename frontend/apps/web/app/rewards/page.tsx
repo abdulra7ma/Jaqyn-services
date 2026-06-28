@@ -1,15 +1,17 @@
 "use client";
 
-// Rewards = earned vouchers (campaigns-restructure design §6a Change 3). The
-// Rewards tab is the single campaign wallet: vouchers unlocked by completing
-// campaigns, grouped Active / Used / Expired. Campaigns (things to join) live on
-// the /campaigns feed — the two are kept distinct.
+// Rewards = the customer's loyalty wallet (campaigns-restructure design §6a,
+// refined): an "In progress" row of cards still being collected (in-progress
+// campaigns, from the feed's `followed`) above the earned vouchers, grouped
+// Active / Used / Expired. The same in-progress cards also appear on the
+// /campaigns feed ("From places you go"); surfacing them here too makes the
+// Rewards tab read as a full loyalty wallet (cards + earned rewards).
 
-import { useCampaignWallet, type CampaignWallet } from "@jaqyn/api";
+import { useCampaignFeed, useCampaignWallet, type CampaignWallet } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { CustomerShell } from "../_components/CustomerShell";
 import { QueryBoundary } from "../_components/QueryBoundary";
-import { VoucherCard, VoucherRow } from "../_components/campaigns";
+import { CampaignCarouselCard, VoucherCard, VoucherRow } from "../_components/campaigns";
 import { PageTitle } from "../_components/kit";
 import { useRequireAuth } from "../_lib/auth";
 
@@ -28,50 +30,73 @@ export default function RewardsPage() {
   const { isAuthenticated } = useRequireAuth();
   // Poll so a staff redemption flips a voucher from Active → Used live.
   const wallet = useCampaignWallet({ refetchInterval: 4000 });
+  // In-progress cards (loyalty/individual being collected) come from the feed's
+  // `followed` list — the same source as the /campaigns "From places you go" row.
+  const feed = useCampaignFeed("all");
 
   return (
     <CustomerShell title={t("cmp.wallet.title")} hideChromeTitle>
       {!isAuthenticated ? null : (
-        <QueryBoundary query={wallet} isEmpty={isWalletEmpty} emptyMessage={t("cmp.wallet.empty")}>
-          {(w) => (
-            <>
-              <PageTitle>{t("cmp.wallet.title")}</PageTitle>
-              <p className="mt-1 text-[13.5px] text-subtle">{t("cmp.wallet.subtitle")}</p>
+        <QueryBoundary query={wallet}>
+          {(w) => {
+            const inProgress = feed.data?.followed ?? [];
+            const empty = isWalletEmpty(w) && inProgress.length === 0 && !feed.isLoading;
 
-              {w.active.length > 0 && (
-                <>
-                  <SectionLabel>{t("cmp.wallet.active")}</SectionLabel>
-                  <div className="mt-3 flex flex-col gap-3">
-                    {w.active.map((v) => (
-                      <VoucherCard key={v.id} voucher={v} />
-                    ))}
-                  </div>
-                </>
-              )}
+            return (
+              <>
+                <PageTitle>{t("cmp.wallet.title")}</PageTitle>
+                <p className="mt-1 text-[13.5px] text-subtle">{t("cmp.wallet.subtitle")}</p>
 
-              {w.used.length > 0 && (
-                <>
-                  <SectionLabel>{t("cmp.wallet.used")}</SectionLabel>
-                  <div className="mt-3 flex flex-col gap-2.5">
-                    {w.used.map((v) => (
-                      <VoucherRow key={v.id} voucher={v} />
-                    ))}
-                  </div>
-                </>
-              )}
+                {empty && <p className="mt-8 text-sm text-subtle">{t("cmp.wallet.empty")}</p>}
 
-              {w.expired.length > 0 && (
-                <>
-                  <SectionLabel>{t("cmp.wallet.expired")}</SectionLabel>
-                  <div className="mt-3 flex flex-col gap-2.5">
-                    {w.expired.map((v) => (
-                      <VoucherRow key={v.id} voucher={v} />
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
-          )}
+                {inProgress.length > 0 && (
+                  <section>
+                    <SectionLabel>{t("cmp.wallet.inProgress")}</SectionLabel>
+                    <div className="-mx-5 mt-3 flex snap-x gap-3 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      {inProgress.map((c) => (
+                        <div key={c.id} className="snap-start">
+                          <CampaignCarouselCard campaign={c} />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {w.active.length > 0 && (
+                  <>
+                    <SectionLabel>{t("cmp.wallet.active")}</SectionLabel>
+                    <div className="mt-3 flex flex-col gap-3">
+                      {w.active.map((v) => (
+                        <VoucherCard key={v.id} voucher={v} />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {w.used.length > 0 && (
+                  <>
+                    <SectionLabel>{t("cmp.wallet.used")}</SectionLabel>
+                    <div className="mt-3 flex flex-col gap-2.5">
+                      {w.used.map((v) => (
+                        <VoucherRow key={v.id} voucher={v} />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {w.expired.length > 0 && (
+                  <>
+                    <SectionLabel>{t("cmp.wallet.expired")}</SectionLabel>
+                    <div className="mt-3 flex flex-col gap-2.5">
+                      {w.expired.map((v) => (
+                        <VoucherRow key={v.id} voucher={v} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          }}
         </QueryBoundary>
       )}
     </CustomerShell>
