@@ -48,9 +48,9 @@ export type RecentActivity = {
 // scan + redeem a campaign reward voucher.
 
 // The loyalty form a row advances. Drives which chooser action and entry the
-// staff sees: stamp/visit/points-visit-basis = one tap; spend/points-spend-basis
-// = bill-amount keypad; social = confirm a post.
-export type ScanRowMechanic = "visit" | "stamp" | "spend" | "points" | "social" | null;
+// staff sees: stamp/visit/points-visit-basis = one tap; points-spend-basis uses
+// the bill-amount keypad; social = confirm a post.
+export type ScanRowMechanic = "visit" | "stamp" | "points" | "social" | null;
 
 export type CampaignScanRow = {
   campaign_id: string;

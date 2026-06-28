@@ -15,7 +15,12 @@ from apps.campaigns.services import (
 )
 from apps.campaigns.constants import STAFF_ABUSE_MAX_CONFIRMS
 from apps.reporting.models import AdminAuditLog
-from apps.campaigns.tests.helpers import make_business, make_campaign, make_customer, make_staff
+from apps.campaigns.tests.helpers import (
+    make_business,
+    make_campaign,
+    make_customer,
+    make_staff,
+)
 
 
 pytestmark = pytest.mark.django_db
@@ -50,7 +55,8 @@ def test_new_vs_returning_split():
     # Returning customer has an earlier participation in another campaign.
     earlier = make_campaign(business)
     CampaignParticipant.objects.create(
-        campaign=earlier, customer=returning,
+        campaign=earlier,
+        customer=returning,
         status=CampaignParticipant.Status.JOINED,
     )
     campaign = make_campaign(business)
@@ -70,13 +76,17 @@ def test_detect_duplicate_visit_signal():
         business, required_count=5, minimum_gap=timedelta(minutes=30)
     )
     participant = CampaignParticipant.objects.create(
-        campaign=campaign, customer=customer,
+        campaign=campaign,
+        customer=customer,
         status=CampaignParticipant.Status.IN_PROGRESS,
     )
     now = timezone.now()
     CampaignAction.objects.create(
-        campaign=campaign, participant=participant, customer=customer,
-        business=business, action_time=now - timedelta(minutes=5),
+        campaign=campaign,
+        participant=participant,
+        customer=customer,
+        business=business,
+        action_time=now - timedelta(minutes=5),
         status=CampaignAction.Status.COUNTED,
     )
 
@@ -92,15 +102,19 @@ def test_staff_abuse_flag_writes_audit():
     campaign = make_campaign(business, required_count=100, minimum_gap=timedelta(0))
     now = timezone.now()
     participant = CampaignParticipant.objects.create(
-        campaign=campaign, customer=make_customer("721"),
+        campaign=campaign,
+        customer=make_customer("721"),
         status=CampaignParticipant.Status.IN_PROGRESS,
     )
     # Seed STAFF_ABUSE_MAX_CONFIRMS counted actions verified by this staff.
     for _ in range(STAFF_ABUSE_MAX_CONFIRMS):
         CampaignAction.objects.create(
-            campaign=campaign, participant=participant,
-            customer=participant.customer, business=business,
-            verified_by_staff=staff, action_time=now,
+            campaign=campaign,
+            participant=participant,
+            customer=participant.customer,
+            business=business,
+            verified_by_staff=staff,
+            action_time=now,
             status=CampaignAction.Status.COUNTED,
         )
 
@@ -119,14 +133,18 @@ def test_fraud_sweep_flags_abusive_staff():
     campaign = make_campaign(business, required_count=100, minimum_gap=timedelta(0))
     now = timezone.now()
     participant = CampaignParticipant.objects.create(
-        campaign=campaign, customer=make_customer("731"),
+        campaign=campaign,
+        customer=make_customer("731"),
         status=CampaignParticipant.Status.IN_PROGRESS,
     )
     for _ in range(STAFF_ABUSE_MAX_CONFIRMS):
         CampaignAction.objects.create(
-            campaign=campaign, participant=participant,
-            customer=participant.customer, business=business,
-            verified_by_staff=staff, action_time=now,
+            campaign=campaign,
+            participant=participant,
+            customer=participant.customer,
+            business=business,
+            verified_by_staff=staff,
+            action_time=now,
             status=CampaignAction.Status.COUNTED,
         )
 

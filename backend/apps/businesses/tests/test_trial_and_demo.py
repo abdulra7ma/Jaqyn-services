@@ -1,4 +1,5 @@
 """Tests for the free-trial lifecycle and one-click demo business seeding."""
+
 from datetime import timedelta
 
 import pytest
@@ -105,8 +106,8 @@ class TestCreateDemoBusiness:
         owner = User.objects.get(email=result.owner_email)
         assert owner.role == User.Role.BUSINESS_OWNER
         assert owner.check_password(DEMO_OWNER_PASSWORD)
-        # Seeded campaign (loyalty card → INDIVIDUAL campaign) + catalog.
-        assert Campaign.objects.filter(business=biz, campaign_type=Campaign.CampaignType.INDIVIDUAL).exists()
+        # Seeded durable loyalty card + catalog.
+        assert biz.loyalty_programs.exists()
         assert biz.catalog_items.count() == 3
 
     def test_each_call_is_unique(self):

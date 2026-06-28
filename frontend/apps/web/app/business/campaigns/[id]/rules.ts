@@ -18,9 +18,7 @@ export function ruleLinesFor(t: Translate, c: BusinessCampaign): string[] {
     if (r.group_checkin_window)
       lines.push(t("cmp.rule.checkin").replace("{window}", r.group_checkin_window));
   } else if (c.type === "individual") {
-    if (r.mechanic === "spend" && r.required_spend != null) {
-      lines.push(t("cmp.biz.form.requiredSpend") + ": " + r.required_spend);
-    } else if (r.required_count != null) {
+    if (r.required_count != null) {
       lines.push(t("cmp.rule.visits").replace("{count}", String(r.required_count)));
     }
     if (r.max_count_per_day != null)

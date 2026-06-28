@@ -172,7 +172,9 @@ def notify_voucher_expiring(self, voucher_id: str) -> dict[str, str]:
         {
             "voucher_id": str(voucher.id),
             "code": voucher.voucher_code,
-            "expires_at": voucher.expires_at.isoformat() if voucher.expires_at else None,
+            "expires_at": voucher.expires_at.isoformat()
+            if voucher.expires_at
+            else None,
         },
     )
     return {"log_id": str(log.id)}
@@ -217,16 +219,13 @@ def notify_campaign_ending(self, campaign_id: str) -> dict[str, int]:
     from apps.notifications.services import notifier
 
     campaign = Campaign.objects.get(id=campaign_id)
-    participants = (
-        CampaignParticipant.objects.filter(
-            campaign=campaign,
-            status__in=[
-                CampaignParticipant.Status.JOINED,
-                CampaignParticipant.Status.IN_PROGRESS,
-            ],
-        )
-        .select_related("customer")
-    )
+    participants = CampaignParticipant.objects.filter(
+        campaign=campaign,
+        status__in=[
+            CampaignParticipant.Status.JOINED,
+            CampaignParticipant.Status.IN_PROGRESS,
+        ],
+    ).select_related("customer")
     sent = 0
     for participant in participants:
         notifier.notify_campaign_event(

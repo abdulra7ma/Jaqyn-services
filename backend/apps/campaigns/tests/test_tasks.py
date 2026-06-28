@@ -134,7 +134,9 @@ def test_notify_vouchers_expiring_soon_warns_once():
     # Second sweep claims nothing — the voucher is already marked warned.
     assert second == 0
     assert CampaignRewardVoucher.objects.get(id=voucher.id).expiry_warned_at is not None
-    assert NotificationLog.objects.filter(event="campaign_voucher_expiring").count() == 1
+    assert (
+        NotificationLog.objects.filter(event="campaign_voucher_expiring").count() == 1
+    )
 
 
 def test_expiring_soon_ignores_far_and_already_expired_vouchers():
@@ -147,7 +149,9 @@ def test_expiring_soon_ignores_far_and_already_expired_vouchers():
     _issue_voucher(campaign, customer, expires_at=timezone.now() - timedelta(hours=1))
 
     assert tasks.notify_vouchers_expiring_soon() == 0
-    assert not NotificationLog.objects.filter(event="campaign_voucher_expiring").exists()
+    assert not NotificationLog.objects.filter(
+        event="campaign_voucher_expiring"
+    ).exists()
 
 
 # --- campaign-ending fan-out + idempotency -------------------------------------
@@ -156,9 +160,7 @@ def test_expiring_soon_ignores_far_and_already_expired_vouchers():
 def test_notify_campaigns_ending_soon_warns_active_participants_once():
     business = make_business()
     customer = make_customer()
-    campaign = make_campaign(
-        business, end_at=timezone.now() + timedelta(hours=6)
-    )
+    campaign = make_campaign(business, end_at=timezone.now() + timedelta(hours=6))
     CampaignParticipant.objects.create(
         campaign=campaign,
         customer=customer,

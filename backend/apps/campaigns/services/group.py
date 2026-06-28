@@ -263,9 +263,7 @@ class CampaignGroupService:
                     "GROUP_SESSION_INVALID_STATE",
                     status_code=status.HTTP_409_CONFLICT,
                 )
-            member_count = GroupMember.objects.filter(
-                group=session
-            ).count()
+            member_count = GroupMember.objects.filter(group=session).count()
             if member_count >= session.required_size:
                 raise JaqynAPIException(
                     "GROUP_SESSION_FULL", status_code=status.HTTP_409_CONFLICT
@@ -358,9 +356,7 @@ class CampaignGroupService:
                 )
 
             members = list(
-                GroupMember.objects.select_for_update().filter(
-                    group=session
-                )
+                GroupMember.objects.select_for_update().filter(group=session)
             )
             if len(members) < session.required_size:
                 raise JaqynAPIException(
@@ -508,9 +504,7 @@ class CampaignGroupService:
         )
         if session is None or not (
             session.group_leader_id == customer.id
-            or GroupMember.objects.filter(
-                group=session, customer=customer
-            ).exists()
+            or GroupMember.objects.filter(group=session, customer=customer).exists()
         ):
             raise JaqynAPIException(
                 "GROUP_SESSION_NOT_FOUND", status_code=status.HTTP_404_NOT_FOUND
@@ -543,7 +537,9 @@ class CampaignGroupService:
         return session
 
     @classmethod
-    def leave_group_session(cls, group_id, customer, now: datetime | None = None) -> Group:
+    def leave_group_session(
+        cls, group_id, customer, now: datetime | None = None
+    ) -> Group:
         """Leave (or, as leader, cancel) a group the customer belongs to (group flow).
 
         Looks up the group by id and asserts the customer is a member or the leader
@@ -665,9 +661,9 @@ class CampaignGroupService:
             )
         )
         member_ids.add(session.group_leader_id)
-        needed = session.required_size - GroupMember.objects.filter(
-            group=session
-        ).count()
+        needed = (
+            session.required_size - GroupMember.objects.filter(group=session).count()
+        )
         if needed <= 0:
             return session
 

@@ -8,11 +8,9 @@
 import { session } from "./session";
 import type {
   Business,
-  BusinessLoyaltyProgram,
   Campaign,
   CampaignCatalogItem,
   CampaignFeed,
-  CampaignMechanic,
   CampaignProgress,
   CampaignVoucher,
   CampaignWallet,
@@ -20,7 +18,6 @@ import type {
   GroupSessionMember,
   ItemSelection,
   MyGroup,
-  PointsBasis,
   RewardProgram,
 } from "./types";
 
@@ -113,17 +110,7 @@ function normalizeCampaignType(raw: string | undefined): Campaign["campaign_type
 // Normalize the INDIVIDUAL completion mechanic (campaigns-restructure design §3).
 // Null for non-individual campaigns (group/social have no mechanic).
 function normalizeMechanic(raw: string | undefined): Campaign["rule"]["mechanic"] {
-  if (raw === "stamp") return "stamp";
-  if (raw === "spend") return "spend";
   if (raw === "visit") return "visit";
-  if (raw === "points") return "points";
-  return null;
-}
-
-// Normalize the POINTS accrual basis (multi-form-loyalty). Null for non-points.
-function normalizePointsBasis(raw: string | undefined): PointsBasis | null {
-  if (raw === "visit") return "visit";
-  if (raw === "spend") return "spend";
   return null;
 }
 
@@ -166,8 +153,6 @@ function adaptCampaignProgress(raw: Raw | null | undefined): CampaignProgress | 
     target_count: raw.required_count ?? raw.target_count ?? raw.goal ?? null,
     completed,
     voucher_id: raw.voucher_id ?? null,
-    // POINTS programs carry a redeemable balance (multi-form-loyalty slice 1).
-    points_balance: raw.points_balance ?? 0,
   };
 }
 
@@ -251,12 +236,10 @@ export function adaptCampaign(raw: Raw): Campaign {
       raw.repeat_policy ?? raw.completion_limit_per_customer ?? raw.repeat ?? "once",
     max_participants: raw.max_participants ?? null,
     rule: {
-      // Backend keys: mechanic (visit/stamp/spend), required_spend (decimal),
-      // minimum_time_between_actions (ISO duration), group_checkin_window_minutes.
+      // Backend keys: visit mechanic, required_count, timing constraints, and
+      // group_checkin_window_minutes.
       mechanic: normalizeMechanic(rule.mechanic),
       required_count: rule.required_count ?? rule.visits ?? null,
-      required_spend:
-        rule.required_spend != null ? String(rule.required_spend) : (rule.requiredSpend ?? null),
       max_count_per_day: rule.max_count_per_day ?? rule.perDay ?? null,
       min_time_between: rule.minimum_time_between_actions ?? rule.min_time_between ?? rule.minGap ?? null,
       required_group_size: rule.required_group_size ?? rule.groupSize ?? null,
@@ -264,15 +247,7 @@ export function adaptCampaign(raw: Raw): Campaign {
         rule.group_checkin_window_minutes != null
           ? `${rule.group_checkin_window_minutes} min`
           : (rule.group_checkin_window ?? rule.checkin ?? null),
-      // GROUP per-member minimum spend (decimal string) — null when no minimum.
-      min_spend: rule.min_spend != null ? String(rule.min_spend) : (rule.minSpend ?? null),
       group_checkin_window_minutes: rule.group_checkin_window_minutes ?? null,
-      // POINTS accrual + cashback rate (multi-form-loyalty slice 1 CampaignRule).
-      points_basis: normalizePointsBasis(rule.points_basis),
-      points_per_visit: rule.points_per_visit ?? null,
-      points_per_som: rule.points_per_som != null ? String(rule.points_per_som) : null,
-      cashback_per_point:
-        rule.cashback_per_point != null ? String(rule.cashback_per_point) : null,
     },
     reward: {
       // Backend serializes reward_type / reward_receiver_type (not type / receiver).
@@ -354,8 +329,6 @@ export function adaptCampaignVoucher(raw: Raw): CampaignVoucher {
     // (branch scope is deferred — plan D5); both stay null.
     redeemed_by: raw.redeemed_by ?? raw.redeemedBy ?? null,
     redeemed_branch: raw.redeemed_branch ?? raw.branch ?? null,
-    // CASHBACK voucher amount (decimal string) — null for item vouchers.
-    cashback_amount: raw.cashback_amount != null ? String(raw.cashback_amount) : null,
     // Item vouchers carry the chosen/preset CatalogItem + the selection mode so the
     // present screen can offer "Choose your item" for unresolved customer-choice ones.
     catalog_item: adaptCatalogItem(raw.catalog_item),
@@ -364,24 +337,6 @@ export function adaptCampaignVoucher(raw: Raw): CampaignVoucher {
       if (raw.item_selection === "customer") return "customer";
       return null;
     })(),
-  };
-}
-
-// Boundary validation for one GET /customer/businesses/{id}/loyalty/ row
-// (multi-form-loyalty slice 2). The backend emits the flat shape below directly.
-export function adaptBusinessLoyaltyProgram(raw: Raw): BusinessLoyaltyProgram {
-  const mechanic = (normalizeMechanic(raw.mechanic) ?? "visit") as CampaignMechanic;
-  return {
-    campaign_id: raw.campaign_id ?? raw.id ?? "",
-    name: raw.name ?? "",
-    mechanic,
-    reward_summary: raw.reward_summary ?? "",
-    joined: raw.joined ?? false,
-    progress_count: raw.progress_count ?? 0,
-    target: raw.target ?? 0,
-    points_balance: raw.points_balance ?? 0,
-    cashback_per_point:
-      raw.cashback_per_point != null ? String(raw.cashback_per_point) : null,
   };
 }
 

@@ -83,7 +83,9 @@ def test_two_confirm_visits_count_once_and_issue_one_voucher():
     participant = CampaignParticipant.objects.get(campaign=campaign, customer=customer)
     assert participant.progress_count == 1
     assert (
-        CampaignRewardVoucher.objects.filter(campaign=campaign, customer=customer).count()
+        CampaignRewardVoucher.objects.filter(
+            campaign=campaign, customer=customer
+        ).count()
         == 1
     )
 

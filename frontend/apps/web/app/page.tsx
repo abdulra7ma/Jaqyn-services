@@ -6,6 +6,7 @@ import Link from "next/link";
 import { CustomerShell } from "./_components/CustomerShell";
 import { GuestLanding } from "./_components/GuestLanding";
 import { CampaignCard, VoucherCard } from "./_components/campaigns";
+import { GiftIcon } from "./_components/icons";
 import { useAuth } from "./_lib/auth";
 
 export default function HomePage() {
@@ -44,6 +45,13 @@ function AuthedHome() {
           </p>
         </div>
         <div className="flex flex-none gap-2">
+          <Link
+            href="/rewards"
+            aria-label={t("nav.rewards")}
+            className="rounded-xl border border-line bg-card p-2.5 text-brand"
+          >
+            <GiftIcon className="h-5 w-5" />
+          </Link>
           <Link
             href="/nearby"
             className="rounded-xl border border-line bg-card px-3 py-2 text-sm font-semibold text-ink"

@@ -37,7 +37,7 @@ function FilterRow<T extends string>({
   labelFor: (v: T) => string;
 }) {
   return (
-    <div className="flex flex-wrap gap-2" role="group">
+    <div className="grid w-full max-w-[440px] grid-cols-4 gap-1 rounded-[14px] bg-[#F1E7D6] p-1" role="group">
       {options.map((opt) => {
         const active = opt === value;
         return (
@@ -46,8 +46,10 @@ function FilterRow<T extends string>({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(opt)}
-            className={`rounded-pill px-3.5 py-1.5 text-[13px] font-semibold transition ${
-              active ? "bg-brand text-brand-fg" : "border border-line bg-card text-subtle hover:text-ink"
+            className={`min-w-0 rounded-[10px] px-3 py-2 text-[13px] font-bold transition ${
+              active
+                ? "bg-brand text-brand-fg shadow-[0_3px_8px_rgba(161,74,43,.24)]"
+                : "text-[#8A7866] hover:bg-white/45 hover:text-ink"
             }`}
           >
             {labelFor(opt)}
@@ -55,6 +57,49 @@ function FilterRow<T extends string>({
         );
       })}
     </div>
+  );
+}
+
+function FilterSelect<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+  labelFor,
+  compactOnDesktop = false,
+}: {
+  options: readonly T[];
+  value: T;
+  onChange: (v: T) => void;
+  label: string;
+  labelFor: (v: T) => string;
+  compactOnDesktop?: boolean;
+}) {
+  return (
+    <label className="block min-w-0">
+      <span className={`mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.08em] text-subtle ${compactOnDesktop ? "lg:sr-only" : ""}`}>
+        {label}
+      </span>
+      <span className="relative block">
+        <select
+          aria-label={label}
+          value={value}
+          onChange={(event) => onChange(event.target.value as T)}
+          className={`w-full appearance-none border border-line bg-card pl-3 pr-9 text-[13px] font-semibold text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/10 ${
+            compactOnDesktop ? "rounded-xl py-2.5 lg:rounded-pill lg:py-1.5" : "rounded-xl py-2.5"
+          }`}
+        >
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {labelFor(option)}
+            </option>
+          ))}
+        </select>
+        <span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-subtle">
+          ⌄
+        </span>
+      </span>
+    </label>
   );
 }
 
@@ -128,19 +173,38 @@ export default function BusinessCampaignsPage() {
           </button>
         </div>
 
-        <div className="mb-4 flex flex-col gap-2.5">
-          <FilterRow
-            options={TYPE_FILTERS}
-            value={typeFilter}
-            onChange={setTypeFilter}
-            labelFor={(v) => t(`cmp.biz.filter.type.${v}`)}
-          />
-          <FilterRow
-            options={STATUS_FILTERS}
-            value={statusFilter}
-            onChange={setStatusFilter}
-            labelFor={(v) => t(`cmp.biz.filter.status.${v}`)}
-          />
+        <div className="mb-5 rounded-[16px] border border-line bg-[#FFFCF7] p-3 shadow-[0_8px_24px_-22px_rgba(46,36,29,.45)] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+          <div className="grid grid-cols-2 gap-3 lg:flex lg:items-center lg:gap-4">
+            <div className="lg:hidden">
+              <FilterSelect
+                options={TYPE_FILTERS}
+                value={typeFilter}
+                onChange={setTypeFilter}
+                label={t("cmp.biz.filter.label.type")}
+                labelFor={(v) => t(`cmp.biz.filter.type.${v}`)}
+              />
+            </div>
+
+            <div className="hidden min-w-0 flex-1 lg:block">
+              <FilterRow
+                options={TYPE_FILTERS}
+                value={typeFilter}
+                onChange={setTypeFilter}
+                labelFor={(v) => t(`cmp.biz.filter.type.${v}`)}
+              />
+            </div>
+
+            <div className="min-w-0 lg:ml-auto lg:w-[180px] lg:flex-none">
+              <FilterSelect
+                options={STATUS_FILTERS}
+                value={statusFilter}
+                onChange={setStatusFilter}
+                label={t("cmp.biz.filter.label.status")}
+                labelFor={(v) => t(`cmp.biz.filter.status.${v}`)}
+                compactOnDesktop
+              />
+            </div>
+          </div>
         </div>
 
         <QueryBoundary

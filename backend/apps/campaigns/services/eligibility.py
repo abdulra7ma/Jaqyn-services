@@ -25,7 +25,6 @@ from apps.campaigns.models import (
     CampaignAction,
     CampaignParticipant,
     CampaignRewardVoucher,
-    CampaignRule,
 )
 
 
@@ -129,7 +128,10 @@ class CampaignEligibilityService:
         """
         if participant is None:
             return True
-        if campaign.completion_limit_per_customer == Campaign.CompletionLimit.REPEATABLE:
+        if (
+            campaign.completion_limit_per_customer
+            == Campaign.CompletionLimit.REPEATABLE
+        ):
             return True
         completed_states = {
             CampaignParticipant.Status.COMPLETED,
@@ -150,9 +152,7 @@ class CampaignEligibilityService:
         return joined < campaign.max_participants
 
     @staticmethod
-    def check_daily_limit(
-        campaign: Campaign, customer_id, now: datetime
-    ) -> bool:
+    def check_daily_limit(campaign: Campaign, customer_id, now: datetime) -> bool:
         """Return ``True`` when the customer is under the campaign's per-day cap.
 
         The cap lives on ``CampaignRule.max_count_per_day``; ``None`` means no
@@ -215,9 +215,11 @@ class CampaignEligibilityService:
         """
         if campaign.max_rewards is None:
             return True
-        consumed = CampaignRewardVoucher.objects.filter(campaign=campaign).exclude(
-            status=CampaignRewardVoucher.Status.CANCELLED
-        ).count()
+        consumed = (
+            CampaignRewardVoucher.objects.filter(campaign=campaign)
+            .exclude(status=CampaignRewardVoucher.Status.CANCELLED)
+            .count()
+        )
         return consumed < campaign.max_rewards
 
     @classmethod
@@ -236,33 +238,25 @@ class CampaignEligibilityService:
         ``check_branch`` is folded in as a no-op for MVP. Returns an
         :class:`EligibilityResult`; never raises and never writes.
 
-        A POINTS-mechanic INDIVIDUAL campaign is a running cashback balance with
-        no completion target (multi-form-loyalty design §1): staff may award
-        points on any visit. It is therefore eligible whenever active and within
-        the run window — the completion (already-completed), daily-limit, min-gap,
-        and reward-limit gates do not apply (those gate reaching a target / minting
-        a voucher, which a POINTS award never does). The participant-cap still
-        applies so a full campaign cannot auto-join a new customer.
+        Campaigns are visit/action-count challenges; durable points, stamps, and
+        spend balances are evaluated by apps.loyalty.
         """
         now = now or timezone.now()
 
         if not cls.check_campaign_active(campaign):
             return EligibilityResult(campaign, False, IneligibilityReason.NOT_ACTIVE)
         if not cls.check_date_time_window(campaign, now):
-            return EligibilityResult(campaign, False, IneligibilityReason.OUTSIDE_WINDOW)
+            return EligibilityResult(
+                campaign, False, IneligibilityReason.OUTSIDE_WINDOW
+            )
         if not cls.check_branch(campaign):  # no-op in MVP
-            return EligibilityResult(campaign, False, IneligibilityReason.OUTSIDE_WINDOW)
+            return EligibilityResult(
+                campaign, False, IneligibilityReason.OUTSIDE_WINDOW
+            )
         if participant is None and not cls.check_participant_limit(campaign):
             return EligibilityResult(
                 campaign, False, IneligibilityReason.PARTICIPANT_LIMIT
             )
-
-        rule = getattr(campaign, "rule", None)
-        if rule is not None and rule.mechanic == CampaignRule.Mechanic.POINTS:
-            # POINTS accrues a balance and never completes/mints a voucher, so the
-            # remaining target/voucher gates do not apply — staff award points on
-            # any visit while the campaign is active and in-window.
-            return EligibilityResult(campaign, True, None)
 
         if not cls.check_customer_eligibility(campaign, participant):
             return EligibilityResult(

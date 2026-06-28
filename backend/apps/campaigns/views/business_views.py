@@ -42,7 +42,7 @@ from apps.campaigns.services import (
 from apps.staff.services import get_staff_for_user
 from core.images import CAMPAIGN_MAX_DIM, compress_image
 from core.pagination import StandardResultsSetPagination
-from core.permissions import IsBusinessOwner, IsBusinessOwnerOrStaff, IsStaff
+from core.permissions import IsBusinessOwner, IsBusinessOwnerOrStaff
 from core.response import success_response
 
 
@@ -64,7 +64,10 @@ def _annotate_list_queryset(qs):
     Called only on the business list path so the annotations are absent (and the
     serializer defaults to 0) on all other list paths.
     """
-    completed_statuses = [CampaignParticipant.Status.COMPLETED, CampaignParticipant.Status.REDEEMED]
+    completed_statuses = [
+        CampaignParticipant.Status.COMPLETED,
+        CampaignParticipant.Status.REDEEMED,
+    ]
     return qs.annotate(
         _participants=Count("participants", distinct=True),
         _completed=Count(
@@ -146,11 +149,17 @@ class CampaignListCreateView(_OwnerMixin, APIView):
         from apps.campaigns.models import Campaign as _Campaign
 
         summary = {
-            "active_campaigns": campaigns.filter(status=_Campaign.Status.ACTIVE).count(),
-            "total_participants": sum(getattr(c, "_participants", 0) or 0 for c in campaigns),
+            "active_campaigns": campaigns.filter(
+                status=_Campaign.Status.ACTIVE
+            ).count(),
+            "total_participants": sum(
+                getattr(c, "_participants", 0) or 0 for c in campaigns
+            ),
             "rewards_issued": campaigns.filter(
                 vouchers__status=CampaignRewardVoucher.Status.ACTIVE
-            ).distinct().count(),
+            )
+            .distinct()
+            .count(),
             "rewards_redeemed": sum(getattr(c, "_redeemed", 0) or 0 for c in campaigns),
         }
         paginator = StandardResultsSetPagination()
@@ -308,9 +317,6 @@ class CampaignDuplicateView(_OwnerMixin, APIView):
                 "rule_type": rule.rule_type,
                 "mechanic": rule.mechanic,
                 "required_count": rule.required_count,
-                "required_spend": rule.required_spend,
-                "min_spend": rule.min_spend,
-                "max_banked": rule.max_banked,
                 "minimum_time_between_actions": rule.minimum_time_between_actions,
                 "max_count_per_day": rule.max_count_per_day,
                 "required_group_size": rule.required_group_size,
@@ -344,7 +350,9 @@ class CampaignParticipantsView(_OwnerMixin, APIView):
     pagination_class = StandardResultsSetPagination
 
     def get(self, request, campaign_id):
-        campaign = CampaignService.get_for_business(campaign_id, self._business(request))
+        campaign = CampaignService.get_for_business(
+            campaign_id, self._business(request)
+        )
         participants = CampaignService.participants_for(campaign)
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(participants, request, view=self)
@@ -358,7 +366,9 @@ class CampaignVouchersView(_OwnerMixin, APIView):
     pagination_class = StandardResultsSetPagination
 
     def get(self, request, campaign_id):
-        campaign = CampaignService.get_for_business(campaign_id, self._business(request))
+        campaign = CampaignService.get_for_business(
+            campaign_id, self._business(request)
+        )
         vouchers = CampaignRewardService.vouchers_for_campaign(campaign)
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(vouchers, request, view=self)
@@ -373,7 +383,9 @@ class CampaignAnalyticsView(_OwnerMixin, APIView):
     serializer_class = CampaignMetricsSerializer
 
     def get(self, request, campaign_id):
-        campaign = CampaignService.get_for_business(campaign_id, self._business(request))
+        campaign = CampaignService.get_for_business(
+            campaign_id, self._business(request)
+        )
         metrics = CampaignAnalyticsService.campaign_metrics(campaign)
         return success_response(CampaignMetricsSerializer(metrics).data)
 
@@ -400,7 +412,9 @@ class CampaignImageUploadView(_OwnerMixin, APIView):
         serializer = CampaignImageUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         # Compress before storing — social cards are shared at post/story size.
-        campaign.image = compress_image(serializer.validated_data["image"], max_dim=CAMPAIGN_MAX_DIM)
+        campaign.image = compress_image(
+            serializer.validated_data["image"], max_dim=CAMPAIGN_MAX_DIM
+        )
         campaign.save(update_fields=["image", "updated_at"])
         return success_response(CampaignSerializer(campaign).data)
 
@@ -415,7 +429,9 @@ class CampaignSocialPostView(_OwnerMixin, APIView):
     serializer_class = SocialPostSerializer
 
     def get(self, request, campaign_id):
-        campaign = CampaignService.get_for_business(campaign_id, self._business(request))
+        campaign = CampaignService.get_for_business(
+            campaign_id, self._business(request)
+        )
         post = build_social_post(campaign)
         return success_response(SocialPostSerializer(post).data)
 
@@ -447,7 +463,6 @@ class CampaignVoucherCancelView(APIView):
     def post(self, request, voucher_id):
         serializer = CancelVoucherSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        from apps.campaigns.services import CampaignRewardService as _CRS
         from apps.staff.models import StaffMember
 
         if request.user.role == "business_owner":

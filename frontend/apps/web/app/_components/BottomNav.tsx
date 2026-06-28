@@ -18,12 +18,12 @@ export type NavItem = {
 // separately. Groups is gone — group campaigns live inside the Campaigns feed.
 export const CUSTOMER_NAV: NavItem[] = [
   { href: "/", key: "nav.home", Icon: HomeIcon, match: (p) => p === "/" },
-  // Rewards = earned vouchers (the campaign wallet). Campaigns = things to join.
+  // Loyalty is the durable-card surface; Rewards is reached from header wallet buttons.
   {
-    href: "/rewards",
-    key: "nav.rewards",
+    href: "/loyalty",
+    key: "nav.loyalty",
     Icon: GiftIcon,
-    match: (p) => p.startsWith("/rewards") || p.startsWith("/campaign-wallet"),
+    match: (p) => p.startsWith("/loyalty"),
   },
   {
     href: "/campaigns",
@@ -55,7 +55,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-// Mobile bottom bar: Home · Rewards · [Scan center] · Campaigns · Profile. The
+// Mobile bottom bar: Home · Loyalty · [Scan center] · Campaigns · Profile. The
 // scan control is a raised center button in the bar itself (campaigns-restructure
 // design §6) rather than a separate floating FAB.
 export function BottomNav() {
@@ -67,14 +67,16 @@ export function BottomNav() {
         <NavLink key={item.href} item={item} active={item.match(pathname)} />
       ))}
       {/* raised center scan button */}
-      <div className="flex justify-center">
+      <div className="relative flex min-h-[58px] justify-center">
         <Link
           href="/qr"
           aria-label={t("nav.scan")}
-          className="-mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-brand-gradient text-brand-fg shadow-glow ring-4 ring-cream/95 transition active:scale-95"
+          className="absolute -top-8 left-1/2 z-10 flex h-[60px] w-[60px] -translate-x-1/2 items-center justify-center rounded-full bg-brand-gradient text-brand-fg shadow-[0_12px_28px_-7px_rgba(194,94,60,.75),0_0_24px_rgba(231,162,62,.28)] ring-[6px] ring-cream/95 transition hover:-translate-y-0.5 active:scale-95"
         >
-          <ScanIcon className="h-7 w-7" />
+          <span className="absolute inset-1 rounded-full border border-white/20" aria-hidden="true" />
+          <ScanIcon className="relative h-7 w-7" />
         </Link>
+        <span className="mt-auto pb-2 text-[11px] font-medium text-brand">{t("nav.scan")}</span>
       </div>
       {RIGHT_ITEMS.map((item) => (
         <NavLink key={item.href} item={item} active={item.match(pathname)} />

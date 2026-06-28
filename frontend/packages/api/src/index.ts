@@ -21,3 +21,8 @@ export type * from "./business/types";
 export { staffApi, type StaffApi } from "./staff/api";
 export * from "./staff/hooks";
 export type * from "./staff/types";
+
+// ---- loyalty API layer ----
+export { loyaltyApi, type LoyaltyApi } from "./loyalty/api";
+export * from "./loyalty/hooks";
+export type * from "./loyalty/types";

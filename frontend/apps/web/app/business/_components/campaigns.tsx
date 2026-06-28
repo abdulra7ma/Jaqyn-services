@@ -91,14 +91,12 @@ export type CampaignTemplate = {
   mechanic?: BusinessCampaignMechanic;
   // Field prefills applied to the create form.
   requiredCount?: number;
-  requiredSpend?: string;
   groupSize?: number;
 };
 
 export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   { id: "visit5", labelKey: "cmp.biz.new.tpl.visit5", type: "individual", mechanic: "visit", requiredCount: 5 },
   { id: "friends3", labelKey: "cmp.biz.new.tpl.friends3", type: "group", groupSize: 3 },
-  { id: "spend1000", labelKey: "cmp.biz.new.tpl.spend1000", type: "individual", mechanic: "spend", requiredSpend: "1000" },
   { id: "story", labelKey: "cmp.biz.new.tpl.story", type: "social" },
 ];
 
@@ -114,12 +112,6 @@ export type CampaignForm = {
   name: string;
   // individual
   requiredCount: string;
-  requiredSpend: string;
-  // individual — points (multi-form-loyalty slice 3)
-  pointsBasis: "visit" | "spend";
-  pointsPerVisit: string;
-  pointsPerSom: string;
-  cashbackPerPoint: string;
   // group
   groupSize: string;
   checkinWindow: string;
@@ -127,7 +119,7 @@ export type CampaignForm = {
   instagram: string;
   // reward
   rewardTitle: string;
-  // Item-reward selection for visit/stamp/spend (multi-form-loyalty slice 3).
+  // Item-reward selection for the campaign reward.
   itemSelection: ItemSelectionMode;
   catalogItemId: string;
   // limits
@@ -140,12 +132,6 @@ export const CAMPAIGN_FORM_DEFAULT: CampaignForm = {
   mechanic: "visit",
   name: "",
   requiredCount: "5",
-  requiredSpend: "1000",
-  // POINTS defaults: 1 pt per visit / 1 pt per 100 сом, 1 сом per point cashback.
-  pointsBasis: "visit",
-  pointsPerVisit: "1",
-  pointsPerSom: "0.01",
-  cashbackPerPoint: "1",
   groupSize: "3",
   checkinWindow: "15",
   instagram: "",
@@ -163,7 +149,6 @@ export function applyTemplate(tpl: CampaignTemplate): CampaignForm {
     type: tpl.type,
     mechanic: tpl.mechanic ?? "visit",
     requiredCount: tpl.requiredCount != null ? String(tpl.requiredCount) : CAMPAIGN_FORM_DEFAULT.requiredCount,
-    requiredSpend: tpl.requiredSpend ?? CAMPAIGN_FORM_DEFAULT.requiredSpend,
     groupSize: tpl.groupSize != null ? String(tpl.groupSize) : CAMPAIGN_FORM_DEFAULT.groupSize,
   };
 }
@@ -171,13 +156,6 @@ export function applyTemplate(tpl: CampaignTemplate): CampaignForm {
 const num = (v: string): number | null => {
   const n = Number.parseInt(v, 10);
   return Number.isFinite(n) ? n : null;
-};
-
-// A decimal string (price/rate) passed through unchanged when non-empty; null
-// when blank so the backend keeps its default rather than receiving "".
-const dec = (v: string): string | null => {
-  const trimmed = v.trim();
-  return trimmed ? trimmed : null;
 };
 
 /**
@@ -197,30 +175,11 @@ export function toPayload(form: CampaignForm): CampaignPayload {
     base.required_group_size = num(form.groupSize);
     base.group_checkin_window_minutes = num(form.checkinWindow);
   } else if (form.type === "individual") {
-    base.mechanic = form.mechanic;
-    if (form.mechanic === "points") {
-      // POINTS → cashback: send the basis + the matching rate + cashback rate, and
-      // mark the reward as cashback so the backend mints money-off vouchers.
-      base.reward_type = "cashback";
-      base.points_basis = form.pointsBasis;
-      if (form.pointsBasis === "spend") {
-        base.points_per_som = dec(form.pointsPerSom);
-      } else {
-        base.points_per_visit = num(form.pointsPerVisit);
-      }
-      base.cashback_per_point = dec(form.cashbackPerPoint);
-    } else {
-      // visit/stamp/spend: an item/discount reward. The owner picks whether the
-      // item is preset (fixed → catalog_item_id) or customer-chosen.
-      if (form.mechanic === "spend") {
-        base.required_spend = form.requiredSpend.trim() || null;
-      } else {
-        base.required_count = num(form.requiredCount);
-      }
-      base.item_selection = form.itemSelection;
-      base.catalog_item_id =
-        form.itemSelection === "fixed" ? form.catalogItemId || null : null;
-    }
+    base.mechanic = "visit";
+    base.required_count = num(form.requiredCount);
+    base.item_selection = form.itemSelection;
+    base.catalog_item_id =
+      form.itemSelection === "fixed" ? form.catalogItemId || null : null;
   } else if (form.type === "social") {
     base.instagram_handle = form.instagram.trim() || null;
   }
@@ -235,15 +194,8 @@ export function toPayload(form: CampaignForm): CampaignPayload {
 export function createError(form: CampaignForm): string | null {
   if (!form.name.trim()) return "cmp.biz.form.invalid.name";
   if (!form.rewardTitle.trim()) return "cmp.biz.form.invalid.reward";
-  if (form.type === "individual" && form.mechanic === "points") {
-    // Cashback rate is what turns points into money — required for a points program.
-    if (!dec(form.cashbackPerPoint)) return "cmp.biz.form.invalid.cashback";
-    const rate = form.pointsBasis === "spend" ? dec(form.pointsPerSom) : form.pointsPerVisit.trim();
-    if (!rate) return "cmp.biz.form.invalid.pointsRate";
-  }
   if (
     form.type === "individual" &&
-    form.mechanic !== "points" &&
     form.itemSelection === "fixed" &&
     !form.catalogItemId
   ) {

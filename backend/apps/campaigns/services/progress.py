@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
@@ -25,7 +24,6 @@ from apps.campaigns.models import (
     Campaign,
     CampaignAction,
     CampaignParticipant,
-    CampaignReward,
     CampaignRewardVoucher,
     CampaignRule,
 )
@@ -89,7 +87,7 @@ class CampaignProgressService:
 
     @staticmethod
     def _required_count(campaign: Campaign) -> int:
-        """Return the visit/stamp count that completes the campaign (default 1).
+        """Return the visit/action count that completes the campaign (default 1).
 
         Reads ``CampaignRule.required_count``; a campaign with no rule row
         completes on a single visit.
@@ -99,7 +97,7 @@ class CampaignProgressService:
 
     @staticmethod
     def _mechanic(campaign: Campaign) -> str:
-        """Return the INDIVIDUAL mechanic (VISIT/STAMP/SPEND), defaulting to VISIT.
+        """Return the INDIVIDUAL mechanic, defaulting to VISIT.
 
         Reads ``CampaignRule.mechanic``; a campaign with no rule (or no mechanic
         set, e.g. a GROUP/SOCIAL campaign whose rule omits it) is treated as VISIT
@@ -109,20 +107,6 @@ class CampaignProgressService:
         if rule is not None and rule.mechanic:
             return rule.mechanic
         return CampaignRule.Mechanic.VISIT
-
-    @staticmethod
-    def _banked_voucher_count(campaign: Campaign, customer) -> int:
-        """Count a customer's unredeemed (ACTIVE) vouchers for a campaign.
-
-        Backs the STAMP ``max_banked`` cap: a stamp completion is blocked when the
-        customer already holds ``max_banked`` ACTIVE (banked, not-yet-redeemed)
-        vouchers for the campaign. Source: campaigns-restructure design §3.
-        """
-        return CampaignRewardVoucher.objects.filter(
-            campaign=campaign,
-            customer=customer,
-            status=CampaignRewardVoucher.Status.ACTIVE,
-        ).count()
 
     @classmethod
     def join_campaign(cls, campaign: Campaign, customer) -> CampaignParticipant:
@@ -228,60 +212,11 @@ class CampaignProgressService:
         staff: StaffMember | None = None,
         verification_method: str = CampaignAction.VerificationMethod.STAFF_SCAN,
         action_type: str = CampaignAction.ActionType.VISIT,
-        amount_spend: Decimal | None = None,
         now: datetime | None = None,
     ) -> ProgressResult:
-        """Count one verified action toward an INDIVIDUAL campaign, completing it if due.
-
-        Branches on the rule's mechanic (§13/§19, campaigns-restructure design §4,
-        multi-form-loyalty design §1):
-
-        * **VISIT** / **STAMP** — each counted action increments ``progress_count``
-          by one; the campaign completes when ``progress_count`` reaches the rule's
-          ``required_count``. STAMP additionally honours ``max_banked``: when a
-          completing stamp would push the customer over ``max_banked`` ACTIVE
-          (banked, unredeemed) vouchers, the action is still counted but **no**
-          voucher is minted and the result reports ``completed=False`` — the
-          customer must redeem a banked voucher before earning another.
-        * **SPEND** — the action carries ``amount_spend`` (rejected as
-          ``VALIDATION_ERROR`` when missing/non-positive, or below the rule's
-          ``min_spend``); it is accumulated onto ``current_spend`` and the campaign
-          completes when ``current_spend`` reaches the rule's ``required_spend``.
-        * **POINTS** — the action *accrues points* onto ``points_balance`` (under
-          the participant lock) and **never** advances completion or mints a
-          voucher: a POINTS program is a running balance the customer later redeems
-          for cashback, not a reach-a-target loop. On the ``visit`` points basis
-          the award is the rule's ``points_per_visit``; on the ``spend`` basis it is
-          ``floor(points_per_som × amount_spend)`` and the action carries
-          ``amount_spend`` (validated like SPEND). The reported
-          ``progress_count``/``required_count`` echo the new balance with a 0
-          target so the caller can render the balance; ``completed`` is always
-          ``False``.
-
-        Runs inside one atomic block. Acquires two row locks in a *fixed order* —
-        the ``Campaign`` row first, then the participant row — so the reward cap
-        and the issued-voucher count are read-modified-written under contention
-        without overshooting ``max_rewards`` and without deadlocking against any
-        other path that locks the same pair (the consistent ordering is the
-        anti-deadlock rule). It auto-joins first when the campaign allows and the
-        customer has no row, re-runs the full §13 eligibility pipeline under the
-        locks, and raises the pipeline's reason code (e.g. ``CAMPAIGN_MIN_GAP``,
-        ``CAMPAIGN_DAILY_LIMIT_REACHED``) if the action is not eligible. On a
-        completing action it mints exactly one voucher via
-        :meth:`complete_campaign` in the *same* transaction, re-checking the reward
-        cap under the campaign lock and scheduling the unlock notification via
-        ``on_commit``. Because the read-modify-write is fully locked, two
-        simultaneous confirms cannot double-count and two simultaneous final-slot
-        completions cannot both mint a voucher over the cap.
-        """
+        """Count one verified visit/action and atomically complete its challenge."""
         now = now or timezone.now()
         with transaction.atomic():
-            # Lock the Campaign row first (consistent order: Campaign → participant)
-            # so the reward-cap re-check in complete_campaign is serialised against
-            # any concurrent completion and the cap can never be overshot. ``of``
-            # restricts the lock to the Campaign row itself (not the joined
-            # rule/reward) on backends that support it; it is ignored where
-            # ``select_for_update`` is a no-op (SQLite test DB).
             campaign = cls._lock_campaign(campaign.id)
             participant = (
                 CampaignParticipant.objects.select_for_update()
@@ -289,12 +224,9 @@ class CampaignProgressService:
                 .first()
             )
             if participant is None:
-                # No row yet: auto-join (raises if the campaign forbids it), then
-                # re-select FOR UPDATE so the rest of the block holds the lock.
                 cls.auto_join_customer(campaign, customer)
-                participant = (
-                    CampaignParticipant.objects.select_for_update()
-                    .get(campaign=campaign, customer=customer)
+                participant = CampaignParticipant.objects.select_for_update().get(
+                    campaign=campaign, customer=customer
                 )
 
             result = CampaignEligibilityService.evaluate(
@@ -304,20 +236,6 @@ class CampaignProgressService:
                 raise JaqynAPIException(
                     result.reason_code, status_code=status.HTTP_409_CONFLICT
                 )
-
-            mechanic = cls._mechanic(campaign)
-            rule = getattr(campaign, "rule", None)
-
-            # SPEND mechanic, and a POINTS campaign on the spend basis, both need a
-            # positive amount at/above the rule minimum (the staff bill amount).
-            spend_amount: Decimal | None = None
-            needs_amount = mechanic == CampaignRule.Mechanic.SPEND or (
-                mechanic == CampaignRule.Mechanic.POINTS
-                and rule is not None
-                and rule.points_basis == CampaignRule.PointsBasis.SPEND
-            )
-            if needs_amount:
-                spend_amount = cls._validate_spend_amount(rule, amount_spend)
 
             action = CampaignAction.objects.create(
                 campaign=campaign,
@@ -329,11 +247,7 @@ class CampaignProgressService:
                 verification_method=verification_method,
                 action_time=now,
                 status=CampaignAction.Status.COUNTED,
-                metadata=(
-                    {"amount_spend": str(spend_amount)}
-                    if spend_amount is not None
-                    else {}
-                ),
+                metadata={},
             )
 
             update_fields = ["last_progress_at", "status", "updated_at"]
@@ -341,39 +255,11 @@ class CampaignProgressService:
             if participant.status == CampaignParticipant.Status.JOINED:
                 participant.status = CampaignParticipant.Status.IN_PROGRESS
 
-            if mechanic == CampaignRule.Mechanic.POINTS:
-                # POINTS accrues a balance and never advances completion. The
-                # participant row was select_for_update'd above, so this
-                # read-modify-write of points_balance is fully locked.
-                awarded = cls._points_awarded(rule, spend_amount)
-                participant.points_balance = (
-                    (participant.points_balance or 0) + awarded
-                )
-                update_fields.append("points_balance")
-                completed = False
-                progress_now = participant.points_balance
-                # A POINTS program has no completion target — report 0 so the
-                # caller renders a balance, not an X/Y bar.
-                required_now = 0
-            elif mechanic == CampaignRule.Mechanic.SPEND:
-                participant.current_spend = (
-                    participant.current_spend or Decimal("0")
-                ) + spend_amount
-                update_fields.append("current_spend")
-                required = (
-                    rule.required_spend
-                    if rule is not None and rule.required_spend is not None
-                    else Decimal("0")
-                )
-                completed = bool(required) and participant.current_spend >= required
-                progress_now = int(participant.current_spend)
-                required_now = int(required)
-            else:
-                participant.progress_count += 1
-                update_fields.append("progress_count")
-                required_now = cls._required_count(campaign)
-                completed = participant.progress_count >= required_now
-                progress_now = participant.progress_count
+            participant.progress_count += 1
+            update_fields.append("progress_count")
+            required_now = cls._required_count(campaign)
+            completed = participant.progress_count >= required_now
+            progress_now = participant.progress_count
 
             participant.save(update_fields=update_fields)
 
@@ -387,20 +273,7 @@ class CampaignProgressService:
 
             voucher: CampaignRewardVoucher | None = None
             if completed:
-                # STAMP honours max_banked: a completion that would exceed the cap
-                # of concurrently-banked ACTIVE vouchers mints nothing.
-                if (
-                    mechanic == CampaignRule.Mechanic.STAMP
-                    and rule is not None
-                    and rule.max_banked is not None
-                    and cls._banked_voucher_count(campaign, customer)
-                    >= rule.max_banked
-                ):
-                    completed = False
-                else:
-                    voucher = cls.complete_campaign(
-                        campaign, participant, customer, now
-                    )
+                voucher = cls.complete_campaign(campaign, participant, customer, now)
 
             # Schedule the per-visit notification on commit (never inside atomic).
             campaign_id = str(campaign.id)
@@ -418,62 +291,6 @@ class CampaignProgressService:
             required_count=required_now,
             voucher=voucher,
         )
-
-    @staticmethod
-    def _points_awarded(
-        rule: CampaignRule | None, spend_amount: Decimal | None
-    ) -> int:
-        """Return the whole points a POINTS action awards (multi-form-loyalty §1).
-
-        On the ``visit`` basis the award is the rule's ``points_per_visit`` (0 when
-        unset). On the ``spend`` basis it is ``floor(points_per_som × spend_amount)``
-        — points are whole units, so a fractional product is truncated down; the
-        money rate is a ``Decimal`` so the multiplication is exact, never float.
-        Returns 0 (never negative) when the rule or its rate is unconfigured.
-        """
-        if rule is None:
-            return 0
-        if rule.points_basis == CampaignRule.PointsBasis.SPEND:
-            if rule.points_per_som is None or spend_amount is None:
-                return 0
-            return int(rule.points_per_som * spend_amount)
-        # visit basis (the default for a POINTS campaign without an explicit basis)
-        return int(rule.points_per_visit or 0)
-
-    @staticmethod
-    def _validate_spend_amount(
-        rule: CampaignRule | None, amount_spend: Decimal | None
-    ) -> Decimal:
-        """Validate a SPEND action amount and return it as a positive Decimal.
-
-        Raises ``VALIDATION_ERROR`` when no amount is supplied, the amount is not
-        positive, or it falls below the rule's ``min_spend``. Money is always a
-        ``Decimal`` — never a float. Source: campaigns-restructure design §3/§4.
-        """
-        if amount_spend is None:
-            raise JaqynAPIException(
-                "VALIDATION_ERROR",
-                "A spend amount is required for a spend campaign",
-                status.HTTP_400_BAD_REQUEST,
-            )
-        amount = Decimal(amount_spend)
-        if amount <= 0:
-            raise JaqynAPIException(
-                "VALIDATION_ERROR",
-                "Spend amount must be positive",
-                status.HTTP_400_BAD_REQUEST,
-            )
-        if (
-            rule is not None
-            and rule.min_spend is not None
-            and amount < rule.min_spend
-        ):
-            raise JaqynAPIException(
-                "VALIDATION_ERROR",
-                "Spend amount is below the minimum",
-                status.HTTP_400_BAD_REQUEST,
-            )
-        return amount
 
     @classmethod
     def complete_campaign(
@@ -531,27 +348,16 @@ class CampaignProgressService:
         participant.status = CampaignParticipant.Status.COMPLETED
         participant.completed_at = now
         update_fields = ["status", "completed_at", "updated_at"]
-        if campaign.completion_limit_per_customer == Campaign.CompletionLimit.REPEATABLE:
+        if (
+            campaign.completion_limit_per_customer
+            == Campaign.CompletionLimit.REPEATABLE
+        ):
             participant.completion_cycle += 1
             participant.status = CampaignParticipant.Status.IN_PROGRESS
             update_fields += ["completion_cycle"]
-            # Reset the counter that drives this campaign's mechanic so the same
-            # participant row can earn again: SPEND subtracts the threshold from
-            # current_spend (keeping any overflow), every other mechanic resets the
-            # visit/stamp count. Source: campaigns-restructure design §4.
-            rule = getattr(campaign, "rule", None)
-            if (
-                rule is not None
-                and rule.mechanic == CampaignRule.Mechanic.SPEND
-                and rule.required_spend is not None
-            ):
-                participant.current_spend = (
-                    participant.current_spend or Decimal("0")
-                ) - rule.required_spend
-                update_fields += ["current_spend"]
-            else:
-                participant.progress_count = 0
-                update_fields += ["progress_count"]
+            # Repeatable challenges restart their visit/action counter.
+            participant.progress_count = 0
+            update_fields += ["progress_count"]
         participant.save(update_fields=update_fields)
 
         emit_event(
@@ -607,9 +413,8 @@ class CampaignProgressService:
             )
             if participant is None:
                 cls.join_campaign(campaign, customer)
-                participant = (
-                    CampaignParticipant.objects.select_for_update()
-                    .get(campaign=campaign, customer=customer)
+                participant = CampaignParticipant.objects.select_for_update().get(
+                    campaign=campaign, customer=customer
                 )
 
             result = CampaignEligibilityService.evaluate(

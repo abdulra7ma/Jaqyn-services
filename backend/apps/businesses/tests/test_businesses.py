@@ -21,10 +21,14 @@ def business_payload(name="Cafe Nomad"):
 
 
 def test_owner_registers_pending_business_and_is_promoted(api_client):
-    owner = User.objects.create_user(phone="+996700111222", role=User.Role.CUSTOMER, is_phone_verified=True)
+    owner = User.objects.create_user(
+        phone="+996700111222", role=User.Role.CUSTOMER, is_phone_verified=True
+    )
     api_client.force_authenticate(owner)
 
-    response = api_client.post("/api/business/register/", business_payload(), format="json")
+    response = api_client.post(
+        "/api/business/register/", business_payload(), format="json"
+    )
 
     owner.refresh_from_db()
     assert response.status_code == 201
@@ -34,14 +38,20 @@ def test_owner_registers_pending_business_and_is_promoted(api_client):
 
 
 def test_owner_business_endpoints_are_scoped(api_client):
-    owner = User.objects.create_user(phone="+996700111223", role=User.Role.BUSINESS_OWNER, is_phone_verified=True)
+    owner = User.objects.create_user(
+        phone="+996700111223", role=User.Role.BUSINESS_OWNER, is_phone_verified=True
+    )
     Business.objects.create(owner=owner, **business_payload())
-    other = User.objects.create_user(phone="+996700111224", role=User.Role.BUSINESS_OWNER, is_phone_verified=True)
+    other = User.objects.create_user(
+        phone="+996700111224", role=User.Role.BUSINESS_OWNER, is_phone_verified=True
+    )
     Business.objects.create(owner=other, **business_payload("Other Cafe"))
 
     api_client.force_authenticate(owner)
     me = api_client.get("/api/business/me/")
-    patch = api_client.patch("/api/business/me/", {"description": "Updated"}, format="json")
+    patch = api_client.patch(
+        "/api/business/me/", {"description": "Updated"}, format="json"
+    )
     dashboard = api_client.get("/api/business/dashboard/")
 
     assert me.data["data"]["name"] == "Cafe Nomad"
@@ -53,7 +63,9 @@ def test_owner_business_endpoints_are_scoped(api_client):
 
 
 def test_owner_profile_update_persists_public_profile_fields(api_client):
-    owner = User.objects.create_user(phone="+996700111320", role=User.Role.BUSINESS_OWNER, is_phone_verified=True)
+    owner = User.objects.create_user(
+        phone="+996700111320", role=User.Role.BUSINESS_OWNER, is_phone_verified=True
+    )
     Business.objects.create(owner=owner, **business_payload())
     api_client.force_authenticate(owner)
 
@@ -110,7 +122,9 @@ def test_public_nearby_filters_visibility_search_category_and_distance(api_clien
         longitude="74.569700",
     )
 
-    res = api_client.get("/api/businesses/nearby/?search=coffee&category=cafe&lat=42.8745&lng=74.5697&radius_km=5")
+    res = api_client.get(
+        "/api/businesses/nearby/?search=coffee&category=cafe&lat=42.8745&lng=74.5697&radius_km=5"
+    )
 
     assert res.status_code == 200
     results = res.data["data"]["results"]
@@ -121,7 +135,9 @@ def test_public_nearby_filters_visibility_search_category_and_distance(api_clien
     assert results[0]["tags"] == ["Coffee"]
 
 
-def test_public_nearby_caches_db_work_and_busts_on_change(api_client, django_assert_num_queries):
+def test_public_nearby_caches_db_work_and_busts_on_change(
+    api_client, django_assert_num_queries
+):
     """The discovery list serializes from the DB once per filter combo, then serves
     from cache (zero queries) until a business change busts it."""
     from django.core.cache import cache
@@ -165,15 +181,25 @@ def test_public_categories_only_returns_categories_with_active_businesses(api_cl
 
     cache.clear()
 
-    def mk(name, category, *, status=Business.Status.APPROVED, vis=Business.VisibilityStatus.PUBLISHED):
+    def mk(
+        name,
+        category,
+        *,
+        status=Business.Status.APPROVED,
+        vis=Business.VisibilityStatus.PUBLISHED,
+    ):
         payload = business_payload(name)
         payload["category"] = category
         Business.objects.create(**payload, status=status, visibility_status=vis)
 
     mk("Pub Cafe", "cafe")
     mk("Pub Barber", "barber")
-    mk("Draft Bakery", "bakery", vis=Business.VisibilityStatus.DRAFT)  # not published → excluded
-    mk("Pending Beauty", "beauty", status=Business.Status.PENDING)  # not approved → excluded
+    mk(
+        "Draft Bakery", "bakery", vis=Business.VisibilityStatus.DRAFT
+    )  # not published → excluded
+    mk(
+        "Pending Beauty", "beauty", status=Business.Status.PENDING
+    )  # not approved → excluded
 
     res = api_client.get("/api/businesses/categories/")
     assert res.status_code == 200
@@ -191,29 +217,47 @@ def test_public_business_detail_includes_catalog_rewards_and_group_offers(api_cl
         longitude="74.569800",
         tags=["Brunch"],
     )
-    CatalogItem.objects.create(business=business, module="menu", name="Cappuccino", category="Coffee", price="150 c")
+    CatalogItem.objects.create(
+        business=business,
+        module="menu",
+        name="Cappuccino",
+        category="Coffee",
+        price="150 c",
+    )
     individual = Campaign.objects.create(
-        business=business, name="Buy 5 coffees",
-        campaign_type=Campaign.CampaignType.INDIVIDUAL, status=Campaign.Status.ACTIVE,
+        business=business,
+        name="Buy 5 coffees",
+        campaign_type=Campaign.CampaignType.INDIVIDUAL,
+        status=Campaign.Status.ACTIVE,
     )
     CampaignRule.objects.create(
-        campaign=individual, rule_type=CampaignRule.RuleType.VISIT_COUNT,
-        mechanic=CampaignRule.Mechanic.STAMP, required_count=5,
+        campaign=individual,
+        rule_type=CampaignRule.RuleType.VISIT_COUNT,
+        mechanic=CampaignRule.Mechanic.VISIT,
+        required_count=5,
     )
     CampaignReward.objects.create(
-        campaign=individual, reward_type=CampaignReward.RewardType.FREE_ITEM,
-        title="Buy 5 coffees", description="Free coffee",
+        campaign=individual,
+        reward_type=CampaignReward.RewardType.FREE_ITEM,
+        title="Buy 5 coffees",
+        description="Free coffee",
     )
     group = Campaign.objects.create(
-        business=business, name="Bring friends",
-        campaign_type=Campaign.CampaignType.GROUP, status=Campaign.Status.ACTIVE,
+        business=business,
+        name="Bring friends",
+        campaign_type=Campaign.CampaignType.GROUP,
+        status=Campaign.Status.ACTIVE,
     )
     CampaignRule.objects.create(
-        campaign=group, rule_type=CampaignRule.RuleType.GROUP_CHECKIN, required_group_size=3,
+        campaign=group,
+        rule_type=CampaignRule.RuleType.GROUP_CHECKIN,
+        required_group_size=3,
     )
     CampaignReward.objects.create(
-        campaign=group, reward_type=CampaignReward.RewardType.DISCOUNT,
-        title="Bring friends", description="15% off",
+        campaign=group,
+        reward_type=CampaignReward.RewardType.DISCOUNT,
+        title="Bring friends",
+        description="15% off",
     )
 
     res = api_client.get(f"/api/businesses/{business.id}/?lat=42.8745&lng=74.5697")
@@ -229,14 +273,20 @@ def test_public_business_detail_includes_catalog_rewards_and_group_offers(api_cl
 
 
 def test_admin_approves_rejects_and_disables_businesses(api_client):
-    owner = User.objects.create_user(phone="+996700111225", role=User.Role.BUSINESS_OWNER, is_phone_verified=True)
+    owner = User.objects.create_user(
+        phone="+996700111225", role=User.Role.BUSINESS_OWNER, is_phone_verified=True
+    )
     business = Business.objects.create(owner=owner, **business_payload())
     admin = User.objects.create_superuser(phone="+996700111226", password="secret")
     api_client.force_authenticate(admin)
 
     pending = api_client.get("/api/admin/businesses/pending/")
     approve = api_client.post(f"/api/admin/businesses/{business.id}/approve/")
-    reject = api_client.post(f"/api/admin/businesses/{business.id}/reject/", {"reason": "bad docs"}, format="json")
+    reject = api_client.post(
+        f"/api/admin/businesses/{business.id}/reject/",
+        {"reason": "bad docs"},
+        format="json",
+    )
     disable = api_client.post(f"/api/admin/businesses/{business.id}/disable/")
 
     assert len(pending.data["data"]["results"]) == 1

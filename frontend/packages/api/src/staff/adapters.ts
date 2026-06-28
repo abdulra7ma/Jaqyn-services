@@ -33,8 +33,6 @@ function ruleSub(campaign: Raw): string {
   const required = rule.required_count ?? null;
   if (campaign.campaign_type === "group") {
     if (rule.required_group_size != null) parts.push(`Group of ${rule.required_group_size}`);
-  } else if (rule.mechanic === "spend" && rule.required_spend != null) {
-    parts.push(`Spend ${rule.required_spend}`);
   } else if (required != null) {
     parts.push(`Visit ${required}×`);
   }
@@ -163,6 +161,67 @@ export function adaptRedeemResult(raw: Raw): RedeemCampaignVoucherResult {
 // voucher-scan adapters per kind so the screen branches on a single tag.
 export function adaptScanDispatch(raw: Raw): ScanDispatchResult {
   if (raw.kind === "customer") {
+    if (Array.isArray(raw.loyalty) || Array.isArray(raw.campaigns)) {
+      const loyalty: Raw[] = Array.isArray(raw.loyalty) ? raw.loyalty : [];
+      const campaigns: Raw[] = Array.isArray(raw.campaigns) ? raw.campaigns : [];
+      const loyaltyRows: CampaignScanRow[] = loyalty.map((row) => ({
+        campaign_id: `loyalty:${row.program_id ?? ""}`,
+        name: row.name ?? "",
+        sub: row.reward_title ?? "",
+        business_name: "",
+        current_count:
+          row.type === "stamp"
+            ? Number(row.stamps_count ?? 0)
+            : row.type === "visit"
+              ? Number(row.visits_count ?? 0)
+              : Number(row.points_balance ?? 0),
+        next_count: 0,
+        goal: Number(row.required_count ?? 0),
+        eligible: true,
+        reason: null,
+        mechanic: row.type ?? null,
+        campaign_type: "loyalty",
+        reward_title: row.reward_title ?? null,
+        points_balance: Number(row.points_balance ?? 0),
+        points_per_som: row.points_per_som ?? null,
+        points_per_visit: row.points_per_visit ?? null,
+        cashback_per_point: row.cashback_per_point ?? null,
+        current_spend: String(row.current_spend ?? "0"),
+      }));
+      const campaignRows: CampaignScanRow[] = campaigns.map((row) => ({
+        campaign_id: row.campaign_id ?? "",
+        name: row.name ?? "",
+        sub: "",
+        business_name: "",
+        current_count: Number(row.progress_count ?? 0),
+        next_count: Number(row.progress_count ?? 0) + 1,
+        goal: Number(row.required_count ?? 0),
+        eligible: Boolean(row.eligible),
+        reason: row.reason_code ?? null,
+        mechanic: "visit",
+        campaign_type: "individual",
+        reward_title: null,
+        points_balance: 0,
+        points_per_som: null,
+        points_per_visit: null,
+        cashback_per_point: null,
+        current_spend: "0",
+      }));
+      return {
+        kind: "customer",
+        customer: {
+          customer: {
+            id: "",
+            name: raw.customer?.name ?? "",
+            phone: raw.customer?.phone_masked ?? "",
+          },
+          rows: [...loyaltyRows, ...campaignRows],
+          none_eligible: ![...loyaltyRows, ...campaignRows].some((row) => row.eligible),
+        },
+        voucher: null,
+        reason: null,
+      };
+    }
     return {
       kind: "customer",
       customer: adaptScanCustomerResult(raw.customer ?? {}),
@@ -171,12 +230,14 @@ export function adaptScanDispatch(raw: Raw): ScanDispatchResult {
     };
   }
   if (raw.kind === "voucher") {
+    const voucher = adaptVoucherScanResult(raw.voucher ?? {});
+    if (raw.domain === "loyalty" && voucher.code) voucher.code = `loyalty:${voucher.code}`;
     return {
       kind: "voucher",
       customer: null,
-      voucher: adaptVoucherScanResult(raw.voucher ?? {}),
+      voucher,
       reason: null,
     };
   }
-  return { kind: "invalid", customer: null, voucher: null, reason: raw.reason ?? null };
+  return { kind: "invalid", customer: null, voucher: null, reason: raw.reason_code ?? raw.reason ?? null };
 }

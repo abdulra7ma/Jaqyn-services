@@ -47,10 +47,8 @@ type OverlayState =
 
 // ─── multi-form loyalty helpers ─────────────────────────────────────────────────
 
-/** True when a row needs a bill amount entered before it can be confirmed:
- *  a "spend" mechanic, or "points" on a spend basis (points_per_som set). */
+/** True when spend-basis points require a bill before confirmation. */
 function needsAmount(row: CampaignScanRow): boolean {
-  if (row.mechanic === "spend") return true;
   if (row.mechanic === "points") return row.points_per_som != null;
   return false;
 }
@@ -212,8 +210,6 @@ function ChooserRow({
   let stateLine: string;
   if (row.mechanic === "stamp") {
     stateLine = t("staff.chooser.stampsState").replace("{progress}", String(row.current_count)).replace("{required}", String(row.goal));
-  } else if (row.mechanic === "spend") {
-    stateLine = t("staff.chooser.spendState").replace("{current}", row.current_spend).replace("{required}", String(row.goal));
   } else if (row.mechanic === "points") {
     stateLine = t("staff.chooser.pointsState").replace("{balance}", String(row.points_balance));
   } else if (row.mechanic === "social") {
@@ -228,9 +224,6 @@ function ChooserRow({
   if (row.mechanic === "stamp") {
     actionLabel = t("staff.chooser.addStamp");
     onAction = () => onConfirm(row);
-  } else if (row.mechanic === "spend") {
-    actionLabel = t("staff.chooser.enterBill");
-    onAction = () => onPick(row);
   } else if (row.mechanic === "points") {
     if (row.points_per_som != null) {
       actionLabel = t("staff.chooser.enterBill");

@@ -3,9 +3,8 @@
 import { useCategories, useNearby, type Business } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Badge } from "@jaqyn/ui";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { BusinessSheet } from "../_components/BusinessSheet";
 import { CustomerShell } from "../_components/CustomerShell";
 import { MiniMap } from "../_components/MiniMap";
 import { QueryBoundary } from "../_components/QueryBoundary";
@@ -17,10 +16,12 @@ const ALL_CATEGORY = "all";
 
 export default function NearbyPage() {
   const t = useT();
-  const router = useRouter();
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState<string>(ALL_CATEGORY);
   const [selected, setSelected] = useState<string | null>(null);
+  // ID of business whose sheet is open. Separate from `selected` so hover-highlight
+  // and sheet-open are independent gestures.
+  const [sheetId, setSheetId] = useState<string | null>(null);
   const [loc, setLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [locMsg, setLocMsg] = useState<string | null>(null);
   const askedForLocation = useRef(false);
@@ -66,6 +67,11 @@ export default function NearbyPage() {
     );
   }
 
+  function openSheet(id: string) {
+    setSelected(id);
+    setSheetId(id);
+  }
+
   return (
     <CustomerShell title={t("nearby.title")}>
       <div className="mb-3 flex items-center gap-2 rounded-xl border-[1.5px] border-line bg-card px-3.5">
@@ -89,7 +95,7 @@ export default function NearbyPage() {
               <MiniMap
                 selectedId={active}
                 onSelect={setSelected}
-                onOpen={(id) => router.push(`/nearby/${id}`)}
+                onOpen={openSheet}
                 userLocation={loc}
                 onUseLocation={requestLocation}
                 pins={shown.map((b, i) => ({
@@ -117,6 +123,7 @@ export default function NearbyPage() {
                     nearest={i === 0}
                     selected={active === b.id}
                     onFocus={() => setSelected(b.id)}
+                    onOpen={() => openSheet(b.id)}
                   />
                 ))}
               </div>
@@ -124,6 +131,13 @@ export default function NearbyPage() {
           );
         }}
       </QueryBoundary>
+
+      {sheetId && (
+        <BusinessSheet
+          businessId={sheetId}
+          onClose={() => setSheetId(null)}
+        />
+      )}
     </CustomerShell>
   );
 }
@@ -133,23 +147,26 @@ function NearbyCard({
   nearest,
   selected,
   onFocus,
+  onOpen,
 }: {
   business: Business;
   nearest: boolean;
   selected: boolean;
   onFocus: () => void;
+  onOpen: () => void;
 }) {
   const t = useT();
   const open = isOpenNow(b.working_hours);
   return (
-    <Link
-      href={`/nearby/${b.id}`}
+    <button
+      type="button"
+      onClick={onOpen}
       onMouseEnter={onFocus}
       onFocus={onFocus}
-      className={`flex items-center gap-3 rounded-[14px] border bg-card px-3.5 py-3 shadow-card transition active:scale-[.99] ${selected ? "border-brand" : "border-line"}`}
+      className={`flex w-full items-center gap-3 rounded-[14px] border bg-card px-3.5 py-3 shadow-card transition active:scale-[.99] ${selected ? "border-brand" : "border-line"}`}
     >
       <InitialTile name={b.glyph || b.name} size={42} image={b.logo_url} />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 text-left">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-bold text-ink">{b.name}</span>
           {open !== null && (
@@ -174,7 +191,7 @@ function NearbyCard({
         )}
       </div>
       <span className="text-xl text-subtle" aria-hidden>›</span>
-    </Link>
+    </button>
   );
 }
 

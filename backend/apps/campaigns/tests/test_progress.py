@@ -29,7 +29,9 @@ def test_single_visit_completes_and_issues_exactly_one_voucher():
 
     assert result.completed is True
     assert result.voucher is not None
-    vouchers = CampaignRewardVoucher.objects.filter(campaign=campaign, customer=customer)
+    vouchers = CampaignRewardVoucher.objects.filter(
+        campaign=campaign, customer=customer
+    )
     assert vouchers.count() == 1
     voucher = vouchers.get()
     assert voucher.status == CampaignRewardVoucher.Status.ACTIVE
@@ -170,21 +172,27 @@ def test_priority_resolver_prefers_closest_to_complete():
     c2 = make_campaign(business, required_count=5)
     # c2 is closer to completion (4/5 vs 1/5).
     CampaignParticipant.objects.create(
-        campaign=c1, customer=customer, progress_count=1,
+        campaign=c1,
+        customer=customer,
+        progress_count=1,
         status=CampaignParticipant.Status.IN_PROGRESS,
     )
     CampaignParticipant.objects.create(
-        campaign=c2, customer=customer, progress_count=4,
+        campaign=c2,
+        customer=customer,
+        progress_count=4,
         status=CampaignParticipant.Status.IN_PROGRESS,
     )
 
     results = [
         CampaignEligibilityService.evaluate(
-            c1, customer.id,
+            c1,
+            customer.id,
             CampaignParticipant.objects.get(campaign=c1, customer=customer),
         ),
         CampaignEligibilityService.evaluate(
-            c2, customer.id,
+            c2,
+            customer.id,
             CampaignParticipant.objects.get(campaign=c2, customer=customer),
         ),
     ]
@@ -228,6 +236,7 @@ def test_join_campaign_is_idempotent():
     second = CampaignProgressService.join_campaign(campaign, customer)
 
     assert first.id == second.id
-    assert CampaignParticipant.objects.filter(
-        campaign=campaign, customer=customer
-    ).count() == 1
+    assert (
+        CampaignParticipant.objects.filter(campaign=campaign, customer=customer).count()
+        == 1
+    )

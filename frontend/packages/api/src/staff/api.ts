@@ -61,18 +61,39 @@ export const staffApi = {
   // Read-only resolve of a scanned token → which preview to open. One round-trip
   // replaces the old visit/redeem mode toggle; no writes happen here.
   resolveScan: (token: string): Promise<ScanDispatchResult> =>
-    api.post<any>("/api/staff/campaigns/scan/", { token }).then(adaptScanDispatch),
+    api.post<any>("/api/staff/scan/", { token }).then(adaptScanDispatch),
   // Confirm ONE program toward this customer (choose-one chooser). campaign_id
   // selects the program; amount is the bill in som, REQUIRED for a "spend"
   // mechanic and for spend-basis "points", IGNORED otherwise. The backend returns
   // 200 even when the program did not advance; only an invalid token errors. Maps
   // the raw envelope through adaptUnifiedScan (campaigns[0] is the chosen program).
-  confirmVisitUnified: (
+  confirmVisitUnified: async (
     token: string,
     campaignId?: string,
     amount?: string,
-  ): Promise<UnifiedScanResult> =>
-    api
+  ): Promise<UnifiedScanResult> => {
+    if (campaignId?.startsWith("loyalty:")) {
+      const raw = await api.post<any>("/api/staff/loyalty/award/", {
+        token,
+        program_id: campaignId.slice("loyalty:".length),
+        ...(amount != null ? { amount } : {}),
+      });
+      return {
+        customer: { name: raw.customer ?? "", phone: "" },
+        campaigns: [{
+          state: raw.voucher ? "completed" : "counted",
+          customer_name: raw.customer ?? "",
+          campaign_name: raw.name ?? "",
+          current_count: raw.type === "stamp" ? raw.stamps_count : raw.type === "visit" ? raw.visits_count : raw.points_balance,
+          goal: raw.required_count ?? 0,
+          reward_title: raw.voucher?.reward_title ?? null,
+          expires_label: raw.voucher?.expires_at ?? null,
+          points_balance: raw.points_balance ?? 0,
+        }],
+        skipped_campaigns: [],
+      };
+    }
+    return api
       .post<any>("/api/staff/campaigns/visit/", {
         token,
         ...(campaignId ? { campaign_id: campaignId } : {}),
@@ -80,7 +101,8 @@ export const staffApi = {
         // that don't need a bill, but omitting keeps the payload minimal.
         ...(amount != null ? { amount } : {}),
       })
-      .then(adaptUnifiedScan),
+      .then(adaptUnifiedScan);
+  },
   async scanCampaignVoucher(token: string): Promise<CampaignVoucherScanResult> {
     // A valid voucher resolves to the voucher object; the backend raises a typed
     // error for an invalid one. Map the known voucher-error codes to the design's
@@ -110,7 +132,9 @@ export const staffApi = {
   // endpoint accepts a token or a code, and the code is the stable identifier the
   // scan surfaces (the voucher *id* is not a redeem key).
   redeemCampaignVoucher: (code: string): Promise<RedeemCampaignVoucherResult> =>
-    api.post<any>("/api/staff/campaigns/redeem-voucher/", { code }).then(adaptRedeemResult),
+    code.startsWith("loyalty:")
+      ? api.post<any>("/api/staff/loyalty/redeem-voucher/", { code: code.slice("loyalty:".length) }).then(adaptRedeemResult)
+      : api.post<any>("/api/staff/campaigns/redeem-voucher/", { code }).then(adaptRedeemResult),
   confirmGroup: (sessionId: string): Promise<ConfirmGroupResult> =>
     api.post<ConfirmGroupResult>("/api/staff/campaigns/confirm-group/", {
       group_session_id: sessionId,

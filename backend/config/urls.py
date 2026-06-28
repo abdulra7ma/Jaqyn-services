@@ -6,13 +6,18 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.businesses.onboarding_views import BusinessTypeListView
 from apps.reporting.analytics import analytics_view
+from apps.loyalty.scan_views import UnifiedStaffScanView
 
 from core.views import HealthView
 
 urlpatterns = [
     # Custom admin analytics page — must precede admin.site.urls so it resolves
     # first. admin_view gates it to logged-in staff and renders in the admin shell.
-    path("admin/analytics/", admin.site.admin_view(analytics_view), name="admin_analytics"),
+    path(
+        "admin/analytics/",
+        admin.site.admin_view(analytics_view),
+        name="admin_analytics",
+    ),
     path("admin/", admin.site.urls),
     path("api/health/", HealthView.as_view(), name="health"),
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
@@ -22,6 +27,9 @@ urlpatterns = [
     path("api/business/", include("apps.businesses.urls")),
     path("api/business/staff/", include("apps.staff.management_urls")),
     path("api/business/", include("apps.reporting.business_urls")),
+    # Exact unified scanner must precede the legacy staff include, which also
+    # contains a /scan/ route.
+    path("api/staff/scan/", UnifiedStaffScanView.as_view()),
     path("api/staff/", include("apps.staff.urls")),
     path("api/qr/", include("apps.qr.urls")),
     path("api/merchant/", include("apps.qr.merchant_urls")),
@@ -30,6 +38,9 @@ urlpatterns = [
     path("api/business/campaigns/", include("apps.campaigns.business_urls")),
     path("api/customer/", include("apps.campaigns.customer_urls")),
     path("api/staff/campaigns/", include("apps.campaigns.staff_urls")),
+    path("api/business/loyalty/", include("apps.loyalty.business_urls")),
+    path("api/customer/loyalty/", include("apps.loyalty.customer_urls")),
+    path("api/staff/loyalty/", include("apps.loyalty.staff_urls")),
     path("api/admin/campaigns/", include("apps.campaigns.admin_urls")),
     path("api/admin/", include("apps.businesses.admin_urls")),
     path("api/admin/", include("apps.reporting.admin_urls")),

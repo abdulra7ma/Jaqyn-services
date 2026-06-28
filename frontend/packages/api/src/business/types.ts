@@ -336,7 +336,6 @@ export type BusinessCampaignReward = {
 export type BusinessCampaignRule = {
   mechanic: BusinessCampaignMechanic | null;
   required_count: number | null;
-  required_spend: string | null;
   max_count_per_day: number | null;
   min_time_between: string | null;
   required_group_size: number | null;
@@ -425,17 +424,9 @@ export type CampaignPayload = {
   active_start_time?: string;
   active_end_time?: string;
   // Rules (subset relevant to the chosen type).
-  // INDIVIDUAL completion mechanic (visit/stamp/spend) — campaigns-restructure §3.
+  // INDIVIDUAL campaigns count verified visits.
   mechanic?: BusinessCampaignMechanic;
   required_count?: number | null;
-  // INDIVIDUAL spend mechanic: total spend (decimal string) to complete.
-  required_spend?: string | null;
-  // INDIVIDUAL points mechanic (multi-form-loyalty slice 3): accrual basis +
-  // the per-action rate (one of per-visit / per-som) + the cashback rate.
-  points_basis?: "visit" | "spend" | null;
-  points_per_visit?: number | null;
-  points_per_som?: string | null;
-  cashback_per_point?: string | null;
   max_count_per_day?: number | null;
   // minimum_time_between_actions: ISO 8601 duration string (e.g. "PT4H") accepted
   // by the backend DurationField. Null clears the constraint.

@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.businesses.models import Business, CatalogItem
-from apps.campaigns.models import Campaign, CampaignReward, CampaignRule
+from apps.loyalty.models import LoyaltyProgram
 from core.logging import emit_event
 
 # Fixed password for seeded demo owners. Safe to document: these only ever back
@@ -53,46 +53,62 @@ def create_demo_business(name: Optional[str] = None) -> DemoBusinessResult:
     display = name or f"Demo Cafe {suffix.upper()}"
 
     owner = User.objects.create(
-        phone=phone, email=email, name="Demo Owner",
-        role=User.Role.BUSINESS_OWNER, is_phone_verified=True, is_active=True,
+        phone=phone,
+        email=email,
+        name="Demo Owner",
+        role=User.Role.BUSINESS_OWNER,
+        is_phone_verified=True,
+        is_active=True,
     )
     owner.set_password(DEMO_OWNER_PASSWORD)
     owner.save(update_fields=["password"])
 
     now = timezone.now()
     business = Business.objects.create(
-        owner=owner, name=display, category=Business.Category.CAFE,
+        owner=owner,
+        name=display,
+        category=Business.Category.CAFE,
         description="Seeded demo business for sales/testing.",
-        area="Bishkek", city="Bishkek", phone=phone, is_demo=True,
+        area="Bishkek",
+        city="Bishkek",
+        phone=phone,
+        is_demo=True,
         status=Business.Status.APPROVED,
         onboarding_status=Business.OnboardingStatus.COMPLETED,
         verification_status=Business.VerificationStatus.VERIFIED,
         visibility_status=Business.VisibilityStatus.PUBLISHED,
-        verified_at=now, published_at=now,
+        verified_at=now,
+        published_at=now,
     )
 
-    # A loyalty stamp card is now an ACTIVE INDIVIDUAL (STAMP) campaign.
-    demo_campaign = Campaign.objects.create(
-        business=business, created_by=owner, name="Demo Coffee Club",
+    LoyaltyProgram.objects.create(
+        business=business,
+        created_by=owner,
+        name="Demo Coffee Club",
         description="Collect 6 stamps, the 7th coffee is on us.",
-        campaign_type=Campaign.CampaignType.INDIVIDUAL,
-        status=Campaign.Status.ACTIVE,
-        completion_limit_per_customer=Campaign.CompletionLimit.REPEATABLE,
-        auto_join_enabled=True,
-    )
-    CampaignRule.objects.create(
-        campaign=demo_campaign, rule_type=CampaignRule.RuleType.VISIT_COUNT,
-        mechanic=CampaignRule.Mechanic.STAMP, required_count=6,
-    )
-    CampaignReward.objects.create(
-        campaign=demo_campaign, reward_type=CampaignReward.RewardType.FREE_ITEM,
-        title="Free coffee", description="Free coffee", expiry_days_after_unlock=30,
+        type=LoyaltyProgram.Type.STAMP,
+        required_count=6,
+        max_banked=2,
+        reward_type=LoyaltyProgram.RewardType.FREE_ITEM,
+        reward_title="Free coffee",
+        reward_description="Free coffee",
+        item_selection=LoyaltyProgram.ItemSelection.CUSTOMER,
     )
     for order, (item_name, price) in enumerate(_DEMO_CATALOG):
         CatalogItem.objects.create(
-            business=business, module="menu", name=item_name, category="Coffee",
-            price=price, sort_order=order, is_active=True,
+            business=business,
+            module="menu",
+            name=item_name,
+            category="Coffee",
+            price=price,
+            sort_order=order,
+            is_active=True,
         )
 
     emit_event("demo_business_created", business_id=str(business.id))
-    return DemoBusinessResult(business=business, owner_email=email, owner_phone=phone, password=DEMO_OWNER_PASSWORD)
+    return DemoBusinessResult(
+        business=business,
+        owner_email=email,
+        owner_phone=phone,
+        password=DEMO_OWNER_PASSWORD,
+    )

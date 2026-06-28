@@ -1,13 +1,11 @@
 from django.urls import path
 
 from apps.campaigns.views.customer_views import (
-    BusinessLoyaltyView,
     CampaignCatalogView,
     CampaignCustomerDetailView,
     CampaignDiscoverView,
     CampaignFeedView,
     CampaignJoinView,
-    CampaignRedeemPointsView,
     CampaignVoucherDetailView,
     CampaignVoucherPresentView,
     CampaignVoucherSelectItemView,
@@ -26,19 +24,61 @@ from apps.campaigns.views.customer_views import (
 urlpatterns = [
     path("campaigns/", CampaignDiscoverView.as_view(), name="customer-campaigns"),
     path("campaigns/feed/", CampaignFeedView.as_view(), name="customer-campaign-feed"),
-    path("campaigns/<uuid:campaign_id>/", CampaignCustomerDetailView.as_view(), name="customer-campaign-detail"),
-    path("campaigns/<uuid:campaign_id>/join/", CampaignJoinView.as_view(), name="customer-campaign-join"),
-    path("campaigns/<uuid:campaign_id>/redeem-points/", CampaignRedeemPointsView.as_view(), name="customer-campaign-redeem-points"),
-    path("campaigns/<uuid:campaign_id>/catalog/", CampaignCatalogView.as_view(), name="customer-campaign-catalog"),
-    path("businesses/<uuid:business_id>/loyalty/", BusinessLoyaltyView.as_view(), name="customer-business-loyalty"),
-    path("campaigns/<uuid:campaign_id>/group/start/", GroupSessionStartView.as_view(), name="customer-campaign-group-start"),
-    path("campaign-groups/", GroupSessionListView.as_view(), name="customer-campaign-groups"),
-    path("campaign-groups/<uuid:group_session_id>/", GroupSessionDetailView.as_view(), name="customer-campaign-group-detail"),
-    path("campaign-groups/<uuid:group_session_id>/invite/", GroupSessionInviteView.as_view(), name="customer-campaign-group-invite"),
-    path("campaign-groups/<uuid:group_session_id>/leave/", GroupSessionLeaveView.as_view(), name="customer-campaign-group-leave"),
-    path("campaign-groups/<uuid:group_session_id>/demo-fill/", GroupSessionDemoFillView.as_view(), name="customer-campaign-group-demo-fill"),
-    path("campaign-wallet/", CampaignWalletView.as_view(), name="customer-campaign-wallet"),
-    path("campaign-vouchers/<uuid:voucher_id>/", CampaignVoucherDetailView.as_view(), name="customer-campaign-voucher"),
+    path(
+        "campaigns/<uuid:campaign_id>/",
+        CampaignCustomerDetailView.as_view(),
+        name="customer-campaign-detail",
+    ),
+    path(
+        "campaigns/<uuid:campaign_id>/join/",
+        CampaignJoinView.as_view(),
+        name="customer-campaign-join",
+    ),
+    path(
+        "campaigns/<uuid:campaign_id>/catalog/",
+        CampaignCatalogView.as_view(),
+        name="customer-campaign-catalog",
+    ),
+    path(
+        "campaigns/<uuid:campaign_id>/group/start/",
+        GroupSessionStartView.as_view(),
+        name="customer-campaign-group-start",
+    ),
+    path(
+        "campaign-groups/",
+        GroupSessionListView.as_view(),
+        name="customer-campaign-groups",
+    ),
+    path(
+        "campaign-groups/<uuid:group_session_id>/",
+        GroupSessionDetailView.as_view(),
+        name="customer-campaign-group-detail",
+    ),
+    path(
+        "campaign-groups/<uuid:group_session_id>/invite/",
+        GroupSessionInviteView.as_view(),
+        name="customer-campaign-group-invite",
+    ),
+    path(
+        "campaign-groups/<uuid:group_session_id>/leave/",
+        GroupSessionLeaveView.as_view(),
+        name="customer-campaign-group-leave",
+    ),
+    path(
+        "campaign-groups/<uuid:group_session_id>/demo-fill/",
+        GroupSessionDemoFillView.as_view(),
+        name="customer-campaign-group-demo-fill",
+    ),
+    path(
+        "campaign-wallet/",
+        CampaignWalletView.as_view(),
+        name="customer-campaign-wallet",
+    ),
+    path(
+        "campaign-vouchers/<uuid:voucher_id>/",
+        CampaignVoucherDetailView.as_view(),
+        name="customer-campaign-voucher",
+    ),
     path(
         "campaign-vouchers/<uuid:voucher_id>/present/",
         CampaignVoucherPresentView.as_view(),

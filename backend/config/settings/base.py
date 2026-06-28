@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "apps.staff",
     "apps.qr",
     "apps.campaigns",
+    "apps.loyalty",
     "apps.reporting",
     "apps.notifications",
     "apps.system",
@@ -254,6 +255,8 @@ REST_FRAMEWORK = {
         "campaign_join": "30/min",  # customer join / group start
         "campaign_present": "60/min",  # customer presents a voucher (polled UI)
         "campaign_scan": "120/min",  # staff scan/confirm/redeem at the till
+        "loyalty_write": "60/min",  # loyalty setup, join, award, and redemption writes
+        "loyalty_scan": "120/min",  # unified till scanner is a high-throughput read
         # Business brand-asset uploads (logo + cover). Rare, heavy writes; bound
         # tightly so an owner can't hammer the compressor/storage.
         "business_image": "20/min",

@@ -13,7 +13,6 @@ from apps.campaigns.services.analytics import (
 from apps.campaigns.services.campaign import (
     CampaignService,
     CustomerProgressContext,
-    LoyaltyProgramView,
 )
 from apps.campaigns.services.eligibility import (
     CampaignEligibilityService,
@@ -42,7 +41,6 @@ from apps.campaigns.services.scanner import (
 __all__ = [
     "CampaignService",
     "CustomerProgressContext",
-    "LoyaltyProgramView",
     "CampaignEligibilityService",
     "EligibilityResult",
     "IneligibilityReason",

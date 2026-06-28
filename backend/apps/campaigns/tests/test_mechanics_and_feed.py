@@ -24,7 +24,6 @@ from apps.campaigns.models import (
 from apps.campaigns.services import (
     CampaignAnalyticsService,
     CampaignProgressService,
-    StaffScannerService,
 )
 from apps.campaigns.tests.helpers import (
     make_business,
@@ -49,6 +48,7 @@ def _auth(user):
 # --- STAMP max_banked --------------------------------------------------------
 
 
+@pytest.mark.skip(reason="Stamp cards moved to apps.loyalty")
 def test_stamp_max_banked_cap_blocks_extra_voucher():
     """A STAMP completion over max_banked counts the stamp but mints no voucher."""
     business = make_business()
@@ -65,29 +65,40 @@ def test_stamp_max_banked_cap_blocks_extra_voucher():
         minimum_gap=timedelta(0),
     )
 
-    first = CampaignProgressService.record_campaign_action(campaign, customer, staff=staff)
+    first = CampaignProgressService.record_campaign_action(
+        campaign, customer, staff=staff
+    )
     assert first.completed is True
     assert first.voucher is not None
 
     # Bank is full (1 ACTIVE voucher) → next stamp counts but mints nothing.
-    second = CampaignProgressService.record_campaign_action(campaign, customer, staff=staff)
+    second = CampaignProgressService.record_campaign_action(
+        campaign, customer, staff=staff
+    )
     assert second.completed is False
     assert second.voucher is None
-    assert CampaignRewardVoucher.objects.filter(
-        customer=customer, status=CampaignRewardVoucher.Status.ACTIVE
-    ).count() == 1
+    assert (
+        CampaignRewardVoucher.objects.filter(
+            customer=customer, status=CampaignRewardVoucher.Status.ACTIVE
+        ).count()
+        == 1
+    )
 
 
 # --- SPEND threshold ---------------------------------------------------------
 
 
+@pytest.mark.skip(reason="Spend rewards moved to apps.loyalty")
 def test_spend_accumulates_and_completes_at_threshold():
     business = make_business()
     staff = make_staff(business)
     customer = make_customer()
     campaign = make_campaign(
-        business, mechanic="spend", required_spend=Decimal("1000"),
-        min_spend=Decimal("100"), minimum_gap=timedelta(0),
+        business,
+        mechanic="spend",
+        required_spend=Decimal("1000"),
+        min_spend=Decimal("100"),
+        minimum_gap=timedelta(0),
     )
 
     r1 = CampaignProgressService.record_campaign_action(
@@ -104,12 +115,15 @@ def test_spend_accumulates_and_completes_at_threshold():
     assert r2.voucher is not None
 
 
+@pytest.mark.skip(reason="Spend rewards moved to apps.loyalty")
 def test_spend_below_min_is_rejected():
     business = make_business()
     staff = make_staff(business)
     customer = make_customer()
     campaign = make_campaign(
-        business, mechanic="spend", required_spend=Decimal("1000"),
+        business,
+        mechanic="spend",
+        required_spend=Decimal("1000"),
         min_spend=Decimal("100"),
     )
     with pytest.raises(JaqynAPIException) as exc:
@@ -119,6 +133,7 @@ def test_spend_below_min_is_rejected():
     assert exc.value.code == "VALIDATION_ERROR"
 
 
+@pytest.mark.skip(reason="Spend rewards moved to apps.loyalty")
 def test_spend_requires_amount():
     business = make_business()
     staff = make_staff(business)
@@ -147,11 +162,18 @@ def test_social_proof_completes_and_mints_one_voucher():
     customer = make_customer()
     campaign = _social_campaign(business)
 
-    result = CampaignProgressService.confirm_social_proof(campaign, customer, staff=staff)
+    result = CampaignProgressService.confirm_social_proof(
+        campaign, customer, staff=staff
+    )
 
     assert result.completed is True
     assert result.voucher is not None
-    assert CampaignRewardVoucher.objects.filter(campaign=campaign, customer=customer).count() == 1
+    assert (
+        CampaignRewardVoucher.objects.filter(
+            campaign=campaign, customer=customer
+        ).count()
+        == 1
+    )
 
 
 def test_social_proof_is_idempotent_no_duplicate_voucher():
@@ -165,7 +187,12 @@ def test_social_proof_is_idempotent_no_duplicate_voucher():
     with pytest.raises(JaqynAPIException) as exc:
         CampaignProgressService.confirm_social_proof(campaign, customer, staff=staff)
     assert exc.value.code == "CAMPAIGN_ALREADY_COMPLETED"
-    assert CampaignRewardVoucher.objects.filter(campaign=campaign, customer=customer).count() == 1
+    assert (
+        CampaignRewardVoucher.objects.filter(
+            campaign=campaign, customer=customer
+        ).count()
+        == 1
+    )
 
 
 def test_social_proof_rejects_non_social_campaign():
@@ -183,14 +210,17 @@ def test_social_proof_rejects_non_social_campaign():
 
 def test_individual_type_stats():
     business = make_business()
-    staff = make_staff(business)
     campaign = make_campaign(business, required_count=5, minimum_gap=timedelta(0))
     # One participant at 4/5 (close to reward), one completed → a redeemed voucher.
-    c1, c2 = make_customer("a"), make_customer("b")
+    c1 = make_customer("a")
     for _ in range(4):
         CampaignParticipant.objects.update_or_create(
-            campaign=campaign, customer=c1,
-            defaults={"progress_count": 4, "status": CampaignParticipant.Status.IN_PROGRESS},
+            campaign=campaign,
+            customer=c1,
+            defaults={
+                "progress_count": 4,
+                "status": CampaignParticipant.Status.IN_PROGRESS,
+            },
         )
     stats = CampaignAnalyticsService.type_stats(campaign)
     assert stats.campaign_type == Campaign.CampaignType.INDIVIDUAL
@@ -203,8 +233,12 @@ def test_social_type_stats_reach_is_follower_sum():
     business = make_business()
     campaign = _social_campaign(business)
     c1, c2 = make_customer("a"), make_customer("b")
-    CampaignParticipant.objects.create(campaign=campaign, customer=c1, follower_count=1000)
-    CampaignParticipant.objects.create(campaign=campaign, customer=c2, follower_count=500)
+    CampaignParticipant.objects.create(
+        campaign=campaign, customer=c1, follower_count=1000
+    )
+    CampaignParticipant.objects.create(
+        campaign=campaign, customer=c2, follower_count=500
+    )
     stats = CampaignAnalyticsService.type_stats(campaign)
     assert stats.campaign_type == Campaign.CampaignType.SOCIAL
     assert stats.labels["stat_c"] == "Reach"
@@ -217,12 +251,17 @@ def test_group_type_stats():
 
     business = make_business()
     campaign = make_campaign(
-        business, campaign_type=Campaign.CampaignType.GROUP, mechanic=None,
+        business,
+        campaign_type=Campaign.CampaignType.GROUP,
+        mechanic=None,
         required_group_size=3,
     )
     leader = make_customer("L")
     group = Group.objects.create(
-        campaign=campaign, group_leader=leader, required_size=3, invite_token="tok-g",
+        campaign=campaign,
+        group_leader=leader,
+        required_size=3,
+        invite_token="tok-g",
     )
     GroupMember.objects.create(group=group, customer=leader)
     GroupMember.objects.create(group=group, customer=make_customer("m"))
@@ -241,10 +280,24 @@ def _owner_client(business):
 
 def test_business_list_filters_by_type_and_status():
     business = make_business()
-    make_campaign(business, campaign_type=Campaign.CampaignType.INDIVIDUAL, status=Campaign.Status.ACTIVE)
-    make_campaign(business, campaign_type=Campaign.CampaignType.SOCIAL, mechanic=None, status=Campaign.Status.DRAFT)
-    make_campaign(business, campaign_type=Campaign.CampaignType.GROUP, mechanic=None,
-                  required_group_size=3, status=Campaign.Status.ENDED)
+    make_campaign(
+        business,
+        campaign_type=Campaign.CampaignType.INDIVIDUAL,
+        status=Campaign.Status.ACTIVE,
+    )
+    make_campaign(
+        business,
+        campaign_type=Campaign.CampaignType.SOCIAL,
+        mechanic=None,
+        status=Campaign.Status.DRAFT,
+    )
+    make_campaign(
+        business,
+        campaign_type=Campaign.CampaignType.GROUP,
+        mechanic=None,
+        required_group_size=3,
+        status=Campaign.Status.ENDED,
+    )
     client = _owner_client(business)
 
     by_type = client.get("/api/business/campaigns/?type=social")
@@ -282,7 +335,9 @@ def test_customer_feed_splits_followed_and_discover():
     customer = make_customer()
     followed = make_campaign(business, required_count=5, minimum_gap=timedelta(0))
     CampaignParticipant.objects.create(
-        campaign=followed, customer=customer, status=CampaignParticipant.Status.IN_PROGRESS,
+        campaign=followed,
+        customer=customer,
+        status=CampaignParticipant.Status.IN_PROGRESS,
         progress_count=2,
     )
     make_campaign(business, required_count=3)  # discover-only
@@ -310,13 +365,9 @@ def test_followed_keeps_all_joined_once_campaigns():
     business = make_business()
     customer = make_customer()
     joined = []
-    for mech in ("visit", "stamp", "points"):
+    for _ in range(3):
         c = make_campaign(
             business,
-            mechanic=mech,
-            cashback_per_point=Decimal("1") if mech == "points" else None,
-            points_basis="visit" if mech == "points" else None,
-            points_per_visit=10 if mech == "points" else None,
             completion_limit=Campaign.CompletionLimit.ONCE,
         )
         CampaignParticipant.objects.create(
@@ -338,7 +389,9 @@ def test_customer_feed_group_filter():
     customer = make_customer()
     make_campaign(business, required_count=3)
     group = make_campaign(
-        business, campaign_type=Campaign.CampaignType.GROUP, mechanic=None,
+        business,
+        campaign_type=Campaign.CampaignType.GROUP,
+        mechanic=None,
         required_group_size=3,
     )
     client = _auth(customer)
@@ -365,7 +418,10 @@ def test_customer_wallet_query_count_bounded(django_assert_num_queries):
     customer = make_customer()
     # Mint a few vouchers by completing a 1-visit repeatable campaign.
     campaign = make_campaign(
-        business, required_count=1, completion_limit="repeatable", minimum_gap=timedelta(0),
+        business,
+        required_count=1,
+        completion_limit="repeatable",
+        minimum_gap=timedelta(0),
     )
     for _ in range(3):
         CampaignProgressService.record_campaign_action(campaign, customer, staff=staff)
@@ -396,7 +452,9 @@ def test_confirm_social_endpoint_happy_path():
     assert resp.status_code == 200, resp.content
     assert resp.data["data"]["completed"] is True
     assert resp.data["data"]["voucher"] is not None
-    assert CampaignRewardVoucher.objects.filter(campaign=campaign, customer=customer).exists()
+    assert CampaignRewardVoucher.objects.filter(
+        campaign=campaign, customer=customer
+    ).exists()
 
 
 def test_confirm_social_endpoint_requires_auth():

@@ -189,23 +189,17 @@ export type PublicGroupOffer = Pick<
 >;
 
 // ---- Campaigns (apps.campaigns — campaigns-restructure design §3) -------------
-// Every offer is a Campaign of one type: Individual (with a visit/stamp/spend
-// mechanic), Group, or Social. Complete the challenge → unlock a voucher → redeem.
+// Every offer is a Campaign of one type: Individual visit challenge, Group, or
+// Social. Complete the challenge → unlock a voucher → redeem.
 // Mirrors only the fields the campaign screens render; the API layer is the
 // boundary, so raw backend rows are coerced through ./adapters before reaching here.
 
 // Campaign type discriminator (campaigns-restructure design §3). Replaces the
-// legacy VISIT/TIME_WINDOW/GROUP enum: an Individual campaign carries a mechanic
-// (visit/stamp/spend), Group runs the group flow, Social is staff-verified proof.
+// legacy VISIT/TIME_WINDOW/GROUP enum. Group runs the group flow; Social is
+// staff-verified proof.
 export type CampaignType = "individual" | "group" | "social";
 
-// Individual sub-discriminator (campaigns-restructure design §3 CampaignRule).
-// `points` (multi-form-loyalty slice 1) is a balance mechanic: the customer
-// accrues points (per visit or per spend) redeemable as cashback.
-export type CampaignMechanic = "visit" | "stamp" | "spend" | "points";
-
-// POINTS accrual basis (multi-form-loyalty design — business chooses per program).
-export type PointsBasis = "visit" | "spend";
+export type CampaignMechanic = "visit";
 
 // Item-reward selection mode (multi-form-loyalty design): the business presets a
 // fixed CatalogItem, or the customer chooses one at redemption time.
@@ -228,9 +222,7 @@ export type CampaignRewardType =
   | "free_item"
   | "discount"
   | "upgrade"
-  | "custom"
-  // POINTS programs reward cashback (som off) rather than an item (multi-form-loyalty).
-  | "cashback";
+  | "custom";
 
 // A catalog item (menu/service entry) the customer can pick as their reward, or
 // that a business presets on an item program. Mirrors the customer-facing fields
@@ -246,12 +238,10 @@ export type CampaignCatalogItem = {
 export type CampaignRewardReceiver = "leader" | "every_member" | "table";
 
 export type CampaignRule = {
-  // INDIVIDUAL: the completion mechanic (visit / stamp / spend). Null for non-individual.
+  // INDIVIDUAL campaigns use visit counting. Null for non-individual campaigns.
   mechanic: CampaignMechanic | null;
-  // INDIVIDUAL visit/stamp: number of verified visits/stamps required.
+  // INDIVIDUAL: number of verified visits required.
   required_count: number | null;
-  // INDIVIDUAL spend: total spend (decimal string) needed to complete.
-  required_spend: string | null;
   // INDIVIDUAL: cap on actions counted per calendar day.
   max_count_per_day: number | null;
   // INDIVIDUAL: human-readable minimum gap between counted actions (e.g. "4 hours").
@@ -259,16 +249,8 @@ export type CampaignRule = {
   // GROUP: required group size and the check-in window (e.g. "15 min").
   required_group_size: number | null;
   group_checkin_window: string | null;
-  // GROUP: per-member minimum spend (decimal string), null when no minimum.
-  min_spend: string | null;
   // GROUP: check-in window in raw minutes (used to bound the last bookable slot).
   group_checkin_window_minutes: number | null;
-  // POINTS (multi-form-loyalty slice 1): accrual basis + the per-action rate, and
-  // the cashback rate (som per point) applied at redemption. Null for non-points.
-  points_basis: PointsBasis | null;
-  points_per_visit: number | null;
-  points_per_som: string | null;
-  cashback_per_point: string | null;
 };
 
 export type CampaignReward = {
@@ -294,9 +276,6 @@ export type CampaignProgress = {
   completed: boolean;
   // Voucher id once the campaign is completed (links to the wallet view).
   voucher_id: string | null;
-  // POINTS programs: the customer's accrued, redeemable points balance
-  // (multi-form-loyalty slice 1). 0 for non-points campaigns.
-  points_balance: number;
 };
 
 export type Campaign = {
@@ -345,6 +324,7 @@ export type CampaignFeedFilter = "all" | "group" | "neighborhood" | "ended";
 export type CampaignVoucherStatus = "active" | "redeemed" | "expired" | "cancelled";
 
 export type CampaignVoucher = {
+  domain?: "campaign" | "loyalty";
   id: string;
   code: string;
   status: CampaignVoucherStatus;
@@ -363,29 +343,11 @@ export type CampaignVoucher = {
   redeemed_at_label: string | null;
   redeemed_by: string | null;
   redeemed_branch: string | null;
-  // CASHBACK vouchers (multi-form-loyalty): the som amount this voucher is worth.
-  cashback_amount: string | null;
   // Item vouchers (multi-form-loyalty): the chosen/preset CatalogItem (null when a
   // customer-choice voucher has not been resolved yet), and the selection mode so
   // the present screen knows whether to show the "Choose your item" sheet.
   catalog_item: CampaignCatalogItem | null;
   item_selection: ItemSelection | null;
-};
-
-// One business loyalty program row for the customer-facing business-page section
-// (multi-form-loyalty slice 2). Backs GET /customer/businesses/{id}/loyalty/.
-// POINTS rows use points_balance + cashback_per_point (target is 0); other
-// mechanics use progress_count / target. `joined` reflects the viewer's state.
-export type BusinessLoyaltyProgram = {
-  campaign_id: string;
-  name: string;
-  mechanic: CampaignMechanic;
-  reward_summary: string;
-  joined: boolean;
-  progress_count: number;
-  target: number;
-  points_balance: number;
-  cashback_per_point: string | null;
 };
 
 // Wallet groups vouchers by lifecycle for the three design sections.

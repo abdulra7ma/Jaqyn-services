@@ -27,13 +27,23 @@ class Campaign(TimeStampedModel):
         ONCE = "once", "Once"
         REPEATABLE = "repeatable", "Repeatable"
 
-    business = models.ForeignKey("businesses.Business", on_delete=models.PROTECT, related_name="campaigns")
-    created_by = models.ForeignKey("accounts.User", on_delete=models.SET_NULL, related_name="created_campaigns", blank=True, null=True)
+    business = models.ForeignKey(
+        "businesses.Business", on_delete=models.PROTECT, related_name="campaigns"
+    )
+    created_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        related_name="created_campaigns",
+        blank=True,
+        null=True,
+    )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     image = models.ImageField(upload_to="campaigns/", blank=True, null=True)
     campaign_type = models.CharField(max_length=32, choices=CampaignType.choices)
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.DRAFT)
+    status = models.CharField(
+        max_length=32, choices=Status.choices, default=Status.DRAFT
+    )
     start_at = models.DateTimeField(blank=True, null=True)
     end_at = models.DateTimeField(blank=True, null=True)
     active_days = models.JSONField(default=list, blank=True)
@@ -41,7 +51,9 @@ class Campaign(TimeStampedModel):
     active_end_time = models.TimeField(default=time(23, 59))
     max_participants = models.PositiveIntegerField(blank=True, null=True)
     max_rewards = models.PositiveIntegerField(blank=True, null=True)
-    completion_limit_per_customer = models.CharField(max_length=32, choices=CompletionLimit.choices, default=CompletionLimit.ONCE)
+    completion_limit_per_customer = models.CharField(
+        max_length=32, choices=CompletionLimit.choices, default=CompletionLimit.ONCE
+    )
     auto_join_enabled = models.BooleanField(default=False)
     allow_multiple_campaign_counting = models.BooleanField(default=False)
     # Instagram handle the customer must follow/tag for a SOCIAL campaign. Nullable
@@ -71,54 +83,20 @@ class CampaignRule(TimeStampedModel):
         GROUP_CHECKIN = "group_checkin", "Group check-in"
 
     class Mechanic(models.TextChoices):
-        # INDIVIDUAL sub-discriminator: how an individual campaign advances. VISIT
-        # counts visits, STAMP counts stamps (honoring max_banked), SPEND
-        # accumulates a money threshold, POINTS accrues a redeemable balance.
-        # Source: campaigns-restructure design §3 + multi-form-loyalty design §1
-        # (POINTS → cashback).
+        # Campaign challenges advance by verified visits/actions only; durable
+        # stamp, spend, and points mechanics live in apps.loyalty.
         VISIT = "visit", "Visit"
-        STAMP = "stamp", "Stamp"
-        SPEND = "spend", "Spend"
-        POINTS = "points", "Points"
 
-    class PointsBasis(models.TextChoices):
-        # How a POINTS-mechanic campaign earns points: a fixed amount per counted
-        # visit, or a per-som rate on the visit's bill. Source: multi-form-loyalty
-        # design §1 (points accrual: business chooses per-visit or per-spend).
-        VISIT = "visit", "Per visit"
-        SPEND = "spend", "Per spend"
-
-    campaign = models.OneToOneField(Campaign, on_delete=models.CASCADE, related_name="rule")
+    campaign = models.OneToOneField(
+        Campaign, on_delete=models.CASCADE, related_name="rule"
+    )
     rule_type = models.CharField(max_length=32, choices=RuleType.choices)
     # INDIVIDUAL mechanic. Nullable because GROUP/SOCIAL campaigns have no per-visit
     # mechanic. Source: campaigns-restructure design §3 (CampaignRule.mechanic).
-    mechanic = models.CharField(max_length=32, choices=Mechanic.choices, blank=True, null=True)
+    mechanic = models.CharField(
+        max_length=32, choices=Mechanic.choices, blank=True, null=True
+    )
     required_count = models.PositiveIntegerField(default=1)
-    # SPEND-mechanic threshold (money the customer must spend to complete) and the
-    # minimum per-action spend that counts. Decimal for exact money. Nullable —
-    # only SPEND campaigns set them. Source: campaigns-restructure design §3.
-    required_spend = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
-    min_spend = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
-    # STAMP-mechanic cap on concurrently-banked unredeemed reward cycles. Nullable
-    # (unlimited) and only meaningful for STAMP. Source: campaigns-restructure
-    # design §3 (CampaignRule.max_banked).
-    max_banked = models.PositiveIntegerField(blank=True, null=True)
-    # POINTS-mechanic accrual basis (visit | spend). Nullable because only a
-    # POINTS-mechanic INDIVIDUAL campaign sets it. Source: multi-form-loyalty
-    # design §1 (points_basis: visit | spend).
-    points_basis = models.CharField(max_length=16, choices=PointsBasis.choices, blank=True, null=True)
-    # Points awarded per counted visit on the VISIT points basis. PositiveInt,
-    # nullable — only a points/visit-basis campaign sets it. Source:
-    # multi-form-loyalty design §1 (points_per_visit, PositiveInt).
-    points_per_visit = models.PositiveIntegerField(blank=True, null=True)
-    # Points awarded per som spent on the SPEND points basis. Decimal for exact
-    # money arithmetic; nullable — only a points/spend-basis campaign sets it.
-    # Source: multi-form-loyalty design §1 (points_per_som, Decimal).
-    points_per_som = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
-    # Som of cashback granted per point at redemption time. Decimal for exact
-    # money; nullable — only a POINTS campaign sets it. Source: multi-form-loyalty
-    # design §1 (cashback_per_point, Decimal — som per point at redemption).
-    cashback_per_point = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     minimum_time_between_actions = models.DurationField(blank=True, null=True)
     max_count_per_day = models.PositiveIntegerField(blank=True, null=True)
     required_group_size = models.PositiveIntegerField(blank=True, null=True)
@@ -135,9 +113,6 @@ class CampaignReward(TimeStampedModel):
         DISCOUNT = "discount", "Discount"
         UPGRADE = "upgrade", "Upgrade"
         CUSTOM = "custom", "Custom"
-        # Som-off cashback minted when a POINTS balance is redeemed. Source:
-        # multi-form-loyalty design §1 (reward_type gains CASHBACK).
-        CASHBACK = "cashback", "Cashback"
 
     class ItemSelection(models.TextChoices):
         # For an item reward (FREE_ITEM/DISCOUNT against a CatalogItem): the
@@ -152,18 +127,28 @@ class CampaignReward(TimeStampedModel):
         EVERY_MEMBER = "every_member", "Every member"
         TABLE = "table", "Table"
 
-    campaign = models.OneToOneField(Campaign, on_delete=models.CASCADE, related_name="reward")
-    reward_type = models.CharField(max_length=32, choices=RewardType.choices, default=RewardType.FREE_ITEM)
+    campaign = models.OneToOneField(
+        Campaign, on_delete=models.CASCADE, related_name="reward"
+    )
+    reward_type = models.CharField(
+        max_length=32, choices=RewardType.choices, default=RewardType.FREE_ITEM
+    )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    estimated_cost = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    estimated_cost = models.DecimalField(
+        max_digits=12, decimal_places=2, blank=True, null=True
+    )
     expiry_days_after_unlock = models.PositiveIntegerField(blank=True, null=True)
     max_redemptions = models.PositiveIntegerField(blank=True, null=True)
-    reward_receiver_type = models.CharField(max_length=32, choices=ReceiverType.choices, default=ReceiverType.LEADER)
+    reward_receiver_type = models.CharField(
+        max_length=32, choices=ReceiverType.choices, default=ReceiverType.LEADER
+    )
     # How the rewarded CatalogItem is chosen (fixed | customer). Nullable — only an
     # item-bearing FREE_ITEM/DISCOUNT reward sets it. Source: multi-form-loyalty
     # design §1 (item_selection: fixed | customer).
-    item_selection = models.CharField(max_length=16, choices=ItemSelection.choices, blank=True, null=True)
+    item_selection = models.CharField(
+        max_length=16, choices=ItemSelection.choices, blank=True, null=True
+    )
     # The fixed CatalogItem granted when item_selection == fixed. SET_NULL so a
     # deleted menu item does not cascade-delete the reward config; related_name="+"
     # because no reverse accessor is needed. Nullable for non-item / customer-choice
@@ -187,21 +172,18 @@ class CampaignParticipant(TimeStampedModel):
         COMPLETED = "completed", "Completed"
         REDEEMED = "redeemed", "Redeemed"
 
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name="participants")
-    customer = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="campaign_participations")
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.JOINED)
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="participants"
+    )
+    customer = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="campaign_participations",
+    )
+    status = models.CharField(
+        max_length=32, choices=Status.choices, default=Status.JOINED
+    )
     progress_count = models.PositiveIntegerField(default=0)
-    # Accumulated spend toward a SPEND-mechanic INDIVIDUAL campaign. Decimal for
-    # exact money; default 0. Untouched by VISIT/STAMP/GROUP/SOCIAL campaigns.
-    # Source: campaigns-restructure design §3 (CampaignParticipant.current_spend).
-    current_spend = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    # Redeemable points balance for a POINTS-mechanic INDIVIDUAL campaign: each
-    # counted action accrues points here (it is never reset by progress and never
-    # auto-completes the campaign), and a redemption deducts them under a row lock.
-    # PositiveInt, default 0. Untouched by VISIT/STAMP/SPEND/GROUP/SOCIAL
-    # campaigns. Source: multi-form-loyalty design §1 (points_balance, PositiveInt
-    # default 0; POINTS programs accrue here, never auto-complete).
-    points_balance = models.PositiveIntegerField(default=0)
     # Self-entered Instagram follower count at join for a SOCIAL campaign. Feeds the
     # analytics "reach" triplet (sum of follower_count). Nullable — only SOCIAL
     # participants set it. Source: campaigns-restructure design §3.
@@ -219,7 +201,9 @@ class CampaignParticipant(TimeStampedModel):
             # One participant row per (campaign, customer). For ONCE campaigns this
             # is the natural key; for REPEATABLE the same row is re-used and the
             # `completion_cycle` counter advances per completion. Source: plan §1.1.
-            models.UniqueConstraint(fields=["campaign", "customer"], name="unique_campaign_participant"),
+            models.UniqueConstraint(
+                fields=["campaign", "customer"], name="unique_campaign_participant"
+            ),
         ]
         indexes = [
             models.Index(fields=["campaign", "status"]),
@@ -250,15 +234,37 @@ class CampaignAction(TimeStampedModel):
         REJECTED = "rejected", "Rejected"
         FLAGGED = "flagged", "Flagged"
 
-    campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT, related_name="actions")
-    participant = models.ForeignKey(CampaignParticipant, on_delete=models.PROTECT, related_name="actions")
-    customer = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="campaign_actions")
-    business = models.ForeignKey("businesses.Business", on_delete=models.PROTECT, related_name="campaign_actions")
-    action_type = models.CharField(max_length=32, choices=ActionType.choices, default=ActionType.VISIT)
-    verified_by_staff = models.ForeignKey("staff.StaffMember", on_delete=models.SET_NULL, related_name="campaign_actions", blank=True, null=True)
-    verification_method = models.CharField(max_length=32, choices=VerificationMethod.choices, default=VerificationMethod.STAFF_SCAN)
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.PROTECT, related_name="actions"
+    )
+    participant = models.ForeignKey(
+        CampaignParticipant, on_delete=models.PROTECT, related_name="actions"
+    )
+    customer = models.ForeignKey(
+        "accounts.User", on_delete=models.PROTECT, related_name="campaign_actions"
+    )
+    business = models.ForeignKey(
+        "businesses.Business", on_delete=models.PROTECT, related_name="campaign_actions"
+    )
+    action_type = models.CharField(
+        max_length=32, choices=ActionType.choices, default=ActionType.VISIT
+    )
+    verified_by_staff = models.ForeignKey(
+        "staff.StaffMember",
+        on_delete=models.SET_NULL,
+        related_name="campaign_actions",
+        blank=True,
+        null=True,
+    )
+    verification_method = models.CharField(
+        max_length=32,
+        choices=VerificationMethod.choices,
+        default=VerificationMethod.STAFF_SCAN,
+    )
     action_time = models.DateTimeField()
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.COUNTED)
+    status = models.CharField(
+        max_length=32, choices=Status.choices, default=Status.COUNTED
+    )
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:
@@ -279,11 +285,27 @@ class CampaignRewardVoucher(TimeStampedModel):
         EXPIRED = "expired", "Expired"
         CANCELLED = "cancelled", "Cancelled"
 
-    campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT, related_name="vouchers")
-    customer = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="campaign_vouchers")
-    business = models.ForeignKey("businesses.Business", on_delete=models.PROTECT, related_name="campaign_vouchers")
-    reward = models.ForeignKey(CampaignReward, on_delete=models.PROTECT, related_name="vouchers")
-    participant = models.ForeignKey(CampaignParticipant, on_delete=models.PROTECT, related_name="vouchers", blank=True, null=True)
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.PROTECT, related_name="vouchers"
+    )
+    customer = models.ForeignKey(
+        "accounts.User", on_delete=models.PROTECT, related_name="campaign_vouchers"
+    )
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.PROTECT,
+        related_name="campaign_vouchers",
+    )
+    reward = models.ForeignKey(
+        CampaignReward, on_delete=models.PROTECT, related_name="vouchers"
+    )
+    participant = models.ForeignKey(
+        CampaignParticipant,
+        on_delete=models.PROTECT,
+        related_name="vouchers",
+        blank=True,
+        null=True,
+    )
     # The CatalogItem this voucher grants — preset (fixed reward) or chosen by the
     # customer at redemption (customer-choice reward). SET_NULL so deleting a menu
     # item does not delete issued vouchers; related_name="+" (no reverse accessor).
@@ -296,18 +318,27 @@ class CampaignRewardVoucher(TimeStampedModel):
         blank=True,
         null=True,
     )
-    # Som of cashback this voucher is worth, set on a CASHBACK voucher minted by
-    # redeeming a POINTS balance (points × rule.cashback_per_point). Decimal for
-    # exact money; nullable for all non-cashback vouchers. Source:
-    # multi-form-loyalty design §1 (cashback_amount, Decimal; CASHBACK vouchers).
-    cashback_amount = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     voucher_code = models.CharField(max_length=32, unique=True)
-    qr_token = models.ForeignKey("qr.QRCodeToken", on_delete=models.SET_NULL, related_name="campaign_vouchers", blank=True, null=True)
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.ACTIVE)
+    qr_token = models.ForeignKey(
+        "qr.QRCodeToken",
+        on_delete=models.SET_NULL,
+        related_name="campaign_vouchers",
+        blank=True,
+        null=True,
+    )
+    status = models.CharField(
+        max_length=32, choices=Status.choices, default=Status.ACTIVE
+    )
     issued_at = models.DateTimeField(blank=True, null=True)
     expires_at = models.DateTimeField(blank=True, null=True)
     redeemed_at = models.DateTimeField(blank=True, null=True)
-    redeemed_by_staff = models.ForeignKey("staff.StaffMember", on_delete=models.SET_NULL, related_name="redeemed_campaign_vouchers", blank=True, null=True)
+    redeemed_by_staff = models.ForeignKey(
+        "staff.StaffMember",
+        on_delete=models.SET_NULL,
+        related_name="redeemed_campaign_vouchers",
+        blank=True,
+        null=True,
+    )
     cancel_reason = models.TextField(blank=True, null=True)
     # Set when the "voucher expiring soon" nudge has been scheduled, so the
     # periodic notify task warns each voucher at most once. Source: plan §1.4
@@ -337,9 +368,15 @@ class Group(TimeStampedModel):
         EXPIRED = "expired", "Expired"
         CANCELLED = "cancelled", "Cancelled"
 
-    campaign = models.ForeignKey(Campaign, on_delete=models.PROTECT, related_name="groups")
-    group_leader = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="led_groups")
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.FORMING)
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.PROTECT, related_name="groups"
+    )
+    group_leader = models.ForeignKey(
+        "accounts.User", on_delete=models.PROTECT, related_name="led_groups"
+    )
+    status = models.CharField(
+        max_length=32, choices=Status.choices, default=Status.FORMING
+    )
     required_size = models.PositiveIntegerField()
     invite_token = models.CharField(max_length=128, unique=True)
     # Leader-chosen visit slot for the group ("we'll come Friday 8pm"). Optional —
@@ -375,14 +412,20 @@ class GroupMember(TimeStampedModel):
         NO_SHOW = "no_show", "No show"
 
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="members")
-    customer = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="group_memberships")
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.JOINED)
+    customer = models.ForeignKey(
+        "accounts.User", on_delete=models.PROTECT, related_name="group_memberships"
+    )
+    status = models.CharField(
+        max_length=32, choices=Status.choices, default=Status.JOINED
+    )
     joined_at = models.DateTimeField(blank=True, null=True)
     checked_in_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["group", "customer"], name="unique_group_member"),
+            models.UniqueConstraint(
+                fields=["group", "customer"], name="unique_group_member"
+            ),
         ]
 
     def __str__(self):

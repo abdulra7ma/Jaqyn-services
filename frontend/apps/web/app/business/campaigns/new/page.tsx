@@ -158,8 +158,6 @@ function StepOutcome({
 
 // ---- Step 2: adaptive form -------------------------------------------------
 
-const MECHANICS = ["visit", "stamp", "spend", "points"] as const;
-
 /** A two-option pill toggle (basis / item-selection). */
 function Toggle<T extends string>({
   label,
@@ -246,86 +244,16 @@ function StepDetails({ form, set }: { form: CampaignForm; set: SetFn }) {
         placeholder={t("cmp.biz.form.namePlaceholder")}
       />
 
-      {/* INDIVIDUAL — mechanic + the field the mechanic needs */}
+      {/* INDIVIDUAL — campaigns are visit-count challenges. */}
       {form.type === "individual" && (
-        <>
-          <div className="mt-4">
-            <span className={LABEL}>{t("cmp.biz.form.mechanic")}</span>
-            <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-              {MECHANICS.map((m) => {
-                const active = form.mechanic === m;
-                return (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => set("mechanic", m)}
-                    aria-pressed={active}
-                    className={`rounded-xl border-[1.5px] px-2 py-3 text-[12.5px] font-semibold transition ${
-                      active ? "border-brand bg-brand-muted text-brand-deep" : "border-line bg-card text-subtle"
-                    }`}
-                  >
-                    {t(`cmp.biz.form.mechanic.${m}`)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {form.mechanic === "points" ? (
-            <>
-              <Toggle
-                label={t("cmp.biz.form.pointsBasis")}
-                value={form.pointsBasis}
-                options={[
-                  { value: "visit", label: t("cmp.biz.form.pointsBasis.visit") },
-                  { value: "spend", label: t("cmp.biz.form.pointsBasis.spend") },
-                ]}
-                onChange={(v) => set("pointsBasis", v)}
-              />
-              <div className="mt-4 flex gap-3.5">
-                {form.pointsBasis === "spend" ? (
-                  <Field
-                    label={t("cmp.biz.form.pointsPerSom")}
-                    value={form.pointsPerSom}
-                    onChange={(v) => set("pointsPerSom", v)}
-                    inputMode="numeric"
-                  />
-                ) : (
-                  <Field
-                    label={t("cmp.biz.form.pointsPerVisit")}
-                    value={form.pointsPerVisit}
-                    onChange={(v) => set("pointsPerVisit", v)}
-                    inputMode="numeric"
-                  />
-                )}
-                <Field
-                  label={t("cmp.biz.form.cashbackPerPoint")}
-                  value={form.cashbackPerPoint}
-                  onChange={(v) => set("cashbackPerPoint", v)}
-                  inputMode="numeric"
-                />
-              </div>
-            </>
-          ) : (
-            <div className="mt-4">
-              {form.mechanic === "spend" ? (
-                <Field
-                  label={t("cmp.biz.form.requiredSpend")}
-                  value={form.requiredSpend}
-                  onChange={(v) => set("requiredSpend", v)}
-                  inputMode="numeric"
-                />
-              ) : (
-                <Field
-                  label={t(form.mechanic === "stamp" ? "cmp.biz.form.requiredStamps" : "cmp.biz.form.requiredVisits")}
-                  value={form.requiredCount}
-                  onChange={(v) => set("requiredCount", v)}
-                  inputMode="numeric"
-                />
-              )}
-            </div>
-          )}
-        </>
+        <div className="mt-4">
+          <Field
+            label={t("cmp.biz.form.requiredVisits")}
+            value={form.requiredCount}
+            onChange={(v) => set("requiredCount", v)}
+            inputMode="numeric"
+          />
+        </div>
       )}
 
       {/* GROUP — size + check-in window */}
@@ -367,8 +295,7 @@ function StepDetails({ form, set }: { form: CampaignForm; set: SetFn }) {
           onChange={(v) => set("rewardTitle", v)}
           placeholder={t("cmp.biz.form.rewardTitlePlaceholder")}
         />
-        {/* Item-reward selection — only for visit/stamp/spend (points pays cashback). */}
-        {form.type === "individual" && form.mechanic !== "points" && (
+        {form.type === "individual" && (
           <ItemRewardPicker form={form} set={set} />
         )}
       </div>

@@ -45,17 +45,11 @@ function campaign(over: Partial<Campaign> = {}): Campaign {
     rule: {
       mechanic: null,
       required_count: null,
-      required_spend: null,
       max_count_per_day: null,
       min_time_between: null,
       required_group_size: 4,
       group_checkin_window: "30 min",
-      min_spend: null,
       group_checkin_window_minutes: 30,
-      points_basis: null,
-      points_per_visit: null,
-      points_per_som: null,
-      cashback_per_point: null,
     },
     reward: {
       type: "discount",

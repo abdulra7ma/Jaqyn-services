@@ -239,8 +239,8 @@ class CampaignAnalyticsService:
         )
         estimated_cost = unit_cost * issued
 
-        new_customers, returning_customers = (
-            CampaignAnalyticsService._new_vs_returning(campaign)
+        new_customers, returning_customers = CampaignAnalyticsService._new_vs_returning(
+            campaign
         )
 
         return CampaignMetrics(

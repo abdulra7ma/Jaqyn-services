@@ -121,7 +121,9 @@ def test_campaign_create_happy_path():
 def test_campaign_create_rejects_customer():
     customer = make_customer()
     response = customer_client(customer).post(
-        "/api/business/campaigns/", {"name": "x", "campaign_type": "visit"}, format="json"
+        "/api/business/campaigns/",
+        {"name": "x", "campaign_type": "visit"},
+        format="json",
     )
     assert response.status_code == 403
 
@@ -189,7 +191,9 @@ def test_campaign_publish_pause_resume_end():
 def test_campaign_cancel():
     business = make_business()
     campaign = make_campaign(business)  # ACTIVE
-    response = owner_client(business).post(f"/api/business/campaigns/{campaign.id}/cancel/")
+    response = owner_client(business).post(
+        f"/api/business/campaigns/{campaign.id}/cancel/"
+    )
     assert response.status_code == 200
     assert response.data["data"]["status"] == Campaign.Status.CANCELLED
 
@@ -197,7 +201,9 @@ def test_campaign_cancel():
 def test_campaign_publish_unpublishable_is_rejected():
     business = make_business()
     campaign = make_campaign(business, status=Campaign.Status.DRAFT, with_reward=False)
-    response = owner_client(business).post(f"/api/business/campaigns/{campaign.id}/publish/")
+    response = owner_client(business).post(
+        f"/api/business/campaigns/{campaign.id}/publish/"
+    )
     assert response.status_code == 409
     assert response.data["error"]["code"] == "CAMPAIGN_NOT_PUBLISHABLE"
 
@@ -437,7 +443,9 @@ def test_completed_one_time_campaign_disappears_from_discover():
     business = make_business()
     customer = make_customer()
     once = make_campaign(business, completion_limit=Campaign.CompletionLimit.ONCE)
-    repeatable = make_campaign(business, completion_limit=Campaign.CompletionLimit.REPEATABLE)
+    repeatable = make_campaign(
+        business, completion_limit=Campaign.CompletionLimit.REPEATABLE
+    )
     for camp in (once, repeatable):
         CampaignParticipant.objects.create(
             campaign=camp,
@@ -665,7 +673,9 @@ def test_customer_wallet_and_voucher_view():
     staff = make_staff(business)
     campaign = make_campaign(business, required_count=1)
     customer = make_customer()
-    result = CampaignProgressService.record_campaign_action(campaign, customer, staff=staff)
+    result = CampaignProgressService.record_campaign_action(
+        campaign, customer, staff=staff
+    )
     client = customer_client(customer)
 
     wallet = client.get("/api/customer/campaign-wallet/")
@@ -683,7 +693,9 @@ def test_customer_present_voucher():
     staff = make_staff(business)
     campaign = make_campaign(business, required_count=1)
     customer = make_customer()
-    result = CampaignProgressService.record_campaign_action(campaign, customer, staff=staff)
+    result = CampaignProgressService.record_campaign_action(
+        campaign, customer, staff=staff
+    )
     response = customer_client(customer).post(
         f"/api/customer/campaign-vouchers/{result.voucher.id}/present/"
     )
@@ -773,7 +785,9 @@ def test_scan_and_redeem_voucher():
     staff = make_staff(business)
     campaign = make_campaign(business, required_count=1)
     customer = make_customer()
-    result = CampaignProgressService.record_campaign_action(campaign, customer, staff=staff)
+    result = CampaignProgressService.record_campaign_action(
+        campaign, customer, staff=staff
+    )
     code = result.voucher.voucher_code
     client = staff_client(staff)
 
@@ -843,7 +857,9 @@ def test_confirm_group_unknown_session_is_not_found():
 
 
 def test_scan_dispatch_requires_auth():
-    response = APIClient().post("/api/staff/campaigns/scan/", {"token": "x"}, format="json")
+    response = APIClient().post(
+        "/api/staff/campaigns/scan/", {"token": "x"}, format="json"
+    )
     assert response.status_code == 401
 
 

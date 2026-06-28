@@ -22,8 +22,6 @@ from apps.campaigns.serializers import (
     CampaignSerializer,
     GroupSerializer,
     GroupSessionStartSerializer,
-    LoyaltyProgramSerializer,
-    RedeemPointsSerializer,
     SelectVoucherItemSerializer,
 )
 from core.exceptions import JaqynAPIException
@@ -132,39 +130,6 @@ class CampaignJoinView(APIView):
         )
 
 
-class CampaignRedeemPointsView(APIView):
-    """POST redeem a customer's points on a POINTS campaign for a cashback voucher.
-
-    Parses the ``{points}`` body, calls
-    :meth:`CampaignRewardService.redeem_points`, and returns the minted cashback
-    voucher (201). Throttled on the ``campaign_join`` scope like the other
-    customer write endpoints. Holds no business logic.
-    """
-
-    permission_classes = [IsCustomer]
-    serializer_class = RedeemPointsSerializer
-    throttle_scope = "campaign_join"
-
-    def get_throttles(self):
-        from rest_framework.throttling import ScopedRateThrottle
-
-        return [ScopedRateThrottle()]
-
-    def post(self, request, campaign_id):
-        params = RedeemPointsSerializer(data=request.data)
-        params.is_valid(raise_exception=True)
-        campaign = CampaignService.get_discoverable(campaign_id)
-        voucher = CampaignRewardService.redeem_points(
-            campaign, request.user, params.validated_data["points"]
-        )
-        return success_response(
-            CampaignRewardVoucherSerializer(
-                voucher, context={"request": request}
-            ).data,
-            status=201,
-        )
-
-
 class CampaignVoucherSelectItemView(APIView):
     """POST attach a customer-chosen CatalogItem to a customer-choice item voucher.
 
@@ -190,33 +155,7 @@ class CampaignVoucherSelectItemView(APIView):
             voucher_id, request.user, params.validated_data["catalog_item_id"]
         )
         return success_response(
-            CampaignRewardVoucherSerializer(
-                voucher, context={"request": request}
-            ).data
-        )
-
-
-class BusinessLoyaltyView(APIView):
-    """GET a business's active loyalty programs + the customer's state on each.
-
-    Backs the business-page "Loyalty" section (multi-form-loyalty design §2). Loads
-    the business, calls :meth:`CampaignService.loyalty_programs_for_customer`, and
-    returns the list of :class:`LoyaltyProgramView` rows. Holds no business logic.
-    """
-
-    permission_classes = [IsCustomer]
-    serializer_class = LoyaltyProgramSerializer
-
-    def get(self, request, business_id):
-        from apps.businesses.models import Business
-
-        try:
-            business = Business.objects.get(id=business_id)
-        except Business.DoesNotExist:
-            raise JaqynAPIException("VALIDATION_ERROR", "Business not found", status_code=404)
-        programs = CampaignService.loyalty_programs_for_customer(business, request.user)
-        return success_response(
-            {"results": LoyaltyProgramSerializer(programs, many=True).data}
+            CampaignRewardVoucherSerializer(voucher, context={"request": request}).data
         )
 
 
@@ -265,9 +204,7 @@ class CampaignVoucherDetailView(APIView):
     def get(self, request, voucher_id):
         voucher = CampaignRewardService.get_customer_voucher(voucher_id, request.user)
         return success_response(
-            CampaignRewardVoucherSerializer(
-                voucher, context={"request": request}
-            ).data
+            CampaignRewardVoucherSerializer(voucher, context={"request": request}).data
         )
 
 
@@ -284,9 +221,7 @@ class CampaignVoucherPresentView(APIView):
     def post(self, request, voucher_id):
         voucher = CampaignRewardService.present_voucher(voucher_id, request.user)
         return success_response(
-            CampaignRewardVoucherSerializer(
-                voucher, context={"request": request}
-            ).data
+            CampaignRewardVoucherSerializer(voucher, context={"request": request}).data
         )
 
 
@@ -341,9 +276,7 @@ class GroupSessionListView(APIView):
         the "Your active group" banner and to decide create-vs-forming.
         """
         groups = CampaignGroupService.active_groups_for_customer(request.user)
-        data = GroupSerializer(
-            groups, many=True, context={"request": request}
-        ).data
+        data = GroupSerializer(groups, many=True, context={"request": request}).data
         return success_response({"results": data})
 
 

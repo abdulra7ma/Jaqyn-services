@@ -45,12 +45,6 @@ function ActiveVoucher({ voucher }: { voucher: CampaignVoucher }) {
         {voucher.catalog_item && (
           <ListRow label={t("cmp.voucher.item")} value={voucher.catalog_item.name} />
         )}
-        {voucher.cashback_amount && (
-          <ListRow
-            label={t("cmp.voucher.cashback")}
-            value={t("cmp.loyalty.cashbackAmount").replace("{amount}", voucher.cashback_amount)}
-          />
-        )}
         <ListRow label={t("cmp.voucher.validUntil")} value={voucher.expires_label} />
       </ListGroup>
 

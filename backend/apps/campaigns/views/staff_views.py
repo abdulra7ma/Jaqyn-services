@@ -51,9 +51,7 @@ class ScanCustomerView(_StaffScanView):
         result = StaffScannerService.scan_customer_qr(
             staff, serializer.validated_data["token"], request=request
         )
-        return success_response(
-            CustomerScanResultSerializer(result).data
-        )
+        return success_response(CustomerScanResultSerializer(result).data)
 
 
 class ScanDispatchView(_StaffScanView):
@@ -81,11 +79,8 @@ class ScanDispatchView(_StaffScanView):
 class UnifiedConfirmVisitView(_StaffScanView):
     """Advance loyalty + one prioritized campaign in a single staff scan (§14).
 
-    Parses the customer token (and optional ``campaign_id`` + bill ``amount``),
-    calls ``StaffScannerService.confirm_visit_unified``, and shapes the unified
-    response. The amount-required business rule (SPEND / POINTS-spend-basis) is
-    enforced by the service, not here. Only an invalid token (or a missing
-    required amount) hard-fails.
+    Parses the customer token and optional ``campaign_id``, calls
+    ``StaffScannerService.confirm_visit_unified``, and shapes the response.
     """
 
     serializer_class = UnifiedConfirmVisitSerializer
@@ -98,7 +93,6 @@ class UnifiedConfirmVisitView(_StaffScanView):
             staff,
             serializer.validated_data["token"],
             campaign_id=serializer.validated_data.get("campaign_id"),
-            amount=serializer.validated_data.get("amount"),
             request=request,
         )
         return success_response(

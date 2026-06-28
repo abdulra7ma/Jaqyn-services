@@ -25,6 +25,7 @@ export const OWNER_NAV_SECTIONS: NavSection[] = [
     items: [
       { key: "owner.nav.dashboard", icon: "□", href: "/business/dashboard" },
       { key: "owner.nav.campaigns", icon: "◇", href: "/business/campaigns" },
+      { key: "owner.nav.loyalty", icon: "◈", href: "/business/loyalty" },
     ],
   },
   {

@@ -29,7 +29,6 @@ from apps.campaigns.models import (
     CampaignParticipant,
     CampaignReward,
     CampaignRewardVoucher,
-    CampaignRule,
 )
 from apps.qr.models import QRCodeToken, ScanLog
 from apps.qr.services import create_token
@@ -127,105 +126,6 @@ class CampaignRewardService:
         return voucher
 
     @classmethod
-    def redeem_points(
-        cls, campaign: Campaign, customer, points: int, now=None
-    ) -> CampaignRewardVoucher:
-        """Redeem points from a POINTS campaign for a cashback voucher (§1).
-
-        Validates that ``campaign`` is a POINTS-mechanic INDIVIDUAL campaign with a
-        cashback reward (``CAMPAIGN_NOT_POINTS`` otherwise), that ``points`` is a
-        positive integer (``VALIDATION_ERROR``), and that the customer holds at
-        least that many points (``INSUFFICIENT_POINTS``). Runs in one atomic block:
-        it ``select_for_update``-locks the participant row, re-checks the balance
-        *under the lock* (so two concurrent redemptions cannot both spend the same
-        points), deducts ``points`` from ``points_balance``, and mints one ACTIVE
-        ``CASHBACK`` :class:`CampaignRewardVoucher` whose ``cashback_amount`` is
-        ``points × rule.cashback_per_point`` (Decimal money, never float). The
-        voucher carries a ``CAMPAIGN_REWARD`` QR token so staff redeem it as money
-        off, exactly like any other campaign voucher. Schedules the
-        reward-unlocked notification via ``transaction.on_commit`` (never inside the
-        atomic block). Returns the minted voucher.
-        """
-        now = now or timezone.now()
-        rule = getattr(campaign, "rule", None)
-        reward = getattr(campaign, "reward", None)
-        if (
-            rule is None
-            or rule.mechanic != CampaignRule.Mechanic.POINTS
-            or rule.cashback_per_point is None
-            or reward is None
-        ):
-            raise JaqynAPIException(
-                "CAMPAIGN_NOT_POINTS", status_code=status.HTTP_409_CONFLICT
-            )
-        if not isinstance(points, int) or points <= 0:
-            raise JaqynAPIException(
-                "VALIDATION_ERROR",
-                "Points to redeem must be a positive whole number",
-                status.HTTP_400_BAD_REQUEST,
-            )
-
-        with transaction.atomic():
-            participant = (
-                CampaignParticipant.objects.select_for_update()
-                .filter(campaign=campaign, customer=customer)
-                .first()
-            )
-            if participant is None or participant.points_balance < points:
-                raise JaqynAPIException(
-                    "INSUFFICIENT_POINTS", status_code=status.HTTP_409_CONFLICT
-                )
-            participant.points_balance -= points
-            participant.save(update_fields=["points_balance", "updated_at"])
-
-            cashback_amount = rule.cashback_per_point * points
-
-            code = _generate_voucher_code()
-            while CampaignRewardVoucher.objects.filter(voucher_code=code).exists():
-                code = _generate_voucher_code()
-            expiry_days = (
-                reward.expiry_days_after_unlock or DEFAULT_VOUCHER_EXPIRY_DAYS
-            )
-            expires_at = now + timedelta(days=expiry_days)
-            voucher = CampaignRewardVoucher.objects.create(
-                campaign=campaign,
-                customer=customer,
-                business=campaign.business,
-                reward=reward,
-                participant=participant,
-                voucher_code=code,
-                status=CampaignRewardVoucher.Status.ACTIVE,
-                issued_at=now,
-                expires_at=expires_at,
-                cashback_amount=cashback_amount,
-            )
-            token = create_token(
-                QRCodeToken.Type.CAMPAIGN_REWARD,
-                business=campaign.business,
-                customer=customer,
-                campaign=campaign.id,
-                expires_at=expires_at,
-            )
-            voucher.qr_token = token
-            voucher.save(update_fields=["qr_token", "updated_at"])
-
-            customer_id = str(customer.id)
-            voucher_id = str(voucher.id)
-            transaction.on_commit(
-                lambda: _schedule_reward_notification(customer_id, voucher_id)
-            )
-
-        emit_event(
-            "campaign_points_redeemed",
-            business_id=str(campaign.business_id),
-            customer_id=str(customer.id),
-            campaign_id=str(campaign.id),
-            voucher_id=str(voucher.id),
-            points=points,
-        )
-        return voucher
-
-    @classmethod
     def select_voucher_item(
         cls, voucher_id, customer, catalog_item_id
     ) -> CampaignRewardVoucher:
@@ -266,13 +166,11 @@ class CampaignRewardService:
                     "VOUCHER_ITEM_NOT_SELECTABLE",
                     status_code=status.HTTP_400_BAD_REQUEST,
                 )
-            item = (
-                CatalogItem.objects.filter(
-                    id=catalog_item_id,
-                    business_id=voucher.business_id,
-                    is_active=True,
-                ).first()
-            )
+            item = CatalogItem.objects.filter(
+                id=catalog_item_id,
+                business_id=voucher.business_id,
+                is_active=True,
+            ).first()
             if item is None:
                 raise JaqynAPIException(
                     "CATALOG_ITEM_NOT_FOUND", status_code=status.HTTP_404_NOT_FOUND
@@ -355,7 +253,9 @@ class CampaignRewardService:
         Does not take a lock — use :meth:`redeem_reward_voucher` to actually
         flip the status.
         """
-        voucher, _ = cls._voucher_from_code_or_token(code=code, token=token, request=request)
+        voucher, _ = cls._voucher_from_code_or_token(
+            code=code, token=token, request=request
+        )
         cls._assert_redeemable(voucher, staff)
         return voucher
 
@@ -507,7 +407,9 @@ class CampaignRewardService:
         """
         return (
             CampaignRewardVoucher.objects.filter(customer=customer)
-            .select_related("campaign", "business", "reward", "qr_token", "catalog_item")
+            .select_related(
+                "campaign", "business", "reward", "qr_token", "catalog_item"
+            )
             .order_by("-issued_at", "-created_at")
         )
 
@@ -520,11 +422,9 @@ class CampaignRewardService:
         probe another's voucher ids).
         """
         try:
-            return (
-                CampaignRewardVoucher.objects.select_related(
-                    "campaign", "business", "reward", "qr_token", "catalog_item"
-                ).get(id=voucher_id, customer=customer)
-            )
+            return CampaignRewardVoucher.objects.select_related(
+                "campaign", "business", "reward", "qr_token", "catalog_item"
+            ).get(id=voucher_id, customer=customer)
         except CampaignRewardVoucher.DoesNotExist:
             raise JaqynAPIException(
                 "VOUCHER_NOT_FOUND", status_code=status.HTTP_404_NOT_FOUND
@@ -575,7 +475,14 @@ class CampaignRewardService:
         """
         return (
             CampaignRewardVoucher.objects.filter(campaign=campaign)
-            .select_related("customer", "reward", "business", "qr_token", "redeemed_by_staff", "catalog_item")
+            .select_related(
+                "customer",
+                "reward",
+                "business",
+                "qr_token",
+                "redeemed_by_staff",
+                "catalog_item",
+            )
             .order_by("-issued_at", "-created_at")
         )
 

@@ -35,7 +35,7 @@ function InfoCell({ label, value }: { label: string; value: string }) {
 /**
  * Group offer detail (prototype SCREEN 2). Striped/peach hero with a reward-type
  * badge, business meta line, title + description, a 2x2 info grid (reward, group
- * size, valid window, min spend), group rules, and a sticky "Create Group" CTA
+ * size, valid window), group rules, and a sticky "Create Group" CTA
  * that routes into the group session flow.
  */
 export function GroupCampaignDetail({ campaign: c }: { campaign: Campaign }) {
@@ -43,7 +43,6 @@ export function GroupCampaignDetail({ campaign: c }: { campaign: Campaign }) {
   const router = useRouter();
 
   const size = c.rule.required_group_size ?? 0;
-  const minSpend = c.rule.min_spend;
   // Business meta line: name · category · area/address.
   const metaLine = [c.business.name, c.business.category, c.business.area || c.business.address]
     .filter((s) => s && String(s).length > 0)
@@ -80,7 +79,7 @@ export function GroupCampaignDetail({ campaign: c }: { campaign: Campaign }) {
         <p className="mt-2.5 text-[14px] leading-relaxed text-ink">{c.description}</p>
       )}
 
-      {/* 2x2 info grid */}
+      {/* Group summary grid. */}
       <div className="mt-5 grid grid-cols-2 gap-2.5">
         <InfoCell label={t("cmp.group.detail.reward")} value={c.reward.title} />
         <InfoCell
@@ -88,14 +87,6 @@ export function GroupCampaignDetail({ campaign: c }: { campaign: Campaign }) {
           value={t("cmp.group.detail.sizeValue").replace("{count}", String(size))}
         />
         <InfoCell label={t("cmp.group.detail.valid")} value={validLabel(t, c)} />
-        <InfoCell
-          label={t("cmp.group.detail.minSpend")}
-          value={
-            minSpend
-              ? t("cmp.group.detail.minSpendValue").replace("{amount}", minSpend)
-              : t("cmp.group.detail.noMinimum")
-          }
-        />
       </div>
 
       {/* rules */}

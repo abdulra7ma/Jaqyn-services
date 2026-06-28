@@ -74,22 +74,22 @@ describe("Business campaigns list — filters + cards", () => {
     expect(screen.getAllByText("Free coffee").length).toBeGreaterThan(0);
   });
 
-  it("Type filter row narrows the list by campaign type", async () => {
+  it("Type filter narrows the list by campaign type", async () => {
     const user = userEvent.setup();
     render(<BusinessCampaignsPage />);
 
-    await user.click(screen.getByRole("button", { name: "cmp.biz.filter.type.group" }));
+    await user.selectOptions(screen.getByLabelText("cmp.biz.filter.label.type"), "group");
 
     expect(lastParams.value).toEqual({ type: "group" });
     expect(screen.getByText("Bring Friends")).toBeInTheDocument();
     expect(screen.queryByText("Visit Five")).not.toBeInTheDocument();
   });
 
-  it("Status filter row narrows the list by status", async () => {
+  it("Status filter narrows the list by status", async () => {
     const user = userEvent.setup();
     render(<BusinessCampaignsPage />);
 
-    await user.click(screen.getByRole("button", { name: "cmp.biz.filter.status.draft" }));
+    await user.selectOptions(screen.getByLabelText("cmp.biz.filter.label.status"), "draft");
 
     expect(lastParams.value).toEqual({ status: "draft" });
     expect(screen.getByText("Tag Us")).toBeInTheDocument();

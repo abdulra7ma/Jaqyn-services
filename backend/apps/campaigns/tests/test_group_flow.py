@@ -191,7 +191,9 @@ def test_start_group_session_mints_invite_token_and_enrols_leader():
     ).exists()
     leader_member = GroupMember.objects.get(group=session, customer=leader)
     assert leader_member.status == GroupMember.Status.CHECKED_IN
-    assert CampaignParticipant.objects.filter(campaign=campaign, customer=leader).exists()
+    assert CampaignParticipant.objects.filter(
+        campaign=campaign, customer=leader
+    ).exists()
 
 
 def test_start_group_session_rejects_non_group_campaign():
@@ -381,8 +383,14 @@ def test_leave_as_leader_cancels_forming_group():
 
     session.refresh_from_db()
     assert session.status == Group.Status.CANCELLED
-    assert GroupMember.objects.get(group=session, customer=leader).status == GroupMember.Status.LEFT
-    assert GroupMember.objects.get(group=session, customer=member).status == GroupMember.Status.LEFT
+    assert (
+        GroupMember.objects.get(group=session, customer=leader).status
+        == GroupMember.Status.LEFT
+    )
+    assert (
+        GroupMember.objects.get(group=session, customer=member).status
+        == GroupMember.Status.LEFT
+    )
 
 
 def test_leave_as_member_removes_them_and_reopens_full_group():
@@ -400,9 +408,15 @@ def test_leave_as_member_removes_them_and_reopens_full_group():
 
     session.refresh_from_db()
     assert session.status == Group.Status.FORMING
-    assert GroupMember.objects.get(group=session, customer=member).status == GroupMember.Status.LEFT
+    assert (
+        GroupMember.objects.get(group=session, customer=member).status
+        == GroupMember.Status.LEFT
+    )
     # The group still exists and the leader is unaffected.
-    assert GroupMember.objects.get(group=session, customer=leader).status == GroupMember.Status.CHECKED_IN
+    assert (
+        GroupMember.objects.get(group=session, customer=leader).status
+        == GroupMember.Status.CHECKED_IN
+    )
 
 
 def test_leave_by_non_member_is_not_found():
@@ -527,9 +541,7 @@ def test_leave_endpoint_returns_success_envelope():
     leader = make_customer("981")
     session = CampaignGroupService.start_group_session(campaign, leader)
 
-    response = _auth(leader).post(
-        f"/api/customer/campaign-groups/{session.id}/leave/"
-    )
+    response = _auth(leader).post(f"/api/customer/campaign-groups/{session.id}/leave/")
     assert response.status_code == 200
     assert response.data["data"]["success"] is True
     session.refresh_from_db()
@@ -577,7 +589,7 @@ def test_customer_detail_serializer_exposes_group_offer_fields():
     assert data["reward"]["reward_receiver_type"] == CampaignReward.ReceiverType.LEADER
     assert data["rule"]["required_group_size"] == 3
     assert data["rule"]["group_checkin_window_minutes"] == 30
-    assert "min_spend" in data["rule"]
+    assert "min_spend" not in data["rule"]
     assert data["business_name"] == business.name
     assert data["business_category"] == business.category
     assert data["business_area"] == business.area
@@ -588,5 +600,3 @@ def test_customer_detail_serializer_exposes_group_offer_fields():
 
 
 # --- end-to-end via the HTTP API --------------------------------------------
-
-

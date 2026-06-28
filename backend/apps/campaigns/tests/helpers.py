@@ -69,13 +69,6 @@ def make_campaign(
     campaign_type: str = Campaign.CampaignType.INDIVIDUAL,
     mechanic: str | None = CampaignRule.Mechanic.VISIT,
     required_count: int = 1,
-    required_spend=None,
-    min_spend=None,
-    max_banked: int | None = None,
-    points_basis: str | None = None,
-    points_per_visit: int | None = None,
-    points_per_som=None,
-    cashback_per_point=None,
     required_group_size: int | None = None,
     group_checkin_window_minutes: int | None = None,
     instagram_handle: str | None = None,
@@ -99,9 +92,8 @@ def make_campaign(
 
     Defaults to an ACTIVE INDIVIDUAL visit campaign requiring one visit with
     auto-join on, an all-day/every-day window, and a free-item reward. Pass
-    ``mechanic`` (VISIT/STAMP/SPEND), ``required_spend``/``min_spend``/
-    ``max_banked``, ``required_group_size`` (GROUP), or ``instagram_handle``
-    (SOCIAL) to build the other shapes.
+    ``required_group_size`` (GROUP) or ``instagram_handle`` (SOCIAL) to build
+    the other campaign shapes.
     """
     campaign = Campaign.objects.create(
         business=business,
@@ -128,15 +120,10 @@ def make_campaign(
     CampaignRule.objects.create(
         campaign=campaign,
         rule_type=rule_type,
-        mechanic=mechanic if campaign_type == Campaign.CampaignType.INDIVIDUAL else None,
+        mechanic=mechanic
+        if campaign_type == Campaign.CampaignType.INDIVIDUAL
+        else None,
         required_count=required_count,
-        required_spend=required_spend,
-        min_spend=min_spend,
-        max_banked=max_banked,
-        points_basis=points_basis,
-        points_per_visit=points_per_visit,
-        points_per_som=points_per_som,
-        cashback_per_point=cashback_per_point,
         required_group_size=required_group_size,
         group_checkin_window_minutes=group_checkin_window_minutes,
         minimum_time_between_actions=minimum_gap,
@@ -159,9 +146,7 @@ def make_campaign(
     return Campaign.objects.select_related("rule", "reward").get(id=campaign.id)
 
 
-def make_catalog_item(
-    business: Business, *, name: str = "Latte", price: str = "150 c"
-):
+def make_catalog_item(business: Business, *, name: str = "Latte", price: str = "150 c"):
     """Build an active CatalogItem on a business (for item-reward tests)."""
     from apps.businesses.models import CatalogItem
 

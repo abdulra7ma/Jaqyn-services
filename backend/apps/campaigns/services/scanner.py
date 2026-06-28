@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from decimal import Decimal
 from uuid import UUID
 
 from django.utils import timezone
@@ -24,7 +23,6 @@ from apps.campaigns.models import (
     Campaign,
     CampaignParticipant,
     CampaignRewardVoucher,
-    CampaignRule,
 )
 from apps.campaigns.services.eligibility import (
     CampaignEligibilityService,
@@ -50,22 +48,8 @@ class EligibleCampaignView:
     ``progress_count``/``required_count`` let the staff UI show "2 / 3" without a
     second request.
 
-    The redesigned staff loyalty chooser renders every one of the business's
-    programs for the scanned customer by *type*, so each row also carries the
-    fields needed to draw and preview that type without dereferencing the nested
-    campaign model:
-
-    * ``mechanic`` — the INDIVIDUAL mechanic (``visit``/``stamp``/``spend``/
-      ``points``) or ``None`` for a GROUP/SOCIAL campaign with no per-visit
-      mechanic. ``campaign_type`` is the top-level discriminator.
-    * ``reward_title`` — the reward summary (``None`` when no reward is configured).
-    * ``points_balance`` — the customer's current redeemable points balance for a
-      POINTS program (0 for every non-points program).
-    * ``points_per_som`` / ``points_per_visit`` / ``cashback_per_point`` — the
-      POINTS accrual + cashback rates so the UI can show "X% back" and preview the
-      award; all ``None`` for non-points programs.
-    * ``current_spend`` — the customer's accumulated spend for a SPEND program
-      (0 otherwise).
+    ``mechanic`` is ``visit`` for individual challenges and ``None`` for group or
+    social campaigns; loyalty card rows are emitted by apps.loyalty instead.
     """
 
     campaign: Campaign
@@ -76,11 +60,6 @@ class EligibleCampaignView:
     mechanic: str | None
     campaign_type: str
     reward_title: str | None
-    points_balance: int
-    points_per_som: Decimal | None
-    points_per_visit: int | None
-    cashback_per_point: Decimal | None
-    current_spend: Decimal
 
 
 @dataclass(frozen=True)
@@ -184,11 +163,7 @@ class StaffScannerService:
         member's business. Read-only; the underlying ``resolve_qr_token`` writes
         the scan-resolve audit row.
 
-        Each returned row carries the per-program fields the staff loyalty chooser
-        binds (mechanic, campaign type, reward title, the customer's points balance
-        and accumulated spend, and the POINTS accrual/cashback rates). A POINTS
-        program has no completion target and so is surfaced as always-eligible
-        whenever active and in-window (the eligibility pipeline applies this).
+        Each returned row carries campaign type, reward title, and visit progress.
         """
         now = now or timezone.now()
         qr_token = resolve_qr_token(raw_token, request, action="campaign_scan_customer")
@@ -214,8 +189,8 @@ class StaffScannerService:
             business, customer.id, now
         )
         # One query for the customer's participant rows across all listed campaigns;
-        # carries progress_count, points_balance and current_spend so each row is
-        # rendered without an N+1 per-campaign lookup. The campaign's rule (which
+        # carries progress_count so each row is rendered without an N+1 per-campaign
+        # lookup. The campaign's rule (which
         # holds the mechanic + points/spend rates) is already select_related on each
         # result by ``eligible_campaigns_for_customer``.
         participant_by_campaign = {
@@ -325,7 +300,6 @@ class StaffScannerService:
         customer,
         request=None,
         now: datetime | None = None,
-        amount_spend: Decimal | None = None,
     ) -> ProgressResult:
         """Count a visit toward a specific campaign at the staff member's business.
 
@@ -337,14 +311,6 @@ class StaffScannerService:
         (which locks, re-checks eligibility, increments, and completes if due) and
         logs the scan outcome.
 
-        ``amount_spend`` is the bill amount the staff entered. It is forwarded to
-        ``record_campaign_action`` and is only consumed by a SPEND mechanic (a
-        money threshold) or a POINTS program on the spend basis
-        (``floor(points_per_som × amount_spend)``); a visit/stamp/points-visit
-        program ignores it. The amount is *required* for those two cases — the
-        progress service raises ``VALIDATION_ERROR`` when it is missing/non-positive
-        — but the duplicate-visit fraud gate still runs unchanged for every
-        mechanic before the amount matters.
         """
         now = now or timezone.now()
         campaign = _load_campaign_for_staff(campaign_id, staff)
@@ -369,7 +335,6 @@ class StaffScannerService:
                 campaign=campaign,
                 customer=customer,
                 staff=staff,
-                amount_spend=amount_spend,
                 now=now,
             )
         except JaqynAPIException as exc:
@@ -403,7 +368,6 @@ class StaffScannerService:
         campaign_id: UUID | None = None,
         request=None,
         now: datetime | None = None,
-        amount: Decimal | None = None,
     ) -> "UnifiedScanResult":
         """Advance every eligible campaign for a customer in one staff scan (§14).
 
@@ -421,14 +385,6 @@ class StaffScannerService:
         are deliberately NOT wrapped in one outer transaction, so skipping one
         never rolls back another.
 
-        ``amount`` is the staff-entered bill, only meaningful on the choose-one
-        (``campaign_id``) path. Business rule: when the targeted campaign is a
-        SPEND mechanic *or* a POINTS program on the spend basis, a positive
-        ``amount`` is **required** (``VALIDATION_ERROR`` otherwise); for a
-        visit/stamp/points-visit-basis campaign the amount is ignored. The amount
-        is forwarded to :meth:`confirm_visit` so points are awarded by the
-        business's rate. On the no-``campaign_id`` stacking path the amount is not
-        applied to any campaign (the frontend always passes ``campaign_id``).
         """
         now = now or timezone.now()
         qr_token = resolve_qr_token(raw_token, request, action="unified_confirm_visit")
@@ -459,11 +415,6 @@ class StaffScannerService:
         target_ids: list[UUID]
         if campaign_id is not None:
             # Explicit single-target contract: advance only the tapped campaign.
-            # Validate the amount-required business rule up front (raises
-            # VALIDATION_ERROR) so a SPEND / POINTS-spend-basis campaign cannot be
-            # confirmed without the staff-entered bill, and so the failure surfaces
-            # as a hard error rather than a silently skipped campaign.
-            StaffScannerService._require_amount_if_needed(campaign_id, staff, amount)
             target_ids = [campaign_id]
         else:
             # Stacking targets: every stacking campaign that is eligible, plus any
@@ -474,10 +425,7 @@ class StaffScannerService:
                 r.campaign.id
                 for r in results
                 if r.campaign.allow_multiple_campaign_counting
-                and (
-                    r.eligible
-                    or r.reason_code == IneligibilityReason.MIN_GAP.value
-                )
+                and (r.eligible or r.reason_code == IneligibilityReason.MIN_GAP.value)
             ]
             nonstacking_results = [
                 r for r in eligible if not r.campaign.allow_multiple_campaign_counting
@@ -491,9 +439,6 @@ class StaffScannerService:
 
         # Map id → name for skipped reporting without a second query.
         name_by_id = {r.campaign.id: r.campaign.name for r in results}
-        # The bill amount only applies on the choose-one path; on the stacking
-        # path it is never threaded into a campaign (see docstring).
-        amount_for_target = amount if campaign_id is not None else None
         for target_id in target_ids:
             try:
                 campaigns.append(
@@ -503,7 +448,6 @@ class StaffScannerService:
                         customer,
                         request=request,
                         now=now,
-                        amount_spend=amount_for_target,
                     )
                 )
             except JaqynAPIException as exc:
@@ -523,37 +467,6 @@ class StaffScannerService:
             campaigns=campaigns,
             skipped_campaigns=skipped,
         )
-
-    @staticmethod
-    def _require_amount_if_needed(
-        campaign_id: UUID, staff: StaffMember, amount: Decimal | None
-    ) -> None:
-        """Reject a choose-one confirm that needs a bill amount but has none.
-
-        Business rule (multi-form-loyalty design §1): a SPEND mechanic, and a
-        POINTS program on the spend basis, both compute their award from the
-        staff-entered bill, so a positive ``amount`` is required for them; every
-        other mechanic ignores the amount. Loads the campaign for the staff member
-        (raising ``CAMPAIGN_NOT_FOUND`` / ``WRONG_BUSINESS`` as usual) so the rule
-        is read off the real campaign, then raises ``VALIDATION_ERROR`` when the
-        amount is missing or non-positive for an amount-required mechanic. This is
-        a service-layer business rule, not view-level shape validation. No-op for
-        any mechanic that does not consume the amount.
-        """
-        campaign = _load_campaign_for_staff(campaign_id, staff)
-        rule = getattr(campaign, "rule", None)
-        if rule is None:
-            return
-        needs_amount = rule.mechanic == CampaignRule.Mechanic.SPEND or (
-            rule.mechanic == CampaignRule.Mechanic.POINTS
-            and rule.points_basis == CampaignRule.PointsBasis.SPEND
-        )
-        if needs_amount and (amount is None or amount <= 0):
-            raise JaqynAPIException(
-                "VALIDATION_ERROR",
-                "A bill amount is required for this program",
-                status.HTTP_400_BAD_REQUEST,
-            )
 
     @staticmethod
     def scan_reward_qr(
@@ -590,7 +503,9 @@ class StaffScannerService:
         voucher). Logs the scan outcome to ``ScanLog`` either way.
         """
         now = now or timezone.now()
-        qr_token = resolve_qr_token(raw_token, request, action="campaign_confirm_social")
+        qr_token = resolve_qr_token(
+            raw_token, request, action="campaign_confirm_social"
+        )
         if (
             qr_token.type != QRCodeToken.Type.CUSTOMER_PROFILE
             or qr_token.customer is None
@@ -620,7 +535,10 @@ class StaffScannerService:
             customer=customer,
             action="campaign_confirm_social",
             status=ScanLog.Status.SUCCESS,
-            metadata={"campaign_id": str(campaign.id), "voucher_id": str(result.voucher.id)},
+            metadata={
+                "campaign_id": str(campaign.id),
+                "voucher_id": str(result.voucher.id),
+            },
         )
         return result
 
@@ -639,9 +557,7 @@ class StaffScannerService:
         """
         now = now or timezone.now()
         try:
-            result = CampaignGroupService.confirm_group_visit(
-                staff, group_id, now=now
-            )
+            result = CampaignGroupService.confirm_group_visit(staff, group_id, now=now)
         except JaqynAPIException as exc:
             log_scan(
                 staff=staff,
@@ -674,26 +590,17 @@ def _to_view(
 
     ``participant_by_campaign`` maps campaign id → the customer's
     :class:`CampaignParticipant` (absent when they have no row yet, in which case
-    progress/points/spend all read as 0). The campaign's ``rule`` and ``reward``
+    progress reads as 0). The campaign's ``rule`` and ``reward``
     are read off the already-joined relations (no extra query) to expose the
-    per-program mechanic, reward title, and POINTS/SPEND fields the staff chooser
-    binds. ``points_per_som``/``points_per_visit``/``cashback_per_point`` are only
-    populated for a POINTS program; ``current_spend`` only carries a non-zero value
-    for a SPEND program with a participant row.
+    campaign mechanic and reward title used by the staff campaign section.
     """
     campaign = result.campaign
     rule = getattr(campaign, "rule", None)
     reward = getattr(campaign, "reward", None)
     required = rule.required_count if rule is not None else 1
     mechanic = rule.mechanic if rule is not None else None
-    is_points = mechanic == CampaignRule.Mechanic.POINTS
-
     participant = participant_by_campaign.get(campaign.id)
     progress = participant.progress_count if participant is not None else 0
-    points_balance = participant.points_balance if participant is not None else 0
-    current_spend = (
-        participant.current_spend if participant is not None else Decimal("0")
-    )
 
     return EligibleCampaignView(
         campaign=campaign,
@@ -704,15 +611,6 @@ def _to_view(
         mechanic=mechanic,
         campaign_type=campaign.campaign_type,
         reward_title=reward.title if reward is not None else None,
-        points_balance=points_balance,
-        points_per_som=rule.points_per_som if is_points and rule is not None else None,
-        points_per_visit=(
-            rule.points_per_visit if is_points and rule is not None else None
-        ),
-        cashback_per_point=(
-            rule.cashback_per_point if is_points and rule is not None else None
-        ),
-        current_spend=current_spend,
     )
 
 
@@ -725,7 +623,5 @@ def _load_campaign_for_staff(campaign_id, staff: StaffMember) -> Campaign:
             "CAMPAIGN_NOT_FOUND", status_code=status.HTTP_404_NOT_FOUND
         )
     if campaign.business_id != staff.business_id:
-        raise JaqynAPIException(
-            "WRONG_BUSINESS", status_code=status.HTTP_403_FORBIDDEN
-        )
+        raise JaqynAPIException("WRONG_BUSINESS", status_code=status.HTTP_403_FORBIDDEN)
     return campaign

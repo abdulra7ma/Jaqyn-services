@@ -20,7 +20,11 @@ def test_create_campaign_starts_as_draft():
     campaign = CampaignService.create_campaign(
         business,
         business.owner,
-        {"name": "New", "campaign_type": Campaign.CampaignType.INDIVIDUAL, "status": "active"},
+        {
+            "name": "New",
+            "campaign_type": Campaign.CampaignType.INDIVIDUAL,
+            "status": "active",
+        },
     )
 
     # status in data is ignored — always DRAFT.
@@ -30,9 +34,7 @@ def test_create_campaign_starts_as_draft():
 def test_publish_requires_reward_and_rule():
     business = make_business()
     # Draft campaign with no rule/reward.
-    campaign = make_campaign(
-        business, status=Campaign.Status.DRAFT, with_reward=False
-    )
+    campaign = make_campaign(business, status=Campaign.Status.DRAFT, with_reward=False)
     campaign.rule.delete()
     campaign = Campaign.objects.get(id=campaign.id)
 

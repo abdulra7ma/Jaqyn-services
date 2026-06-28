@@ -16,7 +16,12 @@ from apps.campaigns.services import (
 from apps.qr.models import ScanLog
 from apps.reporting.models import AdminAuditLog
 from apps.staff.models import StaffMember
-from apps.campaigns.tests.helpers import make_business, make_campaign, make_customer, make_staff
+from apps.campaigns.tests.helpers import (
+    make_business,
+    make_campaign,
+    make_customer,
+    make_staff,
+)
 from core.exceptions import JaqynAPIException
 
 
@@ -155,9 +160,7 @@ def test_non_manager_cannot_cancel():
     voucher = _issued_voucher(business, customer, campaign)
 
     with pytest.raises(JaqynAPIException) as exc:
-        CampaignRewardService.cancel_voucher(
-            voucher.id, cashier, reason="Nope"
-        )
+        CampaignRewardService.cancel_voucher(voucher.id, cashier, reason="Nope")
 
     assert exc.value.code == "PERMISSION_DENIED"
     voucher.refresh_from_db()

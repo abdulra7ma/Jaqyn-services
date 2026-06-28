@@ -1,15 +1,26 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { Business, BusinessLoyaltyProgram } from "@jaqyn/api";
+import type { Business, LoyaltyCardView } from "@jaqyn/api";
 
-// Mount the business page in isolation: stub the shell/params and mock the API at
-// the module boundary (MSW-style boundary mocking via vi.mock, matching the other
-// web tests). Asserts the multi-form-loyalty consolidated "Loyalty" card + switcher.
+// BusinessProfilePage is now a thin wrapper over BusinessSheet which contains
+// BusinessDetailsContent. We mock BusinessSheet to render the content directly
+// so the test stays focused on loyalty-card behavior without fighting the sheet/router.
 
-vi.mock("../../_components/CustomerShell", () => ({
-  CustomerShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+vi.mock("../../_components/BusinessSheet", async () => {
+  const actual = await import("../../_components/BusinessDetailsContent");
+  return {
+    BusinessSheet: ({ businessId }: { businessId: string }) => (
+      <actual.BusinessDetailsContent businessId={businessId} />
+    ),
+  };
+});
+vi.mock("next/navigation", () => ({
+  useParams: () => ({ id: "b-1" }),
+  useRouter: () => ({ back: vi.fn() }),
 }));
-vi.mock("next/navigation", () => ({ useParams: () => ({ id: "b-1" }) }));
+vi.mock("../../_lib/auth", () => ({
+  useRequireAuth: () => ({ isAuthenticated: true }),
+}));
 
 function business(): Business {
   return {
@@ -41,22 +52,28 @@ function business(): Business {
   };
 }
 
-function program(over: Partial<BusinessLoyaltyProgram>): BusinessLoyaltyProgram {
+function program(over: Partial<LoyaltyCardView>): LoyaltyCardView {
   return {
-    campaign_id: "c",
+    program_id: "c",
+    business_id: "b-1",
+    business_name: "Manas Coffee",
+    business_logo_url: null,
+    type: "visit",
     name: "Program",
-    mechanic: "visit",
     reward_summary: "",
     joined: false,
-    progress_count: 0,
-    target: 0,
+    stamps_count: 0,
+    visits_count: 0,
+    required_count: 0,
     points_balance: 0,
+    points_per_som: null,
     cashback_per_point: null,
+    pct_back: null,
     ...over,
   };
 }
 
-const loyalty: { value: BusinessLoyaltyProgram[] } = { value: [] };
+const loyalty: { value: LoyaltyCardView[] } = { value: [] };
 
 vi.mock("@jaqyn/api", () => ({
   useBusiness: () => ({
@@ -67,39 +84,48 @@ vi.mock("@jaqyn/api", () => ({
     refetch: vi.fn(),
   }),
   useBusinessLoyalty: () => ({ data: loyalty.value, isLoading: false, isError: false }),
+  useJoinLoyalty: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import BusinessProfilePage from "./page";
+
+/** Open the loyalty bottom-sheet by clicking its trigger row. */
+function openLoyaltySheet() {
+  // The trigger <p> reads "cmp.loyalty.title · N common.programs" — use substring match.
+  const trigger = screen.getByText("cmp.loyalty.title", { exact: false }).closest("button")!;
+  fireEvent.click(trigger);
+}
 
 describe("Business page — consolidated loyalty card (multi-form-loyalty)", () => {
   it("renders ONE card with a tab per program and switches bodies on tab click", () => {
     loyalty.value = [
       program({
-        campaign_id: "pts",
+        program_id: "pts",
         name: "Coffee Points",
-        mechanic: "points",
+        type: "points",
         points_balance: 120,
         cashback_per_point: "1",
         joined: true,
         reward_summary: "1 сом per point",
       }),
       program({
-        campaign_id: "vis",
+        program_id: "vis",
         name: "Visit 5 times",
-        mechanic: "visit",
-        progress_count: 3,
-        target: 5,
+        type: "visit",
+        visits_count: 3,
+        required_count: 5,
         joined: true,
         reward_summary: "Free latte",
       }),
     ];
     render(<BusinessProfilePage />);
 
-    // Section heading + ONE card carrying the business name in its header (the
-    // page <h1> also shows the name, so the loyalty card header is the 2nd match;
-    // the test translator returns the i18n key verbatim, so we assert on keys).
-    expect(screen.getByText("cmp.loyalty.title")).toBeInTheDocument();
-    expect(screen.getAllByText("Manas Coffee")).toHaveLength(2);
+    // Trigger row is visible; open the loyalty sheet to see the card content.
+    expect(screen.getAllByText("cmp.loyalty.title", { exact: false }).length).toBeGreaterThanOrEqual(1);
+    openLoyaltySheet();
+
+    // Sheet header shows business name alongside trigger row — at least 2 occurrences.
+    expect(screen.getAllByText("Manas Coffee").length).toBeGreaterThanOrEqual(2);
 
     // Two programs → a tablist with one tab per program (labels from the mechanic).
     const tabs = screen.getAllByRole("tab");
@@ -122,14 +148,15 @@ describe("Business page — consolidated loyalty card (multi-form-loyalty)", () 
   it("renders no switcher when the business runs a single program", () => {
     loyalty.value = [
       program({
-        campaign_id: "vis",
-        mechanic: "visit",
-        target: 5,
+        program_id: "vis",
+        type: "visit",
+        required_count: 5,
         joined: true,
         reward_summary: "Free latte",
       }),
     ];
     render(<BusinessProfilePage />);
+    openLoyaltySheet();
     expect(screen.getByText("Free latte")).toBeInTheDocument();
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
   });

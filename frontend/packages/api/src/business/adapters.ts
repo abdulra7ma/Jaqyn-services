@@ -36,10 +36,7 @@ function toBackendCampaignType(type: BusinessCampaignType): string {
 
 // Normalize the INDIVIDUAL completion mechanic (campaigns-restructure design §3).
 function fromBackendMechanic(raw: string | undefined): BusinessCampaignMechanic | null {
-  if (raw === "stamp") return "stamp";
-  if (raw === "spend") return "spend";
   if (raw === "visit") return "visit";
-  if (raw === "points") return "points";
   return null;
 }
 
@@ -48,10 +45,6 @@ function fromBackendMechanic(raw: string | undefined): BusinessCampaignMechanic 
 // GROUP is group_checkin; SOCIAL has no rule_type constraint (defaults to visit).
 function ruleTypeFor(type: BusinessCampaignType, mechanic?: BusinessCampaignMechanic): string {
   if (type === "group") return "group_checkin";
-  if (mechanic === "spend") return "spend";
-  if (mechanic === "stamp") return "stamp";
-  // POINTS is a balance mechanic with no completion target (multi-form-loyalty).
-  if (mechanic === "points") return "points";
   return "visit_count";
 }
 
@@ -89,12 +82,10 @@ export function adaptBusinessCampaign(raw: Raw): BusinessCampaign {
     staff_approval_required: raw.staff_approval_required ?? true,
     instagram_handle: raw.instagram_handle ?? null,
     rule: {
-      // Backend keys: mechanic (visit/stamp/spend), required_spend (decimal),
-      // minimum_time_between_actions (ISO duration), group_checkin_window_minutes.
+      // Backend keys: visit mechanic, required_count, timing constraints, and
+      // group_checkin_window_minutes.
       mechanic: fromBackendMechanic(rule.mechanic),
       required_count: rule.required_count ?? rule.visits ?? null,
-      required_spend:
-        rule.required_spend != null ? String(rule.required_spend) : (rule.requiredSpend ?? null),
       max_count_per_day: rule.max_count_per_day ?? rule.perDay ?? null,
       min_time_between: rule.minimum_time_between_actions ?? rule.min_time_between ?? rule.minGap ?? null,
       required_group_size: rule.required_group_size ?? rule.groupSize ?? null,
@@ -254,19 +245,7 @@ export function toCampaignWritePayload(payload: Partial<CampaignPayload>): Raw {
       rule.group_checkin_window_minutes = payload.group_checkin_window_minutes;
   } else if (type === "individual") {
     if (mechanic != null) rule.mechanic = mechanic;
-    if (mechanic === "points") {
-      // POINTS accrual: send the basis + only the matching rate field, plus the
-      // cashback rate. No required_count/spend — points programs never complete.
-      if (payload.points_basis != null) rule.points_basis = payload.points_basis;
-      if (payload.points_basis === "spend") {
-        if (payload.points_per_som != null) rule.points_per_som = payload.points_per_som;
-      } else if (payload.points_per_visit != null) {
-        rule.points_per_visit = payload.points_per_visit;
-      }
-      if (payload.cashback_per_point != null) rule.cashback_per_point = payload.cashback_per_point;
-    } else if (mechanic === "spend") {
-      if (payload.required_spend != null) rule.required_spend = payload.required_spend;
-    } else if (payload.required_count != null) {
+    if (payload.required_count != null) {
       rule.required_count = payload.required_count;
     }
     if (payload.max_count_per_day != null) rule.max_count_per_day = payload.max_count_per_day;

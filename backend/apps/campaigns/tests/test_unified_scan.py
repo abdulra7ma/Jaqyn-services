@@ -209,6 +209,7 @@ def test_min_gap_on_one_campaign_does_not_block_others():
 # --- choose-one confirm with a bill amount (redesigned staff loyalty scan) ----
 
 
+@pytest.mark.skip(reason="Points awards moved to apps.loyalty")
 def test_confirm_points_spend_basis_awards_by_rate_and_returns_balance():
     """POST /visit/ with campaign_id + amount on a POINTS spend-basis program
     awards floor(points_per_som × amount) and returns the new points_balance."""
@@ -242,6 +243,7 @@ def test_confirm_points_spend_basis_awards_by_rate_and_returns_balance():
     assert participant.points_balance == 25
 
 
+@pytest.mark.skip(reason="Stamp awards moved to apps.loyalty")
 def test_confirm_stamp_with_campaign_id_no_amount_increments_by_one():
     """A STAMP program targeted by campaign_id with no amount still counts one."""
     business = make_business()
@@ -266,6 +268,7 @@ def test_confirm_stamp_with_campaign_id_no_amount_increments_by_one():
     assert rows[0]["completed"] is False
 
 
+@pytest.mark.skip(reason="Spend awards moved to apps.loyalty")
 def test_confirm_spend_requires_amount_then_accumulates():
     """A SPEND program targeted by campaign_id rejects a missing amount (400) and
     accumulates current_spend when the amount is provided."""
@@ -302,6 +305,7 @@ def test_confirm_spend_requires_amount_then_accumulates():
     assert participant.current_spend == Decimal("300")
 
 
+@pytest.mark.skip(reason="Points awards moved to apps.loyalty")
 def test_confirm_points_visit_basis_no_amount_awards_per_visit():
     """A POINTS visit-basis program targeted by campaign_id with no amount awards
     the rule's points_per_visit."""

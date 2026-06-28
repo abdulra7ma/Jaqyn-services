@@ -25,6 +25,7 @@ from django.utils import timezone
 
 from apps.businesses.models import Business
 from apps.campaigns.models import CampaignParticipant, CampaignRewardVoucher
+from apps.loyalty.models import LoyaltyMembership, LoyaltyVoucher
 from apps.qr.models import ScanLog
 from apps.staff.models import StaffMember
 from core.exceptions import JaqynAPIException
@@ -46,7 +47,20 @@ RETURNING_MIN_VISITS = 2
 LOYAL_MIN_VISITS = 5
 
 _WEEK_DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"]
-_MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+_MONTH_LABELS = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
 _PERIOD_LABELS = {"today": "Today", "week": "This week", "month": "This month"}
 
 
@@ -149,7 +163,9 @@ def _shift_month_start(ms: datetime, *, back: int) -> datetime:
     return ms.replace(year=year, month=month)
 
 
-def resolve_period(period: str, date_from: date | None, date_to: date | None) -> ReportWindow:
+def resolve_period(
+    period: str, date_from: date | None, date_to: date | None
+) -> ReportWindow:
     """Translate a period selector into a :class:`ReportWindow`.
 
     ``period`` is one of ``today | week | month | custom``. ``custom`` requires
@@ -161,18 +177,40 @@ def resolve_period(period: str, date_from: date | None, date_to: date | None) ->
     if period == "today":
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = now
-        return ReportWindow("today", start, end, start - timedelta(days=1), start, _PERIOD_LABELS["today"], "hour")
+        return ReportWindow(
+            "today",
+            start,
+            end,
+            start - timedelta(days=1),
+            start,
+            _PERIOD_LABELS["today"],
+            "hour",
+        )
     if period == "week":
         midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
         start = midnight - timedelta(days=midnight.weekday())  # Monday
         end = now
-        return ReportWindow("week", start, end, start - timedelta(days=7), start, _PERIOD_LABELS["week"], "day7")
+        return ReportWindow(
+            "week",
+            start,
+            end,
+            start - timedelta(days=7),
+            start,
+            _PERIOD_LABELS["week"],
+            "day7",
+        )
     if period == "custom":
         if date_from is None or date_to is None or date_from > date_to:
-            raise JaqynAPIException("VALIDATION_ERROR", "A valid from/to date range is required", status_code=400)
+            raise JaqynAPIException(
+                "VALIDATION_ERROR",
+                "A valid from/to date range is required",
+                status_code=400,
+            )
         tz = timezone.get_current_timezone()
         start = timezone.make_aware(datetime.combine(date_from, time.min), tz)
-        end = timezone.make_aware(datetime.combine(date_to + timedelta(days=1), time.min), tz)
+        end = timezone.make_aware(
+            datetime.combine(date_to + timedelta(days=1), time.min), tz
+        )
         span = end - start
         label = f"{date_from.strftime('%-d %b')} – {date_to.strftime('%-d %b')}"
         return ReportWindow("custom", start, end, start - span, start, label, "day")
@@ -180,13 +218,17 @@ def resolve_period(period: str, date_from: date | None, date_to: date | None) ->
     start = _month_start(now)
     end = now
     prev_start = _shift_month_start(start, back=1)
-    return ReportWindow("month", start, end, prev_start, start, _PERIOD_LABELS["month"], "day")
+    return ReportWindow(
+        "month", start, end, prev_start, start, _PERIOD_LABELS["month"], "day"
+    )
 
 
 # --------------------------------------------------------------------------- #
 # Building blocks
 # --------------------------------------------------------------------------- #
-def _success_scans(business: Business, start: datetime, end: datetime) -> QuerySet[ScanLog]:
+def _success_scans(
+    business: Business, start: datetime, end: datetime
+) -> QuerySet[ScanLog]:
     """Success scans for ``business`` in ``[start, end)`` (failed/blocked excluded)."""
     return ScanLog.objects.filter(
         business=business,
@@ -224,16 +266,23 @@ def _raw_metrics(business: Business, start: datetime, end: datetime) -> _RawMetr
     visits = sum(int(r["days"]) for r in visit_rows)
     repeat = sum(1 for r in visit_rows if int(r["days"]) >= RETURNING_MIN_VISITS)
 
-    redemptions = CampaignRewardVoucher.objects.filter(business=business, created_at__gte=start, created_at__lt=end)
-    redemptions_total = redemptions.count()
-    redemptions_claimed = redemptions.filter(status=CampaignRewardVoucher.Status.REDEEMED).count()
+    campaign_redemptions = CampaignRewardVoucher.objects.filter(
+        business=business, created_at__gte=start, created_at__lt=end
+    )
+    loyalty_redemptions = LoyaltyVoucher.objects.filter(
+        business=business, issued_at__gte=start, issued_at__lt=end
+    )
+    redemptions_total = campaign_redemptions.count() + loyalty_redemptions.count()
+    redemptions_claimed = (
+        campaign_redemptions.filter(
+            status=CampaignRewardVoucher.Status.REDEEMED
+        ).count()
+        + loyalty_redemptions.filter(status=LoyaltyVoucher.Status.REDEEMED).count()
+    )
 
-    # Spend telemetry: sum the accumulated current_spend across participants who
-    # joined in-window for the business's SPEND campaigns. Post-restructure spend
-    # lives on CampaignParticipant.current_spend (loyalty RewardTransaction is
-    # gone); this approximates window spend without a per-action JSON aggregate.
-    spend = CampaignParticipant.objects.filter(
-        campaign__business=business,
+    # Spend telemetry belongs to spend-basis loyalty memberships, not campaigns.
+    spend = LoyaltyMembership.objects.filter(
+        program__business=business,
         created_at__gte=start,
         created_at__lt=end,
     ).aggregate(total=Sum("current_spend"))["total"]
@@ -241,7 +290,9 @@ def _raw_metrics(business: Business, start: datetime, end: datetime) -> _RawMetr
         spend = None
 
     enrolled = (
-        CampaignParticipant.objects.filter(campaign__business=business, created_at__gte=start, created_at__lt=end)
+        CampaignParticipant.objects.filter(
+            campaign__business=business, created_at__gte=start, created_at__lt=end
+        )
         .values("customer")
         .distinct()
         .count()
@@ -250,14 +301,20 @@ def _raw_metrics(business: Business, start: datetime, end: datetime) -> _RawMetr
     return _RawMetrics(
         repeat_rate=(repeat / customers * 100) if customers else None,
         visit_freq=(visits / customers) if customers else None,
-        redemption_rate=(redemptions_claimed / redemptions_total * 100) if redemptions_total else None,
-        customer_value=(spend / customers) if (spend is not None and customers) else None,
+        redemption_rate=(redemptions_claimed / redemptions_total * 100)
+        if redemptions_total
+        else None,
+        customer_value=(spend / customers)
+        if (spend is not None and customers)
+        else None,
         spend_per_visit=(spend / visits) if (spend is not None and visits) else None,
         enrollment_rate=min(enrolled / customers * 100, 100) if customers else None,
     )
 
 
-def _delta(current: float | Decimal | None, previous: float | Decimal | None) -> int | None:
+def _delta(
+    current: float | Decimal | None, previous: float | Decimal | None
+) -> int | None:
     """Percentage change of ``current`` vs ``previous``; ``None`` without a baseline."""
     if current is None or previous is None or previous == 0:
         return None
@@ -279,17 +336,42 @@ def _build_kpis(business: Business, window: ReportWindow) -> list[Kpi]:
         return f"{round(value)}%" if value is not None else "—"
 
     return [
-        Kpi("repeat_purchase_rate", pct(cur.repeat_rate), _delta(cur.repeat_rate, prev.repeat_rate), "Customers with 2+ visits"),
+        Kpi(
+            "repeat_purchase_rate",
+            pct(cur.repeat_rate),
+            _delta(cur.repeat_rate, prev.repeat_rate),
+            "Customers with 2+ visits",
+        ),
         Kpi(
             "avg_visit_frequency",
             f"{cur.visit_freq:.1f}×" if cur.visit_freq is not None else "—",
             _delta(cur.visit_freq, prev.visit_freq),
             "Visits per customer",
         ),
-        Kpi("reward_redemption_rate", pct(cur.redemption_rate), _delta(cur.redemption_rate, prev.redemption_rate), "Earned rewards actually claimed"),
-        Kpi("est_customer_value", _money(cur.customer_value), _delta(cur.customer_value, prev.customer_value), "Spend per member"),
-        Kpi("avg_spend_per_visit", _money(cur.spend_per_visit), _delta(cur.spend_per_visit, prev.spend_per_visit), "Across all loyalty scans"),
-        Kpi("enrollment_rate", pct(cur.enrollment_rate), _delta(cur.enrollment_rate, prev.enrollment_rate), "Walk-ins joining the program"),
+        Kpi(
+            "reward_redemption_rate",
+            pct(cur.redemption_rate),
+            _delta(cur.redemption_rate, prev.redemption_rate),
+            "Earned rewards actually claimed",
+        ),
+        Kpi(
+            "est_customer_value",
+            _money(cur.customer_value),
+            _delta(cur.customer_value, prev.customer_value),
+            "Spend per member",
+        ),
+        Kpi(
+            "avg_spend_per_visit",
+            _money(cur.spend_per_visit),
+            _delta(cur.spend_per_visit, prev.spend_per_visit),
+            "Across all loyalty scans",
+        ),
+        Kpi(
+            "enrollment_rate",
+            pct(cur.enrollment_rate),
+            _delta(cur.enrollment_rate, prev.enrollment_rate),
+            "Walk-ins joining the program",
+        ),
     ]
 
 
@@ -300,7 +382,9 @@ def _scans_over_time(business: Business, window: ReportWindow) -> list[SeriesPoi
     if window.bucket == "day7":
         counts = {
             row["day"]: row["c"]
-            for row in scans.annotate(day=TruncDate("created_at")).values("day").annotate(c=Count("id"))
+            for row in scans.annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(c=Count("id"))
         }
         out: list[SeriesPoint] = []
         for i in range(7):
@@ -308,12 +392,22 @@ def _scans_over_time(business: Business, window: ReportWindow) -> list[SeriesPoi
             out.append(SeriesPoint(_WEEK_DAY_LABELS[i], counts.get(d, 0)))
         return out
     if window.bucket == "hour":
-        counts = {row["h"]: row["c"] for row in scans.annotate(h=ExtractHour("created_at")).values("h").annotate(c=Count("id"))}
-        return [SeriesPoint(_hour_label(h), counts.get(h, 0)) for h in range(BUSIEST_OPEN_HOUR, BUSIEST_CLOSE_HOUR + 1)]
+        counts = {
+            row["h"]: row["c"]
+            for row in scans.annotate(h=ExtractHour("created_at"))
+            .values("h")
+            .annotate(c=Count("id"))
+        }
+        return [
+            SeriesPoint(_hour_label(h), counts.get(h, 0))
+            for h in range(BUSIEST_OPEN_HOUR, BUSIEST_CLOSE_HOUR + 1)
+        ]
     # per-day
     counts = {
         row["day"]: row["c"]
-        for row in scans.annotate(day=TruncDate("created_at")).values("day").annotate(c=Count("id"))
+        for row in scans.annotate(day=TruncDate("created_at"))
+        .values("day")
+        .annotate(c=Count("id"))
     }
     out = []
     day = window.start.date()
@@ -333,10 +427,20 @@ def _hour_label(hour: int) -> str:
 def _busiest_hours(business: Business, window: ReportWindow) -> list[SeriesPoint]:
     """2-hour scan buckets across the trading window (7a–7p), summed over the period."""
     scans = _success_scans(business, window.start, window.end)
-    per_hour = {row["h"]: row["c"] for row in scans.annotate(h=ExtractHour("created_at")).values("h").annotate(c=Count("id"))}
+    per_hour = {
+        row["h"]: row["c"]
+        for row in scans.annotate(h=ExtractHour("created_at"))
+        .values("h")
+        .annotate(c=Count("id"))
+    }
     out: list[SeriesPoint] = []
-    for start_hour in range(BUSIEST_OPEN_HOUR, BUSIEST_CLOSE_HOUR + 1, BUSIEST_BUCKET_HOURS):
-        total = sum(per_hour.get(h, 0) for h in range(start_hour, start_hour + BUSIEST_BUCKET_HOURS))
+    for start_hour in range(
+        BUSIEST_OPEN_HOUR, BUSIEST_CLOSE_HOUR + 1, BUSIEST_BUCKET_HOURS
+    ):
+        total = sum(
+            per_hour.get(h, 0)
+            for h in range(start_hour, start_hour + BUSIEST_BUCKET_HOURS)
+        )
         out.append(SeriesPoint(_hour_label(start_hour), total))
     return out
 
@@ -347,16 +451,30 @@ def _new_vs_returning(business: Business) -> list[StackedPoint]:
     "New" = customers whose first-ever success scan falls in that month; "returning"
     = customers active that month whose first scan predates it.
     """
-    base = ScanLog.objects.filter(business=business, status=ScanLog.Status.SUCCESS).exclude(customer__isnull=True)
-    first_by_customer = {row["customer"]: row["first"] for row in base.values("customer").annotate(first=Min("created_at"))}
-    active = base.annotate(month=TruncMonth("created_at")).values("customer", "month").distinct()
+    base = ScanLog.objects.filter(
+        business=business, status=ScanLog.Status.SUCCESS
+    ).exclude(customer__isnull=True)
+    first_by_customer = {
+        row["customer"]: row["first"]
+        for row in base.values("customer").annotate(first=Min("created_at"))
+    }
+    active = (
+        base.annotate(month=TruncMonth("created_at"))
+        .values("customer", "month")
+        .distinct()
+    )
     active_by_month: dict[date, set[object]] = {}
     for row in active:
         active_by_month.setdefault(row["month"].date(), set()).add(row["customer"])
-    first_month_by_customer = {c: dt.date().replace(day=1) for c, dt in first_by_customer.items()}
+    first_month_by_customer = {
+        c: dt.date().replace(day=1) for c, dt in first_by_customer.items()
+    }
 
     now = timezone.localtime()
-    months = [_shift_month_start(_month_start(now), back=i) for i in range(TREND_MONTHS - 1, -1, -1)]
+    months = [
+        _shift_month_start(_month_start(now), back=i)
+        for i in range(TREND_MONTHS - 1, -1, -1)
+    ]
     out: list[StackedPoint] = []
     for m in months:
         key = m.date()
@@ -370,7 +488,9 @@ def _cohorts(business: Business, window: ReportWindow) -> list[Cohort]:
     """New / Returning / Loyal customer mix by distinct visit-days within the window."""
     rows = _customer_visit_days(_success_scans(business, window.start, window.end))
     new = sum(1 for r in rows if int(r["days"]) < RETURNING_MIN_VISITS)
-    returning = sum(1 for r in rows if RETURNING_MIN_VISITS <= int(r["days"]) < LOYAL_MIN_VISITS)
+    returning = sum(
+        1 for r in rows if RETURNING_MIN_VISITS <= int(r["days"]) < LOYAL_MIN_VISITS
+    )
     loyal = sum(1 for r in rows if int(r["days"]) >= LOYAL_MIN_VISITS)
     total = new + returning + loyal
 
@@ -384,16 +504,27 @@ def _cohorts(business: Business, window: ReportWindow) -> list[Cohort]:
     ]
 
 
-def _staff_performance(business: Business, window: ReportWindow) -> tuple[list[StaffRow], TeamTotals]:
+def _staff_performance(
+    business: Business, window: ReportWindow
+) -> tuple[list[StaffRow], TeamTotals]:
     """Per-staff scans/sign-ups/redemptions/trend plus team totals for the window.
 
     A **sign-up** is attributed to the staff member who handled a customer's
     first-ever success scan, counted when that first scan lands in the window.
     """
-    scans = _success_scans(business, window.start, window.end).filter(staff__isnull=False)
-    scans_by_staff = {row["staff"]: row["c"] for row in scans.values("staff").annotate(c=Count("id"))}
-    prev_scans = _success_scans(business, window.prev_start, window.prev_end).filter(staff__isnull=False)
-    prev_by_staff = {row["staff"]: row["c"] for row in prev_scans.values("staff").annotate(c=Count("id"))}
+    scans = _success_scans(business, window.start, window.end).filter(
+        staff__isnull=False
+    )
+    scans_by_staff = {
+        row["staff"]: row["c"] for row in scans.values("staff").annotate(c=Count("id"))
+    }
+    prev_scans = _success_scans(business, window.prev_start, window.prev_end).filter(
+        staff__isnull=False
+    )
+    prev_by_staff = {
+        row["staff"]: row["c"]
+        for row in prev_scans.values("staff").annotate(c=Count("id"))
+    }
 
     redemptions = CampaignRewardVoucher.objects.filter(
         business=business,
@@ -402,7 +533,10 @@ def _staff_performance(business: Business, window: ReportWindow) -> tuple[list[S
         redeemed_at__gte=window.start,
         redeemed_at__lt=window.end,
     )
-    redemptions_by_staff = {row["redeemed_by_staff"]: row["c"] for row in redemptions.values("redeemed_by_staff").annotate(c=Count("id"))}
+    redemptions_by_staff = {
+        row["redeemed_by_staff"]: row["c"]
+        for row in redemptions.values("redeemed_by_staff").annotate(c=Count("id"))
+    }
 
     # First-ever scan per customer (across all time) → attribute the sign-up.
     signups_by_staff: dict[object, int] = {}
@@ -425,7 +559,11 @@ def _staff_performance(business: Business, window: ReportWindow) -> tuple[list[S
     rows: list[StaffRow] = []
     for m in members:
         scan_count = scans_by_staff.get(m.id, 0)
-        if scan_count == 0 and m.id not in redemptions_by_staff and m.id not in signups_by_staff:
+        if (
+            scan_count == 0
+            and m.id not in redemptions_by_staff
+            and m.id not in signups_by_staff
+        ):
             continue
         signups = signups_by_staff.get(m.id, 0)
         rows.append(
@@ -465,19 +603,36 @@ def _insights(business: Business, busiest: list[SeriesPoint]) -> list[Insight]:
     close = 0
     for p in CampaignParticipant.objects.filter(
         campaign__business=business,
-        status__in=[CampaignParticipant.Status.JOINED, CampaignParticipant.Status.IN_PROGRESS],
+        status__in=[
+            CampaignParticipant.Status.JOINED,
+            CampaignParticipant.Status.IN_PROGRESS,
+        ],
         campaign__rule__required_count__gt=0,
     ).values("progress_count", "campaign__rule__required_count"):
         target = p["campaign__rule__required_count"]
-        if target and p["progress_count"] < target and p["progress_count"] >= float(CLOSE_TO_REWARD_RATIO) * target:
+        if (
+            target
+            and p["progress_count"] < target
+            and p["progress_count"] >= float(CLOSE_TO_REWARD_RATIO) * target
+        ):
             close += 1
     if close:
-        out.append(Insight("💡", f"{close} customers are close to a reward. Encourage one more visit — they convert faster than new visitors."))
+        out.append(
+            Insight(
+                "💡",
+                f"{close} customers are close to a reward. Encourage one more visit — they convert faster than new visitors.",
+            )
+        )
 
     if busiest:
         peak = max(busiest, key=lambda b: b.value)
         if peak.value:
-            out.append(Insight("⏰", f"{peak.label} is your busiest hour. Staffing your strongest team here lifts scan-to-enroll conversion."))
+            out.append(
+                Insight(
+                    "⏰",
+                    f"{peak.label} is your busiest hour. Staffing your strongest team here lifts scan-to-enroll conversion.",
+                )
+            )
 
     cutoff = timezone.localtime() - timedelta(days=AT_RISK_DAYS)
     at_risk = 0
@@ -491,7 +646,12 @@ def _insights(business: Business, busiest: list[SeriesPoint]) -> list[Insight]:
         if int(row["days"]) >= LOYAL_MIN_VISITS and row["last"] < cutoff:
             at_risk += 1
     if at_risk:
-        out.append(Insight("⚠️", f"{at_risk} loyal customers have not returned in {AT_RISK_DAYS} days. A reminder can win most of them back."))
+        out.append(
+            Insight(
+                "⚠️",
+                f"{at_risk} loyal customers have not returned in {AT_RISK_DAYS} days. A reminder can win most of them back.",
+            )
+        )
 
     return out
 

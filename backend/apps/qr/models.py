@@ -13,11 +13,25 @@ class QRCodeToken(UUIDModel):
         GROUP_REWARD = "group_reward", "Group reward"
         CAMPAIGN = "campaign", "Campaign"
         CAMPAIGN_REWARD = "campaign_reward", "Campaign reward"
+        # Loyalty vouchers use a distinct token so the unified scan can dispatch safely.
+        LOYALTY_REWARD = "loyalty_reward", "Loyalty reward"
 
     token = models.CharField(max_length=128, unique=True, db_index=True)
     type = models.CharField(max_length=32, choices=Type.choices)
-    business = models.ForeignKey("businesses.Business", on_delete=models.CASCADE, related_name="qr_tokens", blank=True, null=True)
-    customer = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="qr_tokens", blank=True, null=True)
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="qr_tokens",
+        blank=True,
+        null=True,
+    )
+    customer = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="qr_tokens",
+        blank=True,
+        null=True,
+    )
     # Campaign this token belongs to, when any. Stored as a bare UUID (not an FK)
     # so the qr app stays decoupled from the campaigns app. The legacy
     # loyalty/groups FKs were dropped in the campaigns restructure (clean cut).
@@ -31,7 +45,9 @@ class QRCodeToken(UUIDModel):
 
 
 class ApprovalCode(UUIDModel):
-    business = models.ForeignKey("businesses.Business", on_delete=models.CASCADE, related_name="approval_codes")
+    business = models.ForeignKey(
+        "businesses.Business", on_delete=models.CASCADE, related_name="approval_codes"
+    )
     code = models.CharField(max_length=12)
     valid_from = models.DateTimeField()
     valid_to = models.DateTimeField()
@@ -48,11 +64,35 @@ class ScanLog(UUIDModel):
         FAILED = "failed", "Failed"
         BLOCKED = "blocked", "Blocked"
 
-    qr_token = models.ForeignKey(QRCodeToken, on_delete=models.SET_NULL, related_name="scan_logs", blank=True, null=True)
+    qr_token = models.ForeignKey(
+        QRCodeToken,
+        on_delete=models.SET_NULL,
+        related_name="scan_logs",
+        blank=True,
+        null=True,
+    )
     token_value = models.CharField(max_length=128, blank=True, null=True)
-    customer = models.ForeignKey("accounts.User", on_delete=models.SET_NULL, related_name="scan_logs", blank=True, null=True)
-    business = models.ForeignKey("businesses.Business", on_delete=models.SET_NULL, related_name="scan_logs", blank=True, null=True)
-    staff = models.ForeignKey("staff.StaffMember", on_delete=models.SET_NULL, related_name="scan_logs", blank=True, null=True)
+    customer = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        related_name="scan_logs",
+        blank=True,
+        null=True,
+    )
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.SET_NULL,
+        related_name="scan_logs",
+        blank=True,
+        null=True,
+    )
+    staff = models.ForeignKey(
+        "staff.StaffMember",
+        on_delete=models.SET_NULL,
+        related_name="scan_logs",
+        blank=True,
+        null=True,
+    )
     action = models.CharField(max_length=64)
     status = models.CharField(max_length=16, choices=Status.choices)
     failure_reason = models.CharField(max_length=64, blank=True, null=True)

@@ -12,7 +12,7 @@ Every login below also accepts the dev OTP code 000000 when DEV_LOGIN_OTP=000000
 from __future__ import annotations
 
 import secrets
-from datetime import time, timedelta
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -34,6 +34,7 @@ from apps.campaigns.models import (
     GroupMember,
 )
 from apps.qr.models import QRCodeToken, ScanLog
+from apps.loyalty.models import LoyaltyMembership, LoyaltyProgram
 from apps.staff.models import StaffMember
 
 # Documented demo passwords (dev/staging only — never used in production).
@@ -42,7 +43,9 @@ STAFF_PW = "Staff123!"
 CUSTOMER_PW = "Customer123!"
 STAFF_PIN = "1234"  # demo PIN stored hashed on the StaffMember
 
-_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no ambiguous 0/O/1/I — matches voucher style
+_CODE_ALPHABET = (
+    "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no ambiguous 0/O/1/I — matches voucher style
+)
 
 # Bundled real storefront photos used so the demo map/profile show real imagery
 # instead of initials. Lives next to the businesses app; committed to the repo.
@@ -92,19 +95,26 @@ class Command(BaseCommand):
         user.is_active = True
         user.set_password(password)  # guarantees the documented credential works
         user.save()
-        rows.append({
-            "role": label,
-            "name": name,
-            "login": f"{email}  /  {phone}",
-            "password": password,
-            "status": "CREATED" if created else "EXISTS (password reset)",
-        })
+        rows.append(
+            {
+                "role": label,
+                "name": name,
+                "login": f"{email}  /  {phone}",
+                "password": password,
+                "status": "CREATED" if created else "EXISTS (password reset)",
+            }
+        )
         return user, created
 
     def _seed_accounts(self, rows):
         owner, _ = self._upsert_user(
-            phone="+996700112233", email="owner@manas.coffee", password=OWNER_PW,
-            role=User.Role.BUSINESS_OWNER, name="Nurlan A.", rows=rows, label="Business owner",
+            phone="+996700112233",
+            email="owner@manas.coffee",
+            password=OWNER_PW,
+            role=User.Role.BUSINESS_OWNER,
+            name="Nurlan A.",
+            rows=rows,
+            label="Business owner",
         )
 
         biz = Business.objects.filter(owner=owner).first()
@@ -120,20 +130,45 @@ class Command(BaseCommand):
         biz.longitude = Decimal("74.612400")
         biz.glyph = "☕"  # ☕
         biz.description = "Specialty coffee on Chuy Avenue, Bishkek."
-        for attr, member in (("status", "APPROVED"), ("visibility_status", "PUBLISHED"),
-                             ("onboarding_status", "COMPLETED"), ("verification_status", "VERIFIED")):
-            enum = getattr(type(biz), {"status": "Status", "visibility_status": "VisibilityStatus",
-                                       "onboarding_status": "OnboardingStatus",
-                                       "verification_status": "VerificationStatus"}[attr], None)
+        for attr, member in (
+            ("status", "APPROVED"),
+            ("visibility_status", "PUBLISHED"),
+            ("onboarding_status", "COMPLETED"),
+            ("verification_status", "VERIFIED"),
+        ):
+            enum = getattr(
+                type(biz),
+                {
+                    "status": "Status",
+                    "visibility_status": "VisibilityStatus",
+                    "onboarding_status": "OnboardingStatus",
+                    "verification_status": "VerificationStatus",
+                }[attr],
+                None,
+            )
             if enum is not None and hasattr(enum, member):
                 setattr(biz, attr, getattr(enum, member))
         biz.save()
 
         staff_users = [
-            self._upsert_user(phone="+996700112201", email="manager@manas.coffee", password=STAFF_PW,
-                              role=User.Role.STAFF, name="Adina M.", rows=rows, label="Staff · Manager")[0],
-            self._upsert_user(phone="+996700112202", email="cashier@manas.coffee", password=STAFF_PW,
-                              role=User.Role.STAFF, name="Bektur K.", rows=rows, label="Staff · Cashier")[0],
+            self._upsert_user(
+                phone="+996700112201",
+                email="manager@manas.coffee",
+                password=STAFF_PW,
+                role=User.Role.STAFF,
+                name="Adina M.",
+                rows=rows,
+                label="Staff · Manager",
+            )[0],
+            self._upsert_user(
+                phone="+996700112202",
+                email="cashier@manas.coffee",
+                password=STAFF_PW,
+                role=User.Role.STAFF,
+                name="Bektur K.",
+                rows=rows,
+                label="Staff · Cashier",
+            )[0],
         ]
 
         customers = []
@@ -142,10 +177,18 @@ class Command(BaseCommand):
             ("+996700555002", "aizada@example.com", "Aizada T."),
             ("+996700555003", "bek@example.com", "Bek S."),
         ):
-            u, _ = self._upsert_user(phone=phone, email=email, password=CUSTOMER_PW,
-                                     role=User.Role.CUSTOMER, name=name, rows=rows, label="Customer")
+            u, _ = self._upsert_user(
+                phone=phone,
+                email=email,
+                password=CUSTOMER_PW,
+                role=User.Role.CUSTOMER,
+                name=name,
+                rows=rows,
+                label="Customer",
+            )
             prof, _ = CustomerProfile.objects.get_or_create(user=u)
             prof.onboarding_completed = True
+            prof.profile_completed = True
             prof.save()
             customers.append(u)
 
@@ -158,7 +201,9 @@ class Command(BaseCommand):
             (staff_users[0], StaffMember.Role.MANAGER, "Adina M."),
             (staff_users[1], StaffMember.Role.CASHIER, "Bektur K."),
         ):
-            sm, _ = StaffMember.objects.get_or_create(business=biz, user=user, defaults={"name": name})
+            sm, _ = StaffMember.objects.get_or_create(
+                business=biz, user=user, defaults={"name": name}
+            )
             sm.name = name
             sm.role = role
             sm.pin_hash = pin_hash
@@ -169,7 +214,9 @@ class Command(BaseCommand):
         # A SUSPENDED member (no linked user) so the Manage Staff page shows the
         # "suspended" status and the reactivate/no-login paths have demo data.
         suspended, _ = StaffMember.objects.get_or_create(
-            business=biz, name="Cholpon D.", user=None,
+            business=biz,
+            name="Cholpon D.",
+            user=None,
             defaults={"role": StaffMember.Role.CASHIER},
         )
         suspended.role = StaffMember.Role.CASHIER
@@ -179,9 +226,13 @@ class Command(BaseCommand):
 
         # A PENDING invite so the merged team list shows an "invited" row.
         invite, _ = StaffInvite.objects.get_or_create(
-            business=biz, contact="aibek.b@manas.coffee",
-            defaults={"full_name": "Aibek B.", "role": StaffInvite.Role.STAFF,
-                      "status": StaffInvite.Status.PENDING},
+            business=biz,
+            contact="aibek.b@manas.coffee",
+            defaults={
+                "full_name": "Aibek B.",
+                "role": StaffInvite.Role.STAFF,
+                "status": StaffInvite.Status.PENDING,
+            },
         )
         invite.full_name = "Aibek B."
         invite.role = StaffInvite.Role.STAFF
@@ -203,18 +254,34 @@ class Command(BaseCommand):
             ]
             for i, (member, customer) in enumerate(plan):
                 log = ScanLog.objects.create(
-                    business=biz, staff=member, customer=customer,
-                    action="staff_collect", status=ScanLog.Status.SUCCESS,
+                    business=biz,
+                    staff=member,
+                    customer=customer,
+                    action="staff_collect",
+                    status=ScanLog.Status.SUCCESS,
                 )
                 # created_at is auto_now_add, so backdate it explicitly to give
                 # the demo a spread of "last active" times.
-                ScanLog.objects.filter(pk=log.pk).update(created_at=now - timedelta(hours=i + 1))
+                ScanLog.objects.filter(pk=log.pk).update(
+                    created_at=now - timedelta(hours=i + 1)
+                )
                 scan_count += 1
         return {"members": 3, "invited": 1, "suspended": 1, "scans": scan_count}
 
     # ----- extra demo businesses (campaigns-redesign) ---------------------
-    def _upsert_business(self, *, owner_phone, owner_name, name, glyph, area, description,
-                         latitude, longitude, category="cafe"):
+    def _upsert_business(
+        self,
+        *,
+        owner_phone,
+        owner_name,
+        name,
+        glyph,
+        area,
+        description,
+        latitude,
+        longitude,
+        category="cafe",
+    ):
         """Idempotently upsert an APPROVED+PUBLISHED business under its own owner.
 
         Backs the redesigned customer campaigns page, which needs campaigns spread
@@ -224,7 +291,8 @@ class Command(BaseCommand):
         so a re-run updates in place.
         """
         owner, _ = User.objects.get_or_create(
-            phone=owner_phone, defaults={"role": User.Role.BUSINESS_OWNER})
+            phone=owner_phone, defaults={"role": User.Role.BUSINESS_OWNER}
+        )
         owner.role = User.Role.BUSINESS_OWNER
         owner.name = owner_name
         owner.is_phone_verified = True
@@ -244,11 +312,22 @@ class Command(BaseCommand):
         biz.longitude = longitude
         biz.glyph = glyph
         biz.description = description
-        for attr, member in (("status", "APPROVED"), ("visibility_status", "PUBLISHED"),
-                             ("onboarding_status", "COMPLETED"), ("verification_status", "VERIFIED")):
-            enum = getattr(type(biz), {"status": "Status", "visibility_status": "VisibilityStatus",
-                                       "onboarding_status": "OnboardingStatus",
-                                       "verification_status": "VerificationStatus"}[attr], None)
+        for attr, member in (
+            ("status", "APPROVED"),
+            ("visibility_status", "PUBLISHED"),
+            ("onboarding_status", "COMPLETED"),
+            ("verification_status", "VERIFIED"),
+        ):
+            enum = getattr(
+                type(biz),
+                {
+                    "status": "Status",
+                    "visibility_status": "VisibilityStatus",
+                    "onboarding_status": "OnboardingStatus",
+                    "verification_status": "VerificationStatus",
+                }[attr],
+                None,
+            )
             if enum is not None and hasattr(enum, member):
                 setattr(biz, attr, getattr(enum, member))
         biz.save()
@@ -261,18 +340,39 @@ class Command(BaseCommand):
         mirroring the four brands on the marketing landing. No campaigns attached;
         they exist purely to populate discovery. Idempotent (matched by owner)."""
         specs = [
-            dict(owner_phone="+996700112266", owner_name="Aibek T.", name="Aibek Barber",
-                 glyph="💈", area="Sovetskaya Street", category="barber",
-                 description="Classic cuts and hot-towel shaves on Sovetskaya, Bishkek.",
-                 latitude=Decimal("42.871500"), longitude=Decimal("74.598200")),
-            dict(owner_phone="+996700112277", owner_name="Aizada N.", name="Lush Salon",
-                 glyph="💅", area="Toktogul Street", category="beauty",
-                 description="Hair, nails and beauty treatments on Toktogul, Bishkek.",
-                 latitude=Decimal("42.879100"), longitude=Decimal("74.608700")),
-            dict(owner_phone="+996700112288", owner_name="Tanyrbek K.", name="Tanyr Grill",
-                 glyph="🍖", area="Jibek Jolu Avenue", category="restaurant",
-                 description="Charcoal-grilled kebabs and ribs on Jibek Jolu, Bishkek.",
-                 latitude=Decimal("42.883400"), longitude=Decimal("74.605900")),
+            dict(
+                owner_phone="+996700112266",
+                owner_name="Aibek T.",
+                name="Aibek Barber",
+                glyph="💈",
+                area="Sovetskaya Street",
+                category="barber",
+                description="Classic cuts and hot-towel shaves on Sovetskaya, Bishkek.",
+                latitude=Decimal("42.871500"),
+                longitude=Decimal("74.598200"),
+            ),
+            dict(
+                owner_phone="+996700112277",
+                owner_name="Aizada N.",
+                name="Lush Salon",
+                glyph="💅",
+                area="Toktogul Street",
+                category="beauty",
+                description="Hair, nails and beauty treatments on Toktogul, Bishkek.",
+                latitude=Decimal("42.879100"),
+                longitude=Decimal("74.608700"),
+            ),
+            dict(
+                owner_phone="+996700112288",
+                owner_name="Tanyrbek K.",
+                name="Tanyr Grill",
+                glyph="🍖",
+                area="Jibek Jolu Avenue",
+                category="restaurant",
+                description="Charcoal-grilled kebabs and ribs on Jibek Jolu, Bishkek.",
+                latitude=Decimal("42.883400"),
+                longitude=Decimal("74.605900"),
+            ),
         ]
         for spec in specs:
             self._upsert_business(**spec)
@@ -310,73 +410,172 @@ class Command(BaseCommand):
         # Two more storefronts owned by the same demo owner so campaigns span
         # multiple businesses (redesigned customer page). Idempotent upsert.
         bublik = self._upsert_business(
-            owner_phone="+996700112244", owner_name="Gulnara S.",
-            name="Bublik Bistro", glyph="🥪", area="Erkindik Boulevard",
+            owner_phone="+996700112244",
+            owner_name="Gulnara S.",
+            name="Bublik Bistro",
+            glyph="🥪",
+            area="Erkindik Boulevard",
             description="Fresh bagels and lunch sandwiches on Erkindik, Bishkek.",
-            latitude=Decimal("42.873000"), longitude=Decimal("74.601000"))
+            latitude=Decimal("42.873000"),
+            longitude=Decimal("74.601000"),
+        )
         luna = self._upsert_business(
-            owner_phone="+996700112255", owner_name="Cholpon B.",
-            name="Cafe Luna", glyph="🍰", area="Ala-Too Square",
+            owner_phone="+996700112255",
+            owner_name="Cholpon B.",
+            name="Cafe Luna",
+            glyph="🍰",
+            area="Ala-Too Square",
             description="Desserts and weekend hangouts by Ala-Too Square, Bishkek.",
-            latitude=Decimal("42.876900"), longitude=Decimal("74.603600"))
+            latitude=Decimal("42.876900"),
+            longitude=Decimal("74.603600"),
+        )
 
-        def mk(business, name, desc, ctype, *, mechanic=None, required=1, status=Campaign.Status.ACTIVE,
-               group_size=None, required_spend=None, instagram_handle=None,
-               reward_title="", reward_desc="", max_rewards=200):
-            c, _ = Campaign.objects.get_or_create(business=business, name=name, defaults=dict(
-                created_by=owner, description=desc, campaign_type=ctype,
-                status=status, start_at=now - timedelta(days=2),
-                end_at=now + timedelta(days=5), active_days=[], max_participants=1000,
-                max_rewards=max_rewards, completion_limit_per_customer=Campaign.CompletionLimit.ONCE,
-                auto_join_enabled=True, allow_multiple_campaign_counting=False,
-                instagram_handle=instagram_handle))
+        # Pre-launch clean cut: remove the two legacy loyalty-as-campaign seeds.
+        legacy_campaigns = Campaign.objects.filter(
+            name__in=["Lunch Loyalty Streak", "Coffee Lovers Punch Card"]
+        )
+        CampaignRewardVoucher.objects.filter(campaign__in=legacy_campaigns).delete()
+        legacy_campaigns.delete()
+
+        def mk(
+            business,
+            name,
+            desc,
+            ctype,
+            *,
+            mechanic=None,
+            required=1,
+            status=Campaign.Status.ACTIVE,
+            group_size=None,
+            instagram_handle=None,
+            reward_title="",
+            reward_desc="",
+            max_rewards=200,
+        ):
+            c, _ = Campaign.objects.get_or_create(
+                business=business,
+                name=name,
+                defaults=dict(
+                    created_by=owner,
+                    description=desc,
+                    campaign_type=ctype,
+                    status=status,
+                    start_at=now - timedelta(days=2),
+                    end_at=now + timedelta(days=5),
+                    active_days=[],
+                    max_participants=1000,
+                    max_rewards=max_rewards,
+                    completion_limit_per_customer=Campaign.CompletionLimit.ONCE,
+                    auto_join_enabled=True,
+                    allow_multiple_campaign_counting=False,
+                    instagram_handle=instagram_handle,
+                ),
+            )
             rule_type = (
-                CampaignRule.RuleType.GROUP_CHECKIN if ctype == Campaign.CampaignType.GROUP
+                CampaignRule.RuleType.GROUP_CHECKIN
+                if ctype == Campaign.CampaignType.GROUP
                 else CampaignRule.RuleType.VISIT_COUNT
             )
-            CampaignRule.objects.get_or_create(campaign=c, defaults=dict(
-                rule_type=rule_type, mechanic=mechanic, required_count=required,
-                required_spend=required_spend,
-                minimum_time_between_actions=timedelta(hours=1), max_count_per_day=1,
-                required_group_size=group_size,
-                group_checkin_window_minutes=(15 if group_size else None)))
-            CampaignReward.objects.get_or_create(campaign=c, defaults=dict(
-                reward_type=CampaignReward.RewardType.FREE_ITEM, title=reward_title,
-                description=reward_desc, estimated_cost=Decimal("90.00"), expiry_days_after_unlock=7,
-                max_redemptions=max_rewards, reward_receiver_type=RT.LEADER))
+            CampaignRule.objects.update_or_create(
+                campaign=c,
+                defaults=dict(
+                    rule_type=rule_type,
+                    mechanic=mechanic,
+                    required_count=required,
+                    minimum_time_between_actions=timedelta(hours=1),
+                    max_count_per_day=1,
+                    required_group_size=group_size,
+                    group_checkin_window_minutes=(15 if group_size else None),
+                ),
+            )
+            CampaignReward.objects.get_or_create(
+                campaign=c,
+                defaults=dict(
+                    reward_type=CampaignReward.RewardType.FREE_ITEM,
+                    title=reward_title,
+                    description=reward_desc,
+                    estimated_cost=Decimal("90.00"),
+                    expiry_days_after_unlock=7,
+                    max_redemptions=max_rewards,
+                    reward_receiver_type=RT.LEADER,
+                ),
+            )
             return c
 
         # Spread across all three businesses and all three types. Per the
         # campaigns-restructure plan §7 the demo emits one ACTIVE Social, one DRAFT
         # Group, and one COMPLETED Individual so the Status filter has rows.
-        c1 = mk(biz, "Morning Coffee Challenge",
-                "Visit 3 times this week and get a free croissant.",
-                Campaign.CampaignType.INDIVIDUAL, mechanic=CampaignRule.Mechanic.VISIT, required=3,
-                reward_title="Free croissant", reward_desc="Any croissant up to 150 KGS")
-        c2 = mk(bublik, "Lunch Loyalty Streak", "Collect 5 stamps this month and get 20% off your order.",
-                Campaign.CampaignType.INDIVIDUAL, mechanic=CampaignRule.Mechanic.STAMP, required=5,
-                reward_title="20% off your order", reward_desc="Up to 400 KGS off", max_rewards=500)
+        c1 = mk(
+            biz,
+            "Morning Coffee Challenge",
+            "Visit 3 times this week and get a free croissant.",
+            Campaign.CampaignType.INDIVIDUAL,
+            mechanic=CampaignRule.Mechanic.VISIT,
+            required=3,
+            reward_title="Free croissant",
+            reward_desc="Any croissant up to 150 KGS",
+        )
+        c2 = mk(
+            bublik,
+            "Lunch Challenge",
+            "Visit 5 times this month and get 20% off your order.",
+            Campaign.CampaignType.INDIVIDUAL,
+            mechanic=CampaignRule.Mechanic.VISIT,
+            required=5,
+            reward_title="20% off your order",
+            reward_desc="Up to 400 KGS off",
+            max_rewards=500,
+        )
         # ACTIVE Social campaign (Instagram follow/tag → bonus).
-        mk(luna, "Tag Us for a Treat", "Follow and tag us on Instagram for a free dessert.",
-           Campaign.CampaignType.SOCIAL, instagram_handle="@cafe.luna",
-           reward_title="Free dessert", reward_desc="One shared dessert", max_rewards=120)
+        mk(
+            luna,
+            "Tag Us for a Treat",
+            "Follow and tag us on Instagram for a free dessert.",
+            Campaign.CampaignType.SOCIAL,
+            instagram_handle="@cafe.luna",
+            reward_title="Free dessert",
+            reward_desc="One shared dessert",
+            max_rewards=120,
+        )
         # DRAFT Group campaign (bring friends).
-        mk(luna, "Weekend Friends Deal", "Come with 3 friends and unlock a free dessert for the table.",
-           Campaign.CampaignType.GROUP, status=Campaign.Status.DRAFT, group_size=4,
-           reward_title="Free dessert for the table", reward_desc="One shared dessert", max_rewards=120)
-        # A stamp (loyalty) card at Manas → seeded as COMPLETED below.
-        c4 = mk(biz, "Coffee Lovers Punch Card", "Buy 4 coffees this week and the 5th is free.",
-                Campaign.CampaignType.INDIVIDUAL, mechanic=CampaignRule.Mechanic.STAMP, required=4,
-                reward_title="Free coffee", reward_desc="Any drink up to 200 KGS", max_rewards=300)
+        mk(
+            luna,
+            "Weekend Friends Deal",
+            "Come with 3 friends and unlock a free dessert for the table.",
+            Campaign.CampaignType.GROUP,
+            status=Campaign.Status.DRAFT,
+            group_size=4,
+            reward_title="Free dessert for the table",
+            reward_desc="One shared dessert",
+            max_rewards=120,
+        )
+        c4 = mk(
+            biz,
+            "Coffee Lovers Challenge",
+            "Visit 4 times this week and the 5th is free.",
+            Campaign.CampaignType.INDIVIDUAL,
+            mechanic=CampaignRule.Mechanic.VISIT,
+            required=4,
+            reward_title="Free coffee",
+            reward_desc="Any drink up to 200 KGS",
+            max_rewards=300,
+        )
 
         # Participants. Aibek (customers[0]) is JOINED + in-progress across two
         # different businesses so "From places you go" shows multiple cafés:
         # Morning Coffee 2/3 at Manas, Lunch 3/5 at Bublik. The other customers'
         # data is preserved (Aizada mid Morning + Lunch, Bek mid Lunch).
         def join(camp, cust, progress, status):
-            p, _ = CampaignParticipant.objects.get_or_create(campaign=camp, customer=cust, defaults=dict(
-                status=status, progress_count=progress, joined_at=now - timedelta(days=1),
-                last_progress_at=now - timedelta(hours=3)))
+            p, _ = CampaignParticipant.objects.get_or_create(
+                campaign=camp,
+                customer=cust,
+                defaults=dict(
+                    status=status,
+                    progress_count=progress,
+                    joined_at=now - timedelta(days=1),
+                    last_progress_at=now - timedelta(hours=3),
+                ),
+            )
             p.status = status
             p.progress_count = progress
             if status == CampaignParticipant.Status.COMPLETED:
@@ -396,20 +595,89 @@ class Command(BaseCommand):
 
         vouchers = 0
         reward = CampaignReward.objects.filter(campaign=c4).first()
-        if reward and not CampaignRewardVoucher.objects.filter(
-            campaign=c4, customer=customers[1]
-        ).exists():
+        if (
+            reward
+            and not CampaignRewardVoucher.objects.filter(
+                campaign=c4, customer=customers[1]
+            ).exists()
+        ):
             token = QRCodeToken.objects.create(
-                token=secrets.token_urlsafe(16), type=QRCodeToken.Type.CAMPAIGN_REWARD,
-                business=biz, customer=customers[1], campaign=c4.id,
-                is_active=True, expires_at=now + timedelta(days=7))
+                token=secrets.token_urlsafe(16),
+                type=QRCodeToken.Type.CAMPAIGN_REWARD,
+                business=biz,
+                customer=customers[1],
+                campaign=c4.id,
+                is_active=True,
+                expires_at=now + timedelta(days=7),
+            )
             CampaignRewardVoucher.objects.create(
-                campaign=c4, customer=customers[1], business=biz, reward=reward,
-                voucher_code=_code(), qr_token=token, status=CampaignRewardVoucher.Status.ACTIVE,
-                issued_at=now, expires_at=now + timedelta(days=7))
+                campaign=c4,
+                customer=customers[1],
+                business=biz,
+                reward=reward,
+                voucher_code=_code(),
+                qr_token=token,
+                status=CampaignRewardVoucher.Status.ACTIVE,
+                issued_at=now,
+                expires_at=now + timedelta(days=7),
+            )
             vouchers = 1
 
-        return {"campaigns": 5, "businesses": 3, "participants": 6, "active_voucher": vouchers}
+        # Each campaign-bearing demo business also gets the three durable loyalty forms.
+        for loyalty_business in (biz, bublik, luna):
+            points, _ = LoyaltyProgram.objects.get_or_create(
+                business=loyalty_business,
+                name="5% cashback",
+                defaults={
+                    "created_by": loyalty_business.owner,
+                    "type": LoyaltyProgram.Type.POINTS,
+                    "points_basis": LoyaltyProgram.PointsBasis.SPEND,
+                    "points_per_som": Decimal("0.05"),
+                    "cashback_per_point": Decimal("1.00"),
+                    "min_redeem_points": 10,
+                },
+            )
+            stamp, _ = LoyaltyProgram.objects.get_or_create(
+                business=loyalty_business,
+                name="Buy 6, get 1 free",
+                defaults={
+                    "created_by": loyalty_business.owner,
+                    "type": LoyaltyProgram.Type.STAMP,
+                    "required_count": 6,
+                    "max_banked": 2,
+                    "reward_type": LoyaltyProgram.RewardType.FREE_ITEM,
+                    "reward_title": "Free item",
+                    "item_selection": LoyaltyProgram.ItemSelection.CUSTOMER,
+                },
+            )
+            visit, _ = LoyaltyProgram.objects.get_or_create(
+                business=loyalty_business,
+                name="3 visits, 20% off",
+                defaults={
+                    "created_by": loyalty_business.owner,
+                    "type": LoyaltyProgram.Type.VISIT,
+                    "required_count": 3,
+                    "reward_type": LoyaltyProgram.RewardType.DISCOUNT,
+                    "reward_title": "20% off",
+                },
+            )
+            LoyaltyMembership.objects.get_or_create(
+                program=points, customer=customers[0], defaults={"points_balance": 25}
+            )
+            LoyaltyMembership.objects.get_or_create(
+                program=stamp, customer=customers[0], defaults={"stamps_count": 2}
+            )
+            LoyaltyMembership.objects.get_or_create(
+                program=visit, customer=customers[0], defaults={"visits_count": 1}
+            )
+
+        return {
+            "campaigns": 5,
+            "businesses": 3,
+            "participants": 6,
+            "active_voucher": vouchers,
+            "loyalty_programs": 9,
+        }
 
     # ----- group runtime --------------------------------------------------
     def _seed_groups(self, biz, customers):
@@ -420,27 +688,53 @@ class Command(BaseCommand):
         """
         now = timezone.now()
         campaign, _ = Campaign.objects.get_or_create(
-            business=biz, name="Bring 3 Friends", defaults=dict(
+            business=biz,
+            name="Bring 3 Friends",
+            defaults=dict(
                 description="Come as a group of 4 and unlock a free dessert for the table.",
-                campaign_type=Campaign.CampaignType.GROUP, status=Campaign.Status.ACTIVE,
-                max_rewards=120, completion_limit_per_customer=Campaign.CompletionLimit.ONCE))
+                campaign_type=Campaign.CampaignType.GROUP,
+                status=Campaign.Status.ACTIVE,
+                max_rewards=120,
+                completion_limit_per_customer=Campaign.CompletionLimit.ONCE,
+            ),
+        )
         campaign.status = Campaign.Status.ACTIVE
         campaign.save(update_fields=["status", "updated_at"])
-        CampaignRule.objects.get_or_create(campaign=campaign, defaults=dict(
-            rule_type=CampaignRule.RuleType.GROUP_CHECKIN, required_group_size=4,
-            group_checkin_window_minutes=15))
-        CampaignReward.objects.get_or_create(campaign=campaign, defaults=dict(
-            reward_type=CampaignReward.RewardType.FREE_ITEM, title="Free dessert for the table",
-            description="One shared dessert", reward_receiver_type=CampaignReward.ReceiverType.LEADER))
+        CampaignRule.objects.get_or_create(
+            campaign=campaign,
+            defaults=dict(
+                rule_type=CampaignRule.RuleType.GROUP_CHECKIN,
+                required_group_size=4,
+                group_checkin_window_minutes=15,
+            ),
+        )
+        CampaignReward.objects.get_or_create(
+            campaign=campaign,
+            defaults=dict(
+                reward_type=CampaignReward.RewardType.FREE_ITEM,
+                title="Free dessert for the table",
+                description="One shared dessert",
+                reward_receiver_type=CampaignReward.ReceiverType.LEADER,
+            ),
+        )
 
         group, created = Group.objects.get_or_create(
-            campaign=campaign, group_leader=customers[0], defaults=dict(
-                required_size=4, invite_token=secrets.token_urlsafe(12),
-                expires_at=now + timedelta(days=1), status=Group.Status.FORMING))
+            campaign=campaign,
+            group_leader=customers[0],
+            defaults=dict(
+                required_size=4,
+                invite_token=secrets.token_urlsafe(12),
+                expires_at=now + timedelta(days=1),
+                status=Group.Status.FORMING,
+            ),
+        )
         if created:
             for cust in customers:  # leader + 2 others joined, 1 slot open
-                GroupMember.objects.get_or_create(group=group, customer=cust,
-                                                  defaults={"status": GroupMember.Status.JOINED, "joined_at": now})
+                GroupMember.objects.get_or_create(
+                    group=group,
+                    customer=cust,
+                    defaults={"status": GroupMember.Status.JOINED, "joined_at": now},
+                )
         return {"offer": campaign.name, "deals": 1, "members": group.members.count()}
 
     # ----- report ---------------------------------------------------------
@@ -448,24 +742,37 @@ class Command(BaseCommand):
         w = self.stdout.write
         w("")
         w(self.style.MIGRATE_HEADING("=== Demo accounts ==="))
-        w(f"{'ROLE':<18}{'NAME':<12}{'LOGIN (email / phone)':<40}{'PASSWORD':<14}STATUS")
+        w(
+            f"{'ROLE':<18}{'NAME':<12}{'LOGIN (email / phone)':<40}{'PASSWORD':<14}STATUS"
+        )
         w("-" * 100)
         for r in rows:
-            w(f"{r['role']:<18}{r['name']:<12}{r['login']:<40}{r['password']:<14}{r['status']}")
+            w(
+                f"{r['role']:<18}{r['name']:<12}{r['login']:<40}{r['password']:<14}{r['status']}"
+            )
         w("")
-        w("All logins also accept dev OTP code 000000 (when DEV_LOGIN_OTP=000000). Staff PIN: " + STAFF_PIN)
+        w(
+            "All logins also accept dev OTP code 000000 (when DEV_LOGIN_OTP=000000). Staff PIN: "
+            + STAFF_PIN
+        )
         w("")
         w(self.style.MIGRATE_HEADING("=== Seeded data ==="))
-        w(f"Staff     : {counts['staff']['members']} members "
-          f"({counts['staff']['suspended']} suspended), "
-          f"{counts['staff']['invited']} pending invite(s), "
-          f"{counts['staff']['scans']} scan log(s)")
-        w(f"Campaigns : {counts['campaigns']['campaigns']} campaigns across "
-          f"{counts['campaigns']['businesses']} businesses "
-          f"(Manas Coffee, Bublik Bistro, Cafe Luna), "
-          f"{counts['campaigns']['participants']} participants, "
-          f"{counts['campaigns']['active_voucher']} active reward voucher(s)")
-        w(f"Groups    : offer '{counts['groups']['offer']}', "
-          f"{counts['groups']['deals']} active deal, {counts['groups']['members']} members")
+        w(
+            f"Staff     : {counts['staff']['members']} members "
+            f"({counts['staff']['suspended']} suspended), "
+            f"{counts['staff']['invited']} pending invite(s), "
+            f"{counts['staff']['scans']} scan log(s)"
+        )
+        w(
+            f"Campaigns : {counts['campaigns']['campaigns']} campaigns across "
+            f"{counts['campaigns']['businesses']} businesses "
+            f"(Manas Coffee, Bublik Bistro, Cafe Luna), "
+            f"{counts['campaigns']['participants']} participants, "
+            f"{counts['campaigns']['active_voucher']} active reward voucher(s)"
+        )
+        w(
+            f"Groups    : offer '{counts['groups']['offer']}', "
+            f"{counts['groups']['deals']} active deal, {counts['groups']['members']} members"
+        )
         w("")
         w(self.style.SUCCESS("Demo seed complete."))
