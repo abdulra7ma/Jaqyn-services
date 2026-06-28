@@ -29,6 +29,7 @@ from apps.campaigns.models import (
     CampaignParticipant,
     CampaignReward,
     CampaignRewardVoucher,
+    CampaignRule,
 )
 from apps.qr.models import QRCodeToken, ScanLog
 from apps.qr.services import create_token
@@ -69,10 +70,14 @@ class CampaignRewardService:
         reward's ``expiry_days_after_unlock`` (falling back to
         ``DEFAULT_VOUCHER_EXPIRY_DAYS`` when the reward does not set its own), and
         mints a ``CAMPAIGN_REWARD`` QR token bound to the voucher for staff
-        redemption. Must be called inside an atomic block by the completion path,
-        which holds the ``Campaign`` row lock and has already re-checked the reward
-        cap under that lock (see ``CampaignProgressService.complete_campaign``);
-        this method does not itself re-check the cap.
+        redemption. For an item reward (multi-form-loyalty design §1) the voucher's
+        ``catalog_item`` is set up-front when ``reward.item_selection == fixed`` (the
+        business preset the item); when ``customer`` it is left null until the
+        customer picks one via :meth:`select_voucher_item` at present time. Must be
+        called inside an atomic block by the completion path, which holds the
+        ``Campaign`` row lock and has already re-checked the reward cap under that
+        lock (see ``CampaignProgressService.complete_campaign``); this method does
+        not itself re-check the cap.
         """
         now = now or timezone.now()
         code = _generate_voucher_code()
@@ -81,6 +86,14 @@ class CampaignRewardService:
 
         expiry_days = reward.expiry_days_after_unlock or DEFAULT_VOUCHER_EXPIRY_DAYS
         expires_at = now + timedelta(days=expiry_days)
+
+        # A fixed-item reward stamps the preset CatalogItem onto the voucher now;
+        # a customer-choice reward leaves it null until the customer selects.
+        catalog_item = (
+            reward.catalog_item
+            if reward.item_selection == CampaignReward.ItemSelection.FIXED
+            else None
+        )
 
         voucher = CampaignRewardVoucher.objects.create(
             campaign=campaign,
@@ -92,6 +105,7 @@ class CampaignRewardService:
             status=CampaignRewardVoucher.Status.ACTIVE,
             issued_at=now,
             expires_at=expires_at,
+            catalog_item=catalog_item,
         )
         token = create_token(
             QRCodeToken.Type.CAMPAIGN_REWARD,
@@ -111,6 +125,176 @@ class CampaignRewardService:
             voucher_id=str(voucher.id),
         )
         return voucher
+
+    @classmethod
+    def redeem_points(
+        cls, campaign: Campaign, customer, points: int, now=None
+    ) -> CampaignRewardVoucher:
+        """Redeem points from a POINTS campaign for a cashback voucher (§1).
+
+        Validates that ``campaign`` is a POINTS-mechanic INDIVIDUAL campaign with a
+        cashback reward (``CAMPAIGN_NOT_POINTS`` otherwise), that ``points`` is a
+        positive integer (``VALIDATION_ERROR``), and that the customer holds at
+        least that many points (``INSUFFICIENT_POINTS``). Runs in one atomic block:
+        it ``select_for_update``-locks the participant row, re-checks the balance
+        *under the lock* (so two concurrent redemptions cannot both spend the same
+        points), deducts ``points`` from ``points_balance``, and mints one ACTIVE
+        ``CASHBACK`` :class:`CampaignRewardVoucher` whose ``cashback_amount`` is
+        ``points × rule.cashback_per_point`` (Decimal money, never float). The
+        voucher carries a ``CAMPAIGN_REWARD`` QR token so staff redeem it as money
+        off, exactly like any other campaign voucher. Schedules the
+        reward-unlocked notification via ``transaction.on_commit`` (never inside the
+        atomic block). Returns the minted voucher.
+        """
+        now = now or timezone.now()
+        rule = getattr(campaign, "rule", None)
+        reward = getattr(campaign, "reward", None)
+        if (
+            rule is None
+            or rule.mechanic != CampaignRule.Mechanic.POINTS
+            or rule.cashback_per_point is None
+            or reward is None
+        ):
+            raise JaqynAPIException(
+                "CAMPAIGN_NOT_POINTS", status_code=status.HTTP_409_CONFLICT
+            )
+        if not isinstance(points, int) or points <= 0:
+            raise JaqynAPIException(
+                "VALIDATION_ERROR",
+                "Points to redeem must be a positive whole number",
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            participant = (
+                CampaignParticipant.objects.select_for_update()
+                .filter(campaign=campaign, customer=customer)
+                .first()
+            )
+            if participant is None or participant.points_balance < points:
+                raise JaqynAPIException(
+                    "INSUFFICIENT_POINTS", status_code=status.HTTP_409_CONFLICT
+                )
+            participant.points_balance -= points
+            participant.save(update_fields=["points_balance", "updated_at"])
+
+            cashback_amount = rule.cashback_per_point * points
+
+            code = _generate_voucher_code()
+            while CampaignRewardVoucher.objects.filter(voucher_code=code).exists():
+                code = _generate_voucher_code()
+            expiry_days = (
+                reward.expiry_days_after_unlock or DEFAULT_VOUCHER_EXPIRY_DAYS
+            )
+            expires_at = now + timedelta(days=expiry_days)
+            voucher = CampaignRewardVoucher.objects.create(
+                campaign=campaign,
+                customer=customer,
+                business=campaign.business,
+                reward=reward,
+                participant=participant,
+                voucher_code=code,
+                status=CampaignRewardVoucher.Status.ACTIVE,
+                issued_at=now,
+                expires_at=expires_at,
+                cashback_amount=cashback_amount,
+            )
+            token = create_token(
+                QRCodeToken.Type.CAMPAIGN_REWARD,
+                business=campaign.business,
+                customer=customer,
+                campaign=campaign.id,
+                expires_at=expires_at,
+            )
+            voucher.qr_token = token
+            voucher.save(update_fields=["qr_token", "updated_at"])
+
+            customer_id = str(customer.id)
+            voucher_id = str(voucher.id)
+            transaction.on_commit(
+                lambda: _schedule_reward_notification(customer_id, voucher_id)
+            )
+
+        emit_event(
+            "campaign_points_redeemed",
+            business_id=str(campaign.business_id),
+            customer_id=str(customer.id),
+            campaign_id=str(campaign.id),
+            voucher_id=str(voucher.id),
+            points=points,
+        )
+        return voucher
+
+    @classmethod
+    def select_voucher_item(
+        cls, voucher_id, customer, catalog_item_id
+    ) -> CampaignRewardVoucher:
+        """Pick the CatalogItem for a customer-choice item voucher (§1).
+
+        Only valid for the voucher's owner, an unredeemed (ACTIVE) voucher whose
+        reward has ``item_selection == customer`` (``VOUCHER_ITEM_NOT_SELECTABLE``
+        otherwise — a fixed-item, cashback, or non-item voucher cannot be re-chosen).
+        Validates that the chosen ``catalog_item_id`` is an active CatalogItem of the
+        campaign's *own* business (``CATALOG_ITEM_NOT_FOUND`` otherwise — this is the
+        cross-business guard so a customer cannot attach another business's item).
+        Sets ``voucher.catalog_item`` under a row lock and returns the voucher.
+        Raises ``VOUCHER_NOT_FOUND`` when the voucher is not the customer's.
+        """
+        from apps.businesses.models import CatalogItem
+
+        with transaction.atomic():
+            try:
+                voucher = (
+                    CampaignRewardVoucher.objects.select_for_update()
+                    .select_related("reward", "business", "campaign")
+                    .get(id=voucher_id, customer=customer)
+                )
+            except CampaignRewardVoucher.DoesNotExist:
+                raise JaqynAPIException(
+                    "VOUCHER_NOT_FOUND", status_code=status.HTTP_404_NOT_FOUND
+                )
+            if voucher.status != CampaignRewardVoucher.Status.ACTIVE:
+                raise JaqynAPIException(
+                    "VOUCHER_NOT_ACTIVE", status_code=status.HTTP_400_BAD_REQUEST
+                )
+            reward = voucher.reward
+            if (
+                reward is None
+                or reward.item_selection != CampaignReward.ItemSelection.CUSTOMER
+            ):
+                raise JaqynAPIException(
+                    "VOUCHER_ITEM_NOT_SELECTABLE",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+            item = (
+                CatalogItem.objects.filter(
+                    id=catalog_item_id,
+                    business_id=voucher.business_id,
+                    is_active=True,
+                ).first()
+            )
+            if item is None:
+                raise JaqynAPIException(
+                    "CATALOG_ITEM_NOT_FOUND", status_code=status.HTTP_404_NOT_FOUND
+                )
+            voucher.catalog_item = item
+            voucher.save(update_fields=["catalog_item", "updated_at"])
+        return voucher
+
+    @staticmethod
+    def eligible_catalog_items(campaign: Campaign):
+        """Return the active CatalogItems a customer may pick for ``campaign`` (§1).
+
+        The selectable set is the campaign's business's active catalog, newest
+        sort-order first (CatalogItem's own ``Meta.ordering``). Returned as a
+        queryset so the view paginates it; no item from another business is ever
+        included (the cross-business guard is enforced again at selection).
+        """
+        from apps.businesses.models import CatalogItem
+
+        return CatalogItem.objects.filter(
+            business_id=campaign.business_id, is_active=True
+        )
 
     @staticmethod
     def _voucher_from_code_or_token(
@@ -323,7 +507,7 @@ class CampaignRewardService:
         """
         return (
             CampaignRewardVoucher.objects.filter(customer=customer)
-            .select_related("campaign", "business", "reward", "qr_token")
+            .select_related("campaign", "business", "reward", "qr_token", "catalog_item")
             .order_by("-issued_at", "-created_at")
         )
 
@@ -338,7 +522,7 @@ class CampaignRewardService:
         try:
             return (
                 CampaignRewardVoucher.objects.select_related(
-                    "campaign", "business", "reward", "qr_token"
+                    "campaign", "business", "reward", "qr_token", "catalog_item"
                 ).get(id=voucher_id, customer=customer)
             )
         except CampaignRewardVoucher.DoesNotExist:
@@ -391,7 +575,7 @@ class CampaignRewardService:
         """
         return (
             CampaignRewardVoucher.objects.filter(campaign=campaign)
-            .select_related("customer", "reward", "business", "qr_token", "redeemed_by_staff")
+            .select_related("customer", "reward", "business", "qr_token", "redeemed_by_staff", "catalog_item")
             .order_by("-issued_at", "-created_at")
         )
 
@@ -514,3 +698,17 @@ class CampaignRewardService:
             voucher_id=str(voucher.id),
         )
         return voucher
+
+
+def _schedule_reward_notification(customer_id: str, voucher_id: str) -> None:
+    """Enqueue the reward-unlocked notification task (on_commit callback).
+
+    A cashback voucher minted by :meth:`CampaignRewardService.redeem_points`
+    reuses the same reward-unlocked notification as a completion voucher, so the
+    customer is told their reward is ready. Imported lazily and only delayed from
+    an ``on_commit`` callback (never inside the atomic block) — the
+    Celery-with-Postgres rule.
+    """
+    from apps.campaigns.tasks import notify_reward_unlocked
+
+    notify_reward_unlocked.delay(customer_id, voucher_id)

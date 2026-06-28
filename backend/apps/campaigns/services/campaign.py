@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from dataclasses import field as dc_field
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from django.db import models, transaction
 from django.utils import timezone
@@ -28,6 +29,31 @@ from apps.campaigns.models import (
 )
 from core.exceptions import JaqynAPIException
 from core.logging import emit_event
+
+
+@dataclass(frozen=True)
+class LoyaltyProgramView:
+    """One of a business's loyalty programs + the requesting customer's state (§2).
+
+    Backs the business-page "Loyalty" section (multi-form-loyalty design §2). Each
+    row is one active INDIVIDUAL campaign of the business with this customer's
+    progress on it: ``mechanic`` (visit/stamp/spend/points) selects how the FE
+    renders the row; ``progress_count``/``target`` drive the X/Y bar for
+    visit/stamp/spend; ``points_balance`` carries the redeemable balance for a
+    POINTS program (0 otherwise); ``reward_summary`` is the reward title for the
+    line; ``joined`` is whether the customer has a participant row. ``cashback_per_point``
+    is surfaced for POINTS programs so the FE can show the conversion (null otherwise).
+    """
+
+    campaign_id: str
+    name: str
+    mechanic: str
+    reward_summary: str
+    joined: bool
+    progress_count: int
+    target: int
+    points_balance: int
+    cashback_per_point: Decimal | None
 
 
 @dataclass(frozen=True)
@@ -177,8 +203,9 @@ class CampaignService:
         strictly after ``start_at``, plus ``max_rewards >= 1`` when set. The rule
         requirement is type-aware (campaigns-restructure design §3):
 
-        * INDIVIDUAL — a rule with ``required_count >= 1`` for VISIT/STAMP, or a
-          positive ``required_spend`` for SPEND.
+        * INDIVIDUAL — a rule with ``required_count >= 1`` for VISIT/STAMP, a
+          positive ``required_spend`` for SPEND, or a positive
+          ``cashback_per_point`` (the conversion rate) for POINTS.
         * GROUP — a rule with ``required_group_size >= 2`` (a group needs members).
         * SOCIAL — no completion-rule fields (completion is staff-verified proof);
           only the reward is required.
@@ -206,6 +233,16 @@ class CampaignService:
                     raise JaqynAPIException(
                         "CAMPAIGN_NOT_PUBLISHABLE",
                         "A positive required spend is needed",
+                        status.HTTP_409_CONFLICT,
+                    )
+            elif mechanic == CampaignRule.Mechanic.POINTS:
+                # A POINTS program completes nothing on a target — it accrues a
+                # balance — so the publish gate instead requires a positive
+                # cashback conversion rate (and, by basis, the matching earn rate).
+                if not rule.cashback_per_point or rule.cashback_per_point <= 0:
+                    raise JaqynAPIException(
+                        "CAMPAIGN_NOT_PUBLISHABLE",
+                        "A positive cashback-per-point rate is needed",
                         status.HTTP_409_CONFLICT,
                     )
             elif rule.required_count < 1:
@@ -557,6 +594,90 @@ class CampaignService:
             )
         discover = [c for c in discover_qs if c.id not in followed_ids]
         return followed, discover
+
+    @staticmethod
+    def loyalty_programs_for_customer(
+        business: Business, customer, now: datetime | None = None
+    ) -> list[LoyaltyProgramView]:
+        """Return a business's active loyalty programs + this customer's state (§2).
+
+        Backs the business-page "Loyalty" section. Lists every ACTIVE INDIVIDUAL
+        campaign of ``business`` whose run window is open at ``now``, each as a
+        :class:`LoyaltyProgramView` carrying the requesting ``customer``'s progress.
+        Runs exactly two bounded queries regardless of program count — the campaigns
+        (with ``rule``/``reward`` select-related) and the customer's participant rows
+        across those campaigns — so the section is N+1-free. For a POINTS program the
+        view reports ``points_balance`` (target 0); for visit/stamp it reports
+        ``progress_count``/``required_count``; for spend it reports the integer
+        ``current_spend``/``required_spend``. ``joined`` is whether the customer has a
+        participant row. Newest campaign first.
+        """
+        now = now or timezone.now()
+        campaigns = list(
+            Campaign.objects.filter(
+                business=business,
+                status=Campaign.Status.ACTIVE,
+                campaign_type=Campaign.CampaignType.INDIVIDUAL,
+            )
+            .filter(models.Q(start_at__isnull=True) | models.Q(start_at__lte=now))
+            .filter(models.Q(end_at__isnull=True) | models.Q(end_at__gt=now))
+            .select_related("rule", "reward")
+            .order_by("-created_at")
+        )
+        if not campaigns:
+            return []
+        participants = {
+            p.campaign_id: p
+            for p in CampaignParticipant.objects.filter(
+                customer=customer,
+                campaign_id__in=[c.id for c in campaigns],
+            )
+        }
+
+        views: list[LoyaltyProgramView] = []
+        for campaign in campaigns:
+            rule = getattr(campaign, "rule", None)
+            reward = getattr(campaign, "reward", None)
+            mechanic = (
+                rule.mechanic
+                if rule is not None and rule.mechanic
+                else CampaignRule.Mechanic.VISIT
+            )
+            participant = participants.get(campaign.id)
+            joined = participant is not None
+            points_balance = participant.points_balance if joined else 0
+            cashback_per_point = (
+                rule.cashback_per_point
+                if rule is not None and mechanic == CampaignRule.Mechanic.POINTS
+                else None
+            )
+            if mechanic == CampaignRule.Mechanic.POINTS:
+                progress_count = 0
+                target = 0
+            elif mechanic == CampaignRule.Mechanic.SPEND:
+                progress_count = int(participant.current_spend) if joined else 0
+                target = (
+                    int(rule.required_spend)
+                    if rule is not None and rule.required_spend is not None
+                    else 0
+                )
+            else:
+                progress_count = participant.progress_count if joined else 0
+                target = rule.required_count if rule is not None else 1
+            views.append(
+                LoyaltyProgramView(
+                    campaign_id=str(campaign.id),
+                    name=campaign.name,
+                    mechanic=mechanic,
+                    reward_summary=reward.title if reward is not None else "",
+                    joined=joined,
+                    progress_count=progress_count,
+                    target=target,
+                    points_balance=points_balance,
+                    cashback_per_point=cashback_per_point,
+                )
+            )
+        return views
 
     @staticmethod
     def progress_context_for(customer, campaigns) -> CustomerProgressContext:

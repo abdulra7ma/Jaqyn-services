@@ -72,6 +72,10 @@ def make_campaign(
     required_spend=None,
     min_spend=None,
     max_banked: int | None = None,
+    points_basis: str | None = None,
+    points_per_visit: int | None = None,
+    points_per_som=None,
+    cashback_per_point=None,
     required_group_size: int | None = None,
     group_checkin_window_minutes: int | None = None,
     instagram_handle: str | None = None,
@@ -85,6 +89,9 @@ def make_campaign(
     start_at=None,
     end_at=None,
     with_reward: bool = True,
+    reward_type: str = CampaignReward.RewardType.FREE_ITEM,
+    item_selection: str | None = None,
+    catalog_item=None,
     expiry_days: int | None = 7,
     estimated_cost: str | None = "3.50",
 ) -> Campaign:
@@ -126,6 +133,10 @@ def make_campaign(
         required_spend=required_spend,
         min_spend=min_spend,
         max_banked=max_banked,
+        points_basis=points_basis,
+        points_per_visit=points_per_visit,
+        points_per_som=points_per_som,
+        cashback_per_point=cashback_per_point,
         required_group_size=required_group_size,
         group_checkin_window_minutes=group_checkin_window_minutes,
         minimum_time_between_actions=minimum_gap,
@@ -136,14 +147,27 @@ def make_campaign(
 
         CampaignReward.objects.create(
             campaign=campaign,
-            reward_type=CampaignReward.RewardType.FREE_ITEM,
+            reward_type=reward_type,
             title="Free coffee",
             description="On the house",
             estimated_cost=Decimal(estimated_cost) if estimated_cost else None,
             expiry_days_after_unlock=expiry_days,
+            item_selection=item_selection,
+            catalog_item=catalog_item,
         )
     # Re-fetch with the relations so getattr(campaign, "rule"/"reward") is fresh.
     return Campaign.objects.select_related("rule", "reward").get(id=campaign.id)
+
+
+def make_catalog_item(
+    business: Business, *, name: str = "Latte", price: str = "150 c"
+):
+    """Build an active CatalogItem on a business (for item-reward tests)."""
+    from apps.businesses.models import CatalogItem
+
+    return CatalogItem.objects.create(
+        business=business, module="menu", name=name, price=price, is_active=True
+    )
 
 
 def now_utc():

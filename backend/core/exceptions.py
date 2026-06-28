@@ -41,6 +41,11 @@ ERROR_MESSAGES = {
     "GROUP_SESSION_NOT_FOUND": "The group session does not exist",
     "GROUP_SESSION_INVALID_STATE": "The group session is not in a valid state",
     "GROUP_SESSION_FULL": "The group session is already full",
+    # --- Multi-form loyalty (points → cashback, item rewards) ---
+    "INSUFFICIENT_POINTS": "You do not have enough points to redeem",
+    "CAMPAIGN_NOT_POINTS": "This campaign does not award points",
+    "VOUCHER_ITEM_NOT_SELECTABLE": "This voucher does not allow choosing an item",
+    "CATALOG_ITEM_NOT_FOUND": "The selected item does not exist for this business",
 }
 
 
