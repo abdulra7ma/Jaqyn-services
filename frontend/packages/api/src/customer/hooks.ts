@@ -17,6 +17,8 @@ export const qk = {
   nearby: (params?: NearbyParams) => ["nearby", params ?? {}] as const,
   categories: ["categories"] as const,
   business: (id: string) => ["business", id] as const,
+  // The business's active loyalty programs + viewer state (multi-form-loyalty §2).
+  businessLoyalty: (id: string) => ["business-loyalty", id] as const,
   qr: (token: string) => ["qr", token] as const,
   campaigns: (params?: CampaignListParams) => ["campaigns", params ?? {}] as const,
   // The {followed, discover} feed, keyed by the discover filter so each filter
@@ -25,6 +27,8 @@ export const qk = {
   campaign: (id: string) => ["campaigns", id] as const,
   campaignWallet: ["campaign-wallet"] as const,
   campaignVoucher: (id: string) => ["campaign-vouchers", id] as const,
+  // The pick-from-menu catalog for a campaign's item reward (multi-form-loyalty §3).
+  campaignCatalog: (id: string) => ["campaign-catalog", id] as const,
   groupSession: (id: string) => ["group-sessions", id] as const,
   myGroups: ["my-groups-list"] as const,
 };
@@ -54,6 +58,15 @@ export const useCategories = () =>
 
 export const useBusiness = (id: string) =>
   useQuery({ queryKey: qk.business(id), queryFn: () => customerApi.getBusiness(id), enabled: !!id });
+
+// The business's loyalty programs + the viewer's progress/points on each
+// (multi-form-loyalty slice 2). Backs the business-page "Loyalty" section.
+export const useBusinessLoyalty = (id: string) =>
+  useQuery({
+    queryKey: qk.businessLoyalty(id),
+    queryFn: () => customerApi.listBusinessLoyalty(id),
+    enabled: !!id,
+  });
 
 export const useQrResolve = (token: string) =>
   useQuery({ queryKey: qk.qr(token), queryFn: () => customerApi.resolveQr(token), enabled: !!token });
@@ -108,6 +121,15 @@ export const useCampaignVoucher = (id: string, opts?: { refetchInterval?: number
     refetchInterval: opts?.refetchInterval,
   });
 
+// The catalog items a customer can pick for an item voucher (multi-form-loyalty
+// slice 3). Only fetched when a sheet asks for it (enabled flag).
+export const useCampaignCatalog = (campaignId: string, enabled = true) =>
+  useQuery({
+    queryKey: qk.campaignCatalog(campaignId),
+    queryFn: () => customerApi.campaignCatalog(campaignId),
+    enabled: enabled && !!campaignId,
+  });
+
 // Poll the live group session so demo-fill / real joins reflect without a manual
 // refetch (mirrors the detail page's live polling).
 export const useGroupSession = (id: string, opts?: { refetchInterval?: number }) =>
@@ -146,6 +168,39 @@ export const usePresentVoucher = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => customerApi.presentCampaignVoucher(id),
+    onSuccess: (voucher) => {
+      qc.setQueryData(qk.campaignVoucher(voucher.id), voucher);
+      qc.invalidateQueries({ queryKey: qk.campaignWallet });
+    },
+  });
+};
+
+// Redeem points → cashback voucher (multi-form-loyalty slice 3). On success the
+// campaign's points balance changed and a new voucher exists, so invalidate the
+// wallet, the campaign detail, the feed (in-progress cards), and every
+// business-loyalty list (any could surface this campaign's balance).
+export const useRedeemPoints = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ campaignId, points }: { campaignId: string; points: number }) =>
+      customerApi.redeemPoints(campaignId, points),
+    onSuccess: (voucher, { campaignId }) => {
+      qc.setQueryData(qk.campaignVoucher(voucher.id), voucher);
+      qc.invalidateQueries({ queryKey: qk.campaignWallet });
+      qc.invalidateQueries({ queryKey: qk.campaign(campaignId) });
+      qc.invalidateQueries({ queryKey: ["campaign-feed"] });
+      qc.invalidateQueries({ queryKey: ["business-loyalty"] });
+    },
+  });
+};
+
+// Resolve a customer-choice item voucher (multi-form-loyalty slice 3). The
+// voucher now carries its catalog_item, so update its cache + the wallet.
+export const useSelectVoucherItem = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ voucherId, catalogItemId }: { voucherId: string; catalogItemId: string }) =>
+      customerApi.selectVoucherItem(voucherId, catalogItemId),
     onSuccess: (voucher) => {
       qc.setQueryData(qk.campaignVoucher(voucher.id), voucher);
       qc.invalidateQueries({ queryKey: qk.campaignWallet });

@@ -1,16 +1,22 @@
 "use client";
 
-import type {
-  Campaign,
-  CampaignStatus,
-  CampaignType,
-  CampaignVoucher,
-  CampaignVoucherStatus,
-  GroupSessionMember,
+import {
+  useCampaignCatalog,
+  useRedeemPoints,
+  useSelectVoucherItem,
+  type BusinessLoyaltyProgram,
+  type Campaign,
+  type CampaignCatalogItem,
+  type CampaignStatus,
+  type CampaignType,
+  type CampaignVoucher,
+  type CampaignVoucherStatus,
+  type GroupSessionMember,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Badge, cn } from "@jaqyn/ui";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import QRCode from "react-qr-code";
 
@@ -286,6 +292,156 @@ export function CampaignCarouselCard({ campaign }: { campaign: Campaign }) {
   );
 }
 
+/**
+ * One business loyalty program row for the business-page "Loyalty" section
+ * (multi-form-loyalty slice 2). POINTS programs show a balance + cashback hint;
+ * visit/stamp/spend programs show an X/Y progress bar + the reward line. The whole
+ * row links into the campaign detail (join / continue / redeem). Tokens-only.
+ */
+export function LoyaltyProgramRow({ program }: { program: BusinessLoyaltyProgram }) {
+  const t = useT();
+  const isPoints = program.mechanic === "points";
+  // Non-points programs render a progress bar against their target.
+  const target = program.target > 0 ? program.target : 0;
+  const pct =
+    target > 0 ? Math.min(100, Math.round((program.progress_count / target) * 100)) : 0;
+  // POINTS: show "Redeem cashback" only once there is a balance to spend.
+  const canRedeem = isPoints && program.points_balance > 0;
+  const cta = canRedeem
+    ? t("cmp.loyalty.redeem")
+    : program.joined
+      ? t("cmp.card.continue")
+      : t("cmp.card.join");
+
+  return (
+    <Link
+      href={`/campaigns/${program.campaign_id}`}
+      className="block rounded-2xl border border-line bg-card p-4 shadow-card transition active:scale-[.99]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-[15px] font-bold text-ink">{program.name}</p>
+          {program.reward_summary && (
+            <p className="mt-0.5 truncate text-[12.5px] font-semibold text-brand">
+              {program.reward_summary}
+            </p>
+          )}
+        </div>
+        {isPoints && (
+          <span className="flex-none rounded-pill bg-brand-muted px-2.5 py-1 text-[12.5px] font-bold text-brand">
+            {t("cmp.loyalty.points").replace("{count}", String(program.points_balance))}
+          </span>
+        )}
+      </div>
+
+      {isPoints ? (
+        <p className="mt-2 text-[12.5px] text-subtle">
+          {canRedeem && program.cashback_per_point
+            ? t("cmp.loyalty.cashbackHint").replace("{rate}", program.cashback_per_point)
+            : t("cmp.loyalty.pointsHint")}
+        </p>
+      ) : (
+        target > 0 && (
+          <div className="mt-3">
+            <div className="h-2 overflow-hidden rounded-pill bg-board">
+              <div
+                className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[12px] font-semibold text-subtle">
+              {t("cmp.card.progress")
+                .replace("{count}", String(program.progress_count))
+                .replace("{total}", String(target))}
+            </p>
+          </div>
+        )
+      )}
+
+      <div className="mt-3 flex items-center justify-end border-t border-line pt-2.5">
+        <span className="text-[13px] font-bold text-brand">{cta} ›</span>
+      </div>
+    </Link>
+  );
+}
+
+/**
+ * Points balance + "Redeem cashback" surface for a POINTS campaign detail
+ * (multi-form-loyalty slice 3). The customer enters how many points to redeem
+ * (defaulting to the full balance) and sees the resulting cashback at the
+ * campaign's rate; redeeming mints a cashback voucher and routes to the wallet.
+ * Only meaningful for an individual `points` campaign — callers gate on that.
+ */
+export function PointsRedeemCard({ campaign }: { campaign: Campaign }) {
+  const t = useT();
+  const router = useRouter();
+  const redeem = useRedeemPoints();
+  const balance = campaign.my_progress?.points_balance ?? 0;
+  const rate = campaign.rule.cashback_per_point;
+  const [amount, setAmount] = useState(String(balance));
+
+  const requested = Number.parseInt(amount, 10);
+  const valid = Number.isFinite(requested) && requested > 0 && requested <= balance;
+  // Estimated cashback at the campaign's som-per-point rate (display only; the
+  // backend computes the authoritative amount).
+  const estimate =
+    valid && rate ? (requested * Number.parseFloat(rate)).toFixed(2).replace(/\.00$/, "") : null;
+
+  const onRedeem = () => {
+    if (!valid) return;
+    redeem.mutate(
+      { campaignId: campaign.id, points: requested },
+      {
+        onSuccess: (voucher) => router.push(`/campaign-wallet/${voucher.id}`),
+      },
+    );
+  };
+
+  return (
+    <div className="mt-4 rounded-[18px] border border-line bg-card p-4">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[13px] font-semibold text-subtle">{t("cmp.loyalty.balance")}</span>
+        <span className="font-display text-[20px] font-extrabold text-ink">
+          {t("cmp.loyalty.points").replace("{count}", String(balance))}
+        </span>
+      </div>
+      {balance > 0 ? (
+        <>
+          <label className="mt-3 block">
+            <span className="text-[12px] font-bold text-subtle">{t("cmp.loyalty.redeemAmount")}</span>
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              inputMode="numeric"
+              max={balance}
+              min={1}
+              className="mt-1.5 w-full rounded-xl border-[1.5px] border-line bg-card px-3.5 py-3 text-sm font-semibold text-ink outline-none focus:border-brand"
+            />
+          </label>
+          {estimate && (
+            <p className="mt-2 text-[12.5px] font-semibold text-sage">
+              {t("cmp.loyalty.cashbackEstimate").replace("{amount}", estimate)}
+            </p>
+          )}
+          {redeem.isError && (
+            <p className="mt-2 text-[12.5px] font-semibold text-danger">{t("cmp.loyalty.redeemError")}</p>
+          )}
+          <button
+            type="button"
+            onClick={onRedeem}
+            disabled={!valid || redeem.isPending}
+            className="mt-3 w-full rounded-xl bg-brand-gradient py-3.5 text-[14.5px] font-bold text-brand-fg shadow-glow transition active:scale-[.99] disabled:opacity-60"
+          >
+            {redeem.isPending ? t("cmp.loyalty.redeeming") : t("cmp.loyalty.redeem")}
+          </button>
+        </>
+      ) : (
+        <p className="mt-2 text-[12.5px] text-subtle">{t("cmp.loyalty.pointsHint")}</p>
+      )}
+    </div>
+  );
+}
+
 /** Active-voucher card in the wallet (design `activeVouchers`). */
 export function VoucherCard({ voucher }: { voucher: CampaignVoucher }) {
   const t = useT();
@@ -298,6 +454,15 @@ export function VoucherCard({ voucher }: { voucher: CampaignVoucher }) {
           <p className="mt-0.5 font-display text-lg font-extrabold leading-tight tracking-tight text-ink">
             {voucher.reward_title}
           </p>
+          {/* Cashback amount / chosen item line (multi-form-loyalty slice 3). */}
+          {voucher.cashback_amount && (
+            <p className="mt-0.5 text-[13px] font-bold text-sage">
+              {t("cmp.loyalty.cashbackAmount").replace("{amount}", voucher.cashback_amount)}
+            </p>
+          )}
+          {voucher.catalog_item && (
+            <p className="mt-0.5 text-[13px] font-semibold text-brand">{voucher.catalog_item.name}</p>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="text-[11.5px] text-subtle">{voucher.campaign.name}</span>
             {voucher.expiring_soon ? (
@@ -382,6 +547,80 @@ export function VoucherQrBlock({
       </div>
       <p className="mt-3.5 font-mono text-[15px] font-bold tracking-[0.12em] text-ink">{code}</p>
     </div>
+  );
+}
+
+/**
+ * "Choose your item" sheet for a customer-choice item voucher (multi-form-loyalty
+ * slice 3). Lists the campaign's eligible CatalogItems and, on tap, resolves the
+ * voucher via select-item. Shown only while the voucher has no catalog_item yet.
+ */
+export function VoucherItemSheet({
+  campaignId,
+  voucherId,
+  onSelected,
+}: {
+  campaignId: string;
+  voucherId: string;
+  onSelected?: (voucher: CampaignVoucher) => void;
+}) {
+  const t = useT();
+  const catalog = useCampaignCatalog(campaignId);
+  const select = useSelectVoucherItem();
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const onPick = (item: CampaignCatalogItem) => {
+    setPendingId(item.id);
+    select.mutate(
+      { voucherId, catalogItemId: item.id },
+      {
+        onSuccess: (voucher) => onSelected?.(voucher),
+        onSettled: () => setPendingId(null),
+      },
+    );
+  };
+
+  return (
+    <section aria-labelledby="choose-item-heading" className="mt-2">
+      <h2
+        id="choose-item-heading"
+        className="font-display text-base font-bold text-ink"
+      >
+        {t("cmp.voucher.chooseItem")}
+      </h2>
+      <p className="mt-1 text-[13px] text-subtle">{t("cmp.voucher.chooseItemHint")}</p>
+
+      {catalog.isLoading && (
+        <p className="mt-4 text-sm text-subtle">{t("common.loading")}</p>
+      )}
+      {catalog.isError && (
+        <p className="mt-4 text-sm text-danger">{t("cmp.voucher.chooseItemError")}</p>
+      )}
+      {catalog.data && catalog.data.length === 0 && (
+        <p className="mt-4 text-sm text-subtle">{t("cmp.voucher.chooseItemEmpty")}</p>
+      )}
+
+      <ul className="mt-4 flex flex-col gap-2.5">
+        {(catalog.data ?? []).map((item) => (
+          <li key={item.id}>
+            <button
+              type="button"
+              onClick={() => onPick(item)}
+              disabled={select.isPending}
+              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-line bg-card p-3.5 text-left shadow-card transition active:scale-[.99] disabled:opacity-60"
+            >
+              <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{item.name}</span>
+              {item.price && (
+                <span className="flex-none text-sm font-bold text-brand">{item.price}</span>
+              )}
+              <span className="flex-none text-[13px] font-bold text-brand">
+                {pendingId === item.id ? t("cmp.voucher.choosing") : t("cmp.voucher.choose")}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

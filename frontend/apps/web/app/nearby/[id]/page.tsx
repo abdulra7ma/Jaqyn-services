@@ -1,6 +1,6 @@
 "use client";
 
-import { useBusiness } from "@jaqyn/api";
+import { useBusiness, useBusinessLoyalty } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Badge, Card } from "@jaqyn/ui";
 import Link from "next/link";
@@ -46,6 +46,7 @@ function GalleryPhoto({ photo }: { photo: { id: string; image_url: string; capti
   );
 }
 import { CustomerShell } from "../../_components/CustomerShell";
+import { LoyaltyProgramRow } from "../../_components/campaigns";
 import { QueryBoundary } from "../../_components/QueryBoundary";
 import { ListGroup, ListRow } from "../../_components/kit";
 import { isOpenNow } from "../../_lib/hours";
@@ -54,6 +55,8 @@ export default function BusinessProfilePage() {
   const t = useT();
   const { id } = useParams<{ id: string }>();
   const business = useBusiness(id);
+  // The business's active loyalty programs + the viewer's state (multi-form-loyalty §2).
+  const loyalty = useBusinessLoyalty(id);
 
   return (
     <CustomerShell title={t("nearby.title")} back="/nearby" showNav={false} hideChromeTitle>
@@ -122,6 +125,24 @@ export default function BusinessProfilePage() {
                 <ListRow label={t("auth.phone")} value={b.phone || "—"} />
                 {b.public_email && <ListRow label="Email" value={b.public_email} />}
               </ListGroup>
+
+              {/* Loyalty programs the customer can join/continue/redeem (slice 2).
+                  Omitted entirely when the business runs none. */}
+              {(loyalty.data?.length ?? 0) > 0 && (
+                <section aria-labelledby="loyalty-heading">
+                  <h2
+                    id="loyalty-heading"
+                    className="mb-2.5 px-1 font-display text-sm font-bold text-ink"
+                  >
+                    {t("cmp.loyalty.title")}
+                  </h2>
+                  <div className="flex flex-col gap-2.5">
+                    {loyalty.data?.map((program) => (
+                      <LoyaltyProgramRow key={program.campaign_id} program={program} />
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {renderHours(b.working_hours) && (
                 <Card>

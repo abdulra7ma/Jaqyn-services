@@ -10,6 +10,12 @@ vi.mock("../../../_lib/useErrMessage", () => ({ useErrMessage: () => () => "erro
 
 vi.mock("@jaqyn/api", () => ({
   useCreateCampaign: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  // The item-reward picker fetches the owner's catalog (multi-form-loyalty slice 3).
+  useCatalog: () => ({
+    data: [{ id: "ci-1", name: "Latte", price: "180" }],
+    isLoading: false,
+    isError: false,
+  }),
 }));
 
 import NewCampaignPage from "./page";
@@ -60,6 +66,49 @@ describe("Campaign create flow — outcome chooser + adaptive form", () => {
     expect(screen.getByText("cmp.biz.form.instagram")).toBeInTheDocument();
     expect(screen.queryByText("cmp.biz.form.groupSize")).not.toBeInTheDocument();
     expect(screen.queryByText("cmp.biz.form.requiredVisits")).not.toBeInTheDocument();
+  });
+
+  it("choosing the Points mechanic shows the basis toggle + per-visit + cashback fields", async () => {
+    const user = userEvent.setup();
+    render(<NewCampaignPage />);
+    await user.click(screen.getByText("cmp.biz.new.outcome.individual"));
+
+    // Switch the mechanic to Points (multi-form-loyalty slice 3).
+    await user.click(screen.getByRole("button", { name: "cmp.biz.form.mechanic.points" }));
+
+    expect(screen.getByText("cmp.biz.form.pointsBasis")).toBeInTheDocument();
+    // Per-visit basis is the default → per-visit rate + cashback rate are shown.
+    expect(screen.getByText("cmp.biz.form.pointsPerVisit")).toBeInTheDocument();
+    expect(screen.getByText("cmp.biz.form.cashbackPerPoint")).toBeInTheDocument();
+    // The visit-completion field is gone (points has no completion target), and the
+    // item-reward picker (visit/stamp/spend only) is not shown for points.
+    expect(screen.queryByText("cmp.biz.form.requiredVisits")).not.toBeInTheDocument();
+    expect(screen.queryByText("cmp.biz.form.itemSelection")).not.toBeInTheDocument();
+  });
+
+  it("switching the points basis to spend swaps the rate field to points-per-som", async () => {
+    const user = userEvent.setup();
+    render(<NewCampaignPage />);
+    await user.click(screen.getByText("cmp.biz.new.outcome.individual"));
+    await user.click(screen.getByRole("button", { name: "cmp.biz.form.mechanic.points" }));
+    await user.click(screen.getByRole("button", { name: "cmp.biz.form.pointsBasis.spend" }));
+
+    expect(screen.getByText("cmp.biz.form.pointsPerSom")).toBeInTheDocument();
+    expect(screen.queryByText("cmp.biz.form.pointsPerVisit")).not.toBeInTheDocument();
+  });
+
+  it("a visit campaign offers the item-selection toggle; Fixed reveals the catalog picker", async () => {
+    const user = userEvent.setup();
+    render(<NewCampaignPage />);
+    await user.click(screen.getByText("cmp.biz.new.outcome.individual"));
+
+    // visit/stamp/spend rewards expose the item-selection toggle (slice 3).
+    expect(screen.getByText("cmp.biz.form.itemSelection")).toBeInTheDocument();
+    // Default is customer-choice → no picker. Switching to Fixed reveals it.
+    expect(screen.queryByText("cmp.biz.form.catalogItem")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "cmp.biz.form.item.fixed" }));
+    expect(screen.getByText("cmp.biz.form.catalogItem")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Latte/ })).toBeInTheDocument();
   });
 
   it("a spend template prefills the spend mechanic + required-spend field", async () => {

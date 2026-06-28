@@ -7,7 +7,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { CustomerShell } from "../../_components/CustomerShell";
 import { QueryBoundary } from "../../_components/QueryBoundary";
-import { VoucherQrBlock } from "../../_components/campaigns";
+import { VoucherItemSheet, VoucherQrBlock } from "../../_components/campaigns";
 import { ListGroup, ListRow } from "../../_components/kit";
 import { useRequireAuth } from "../../_lib/auth";
 
@@ -20,6 +20,13 @@ const STATUS_TONE = {
 
 function ActiveVoucher({ voucher }: { voucher: CampaignVoucher }) {
   const t = useT();
+  // Customer-choice item vouchers must resolve their item before they can be
+  // presented for redemption (multi-form-loyalty slice 3). Show the picker until
+  // the customer has chosen; the polling query then re-renders with the QR.
+  const needsItem = voucher.item_selection === "customer" && voucher.catalog_item == null;
+  if (needsItem) {
+    return <VoucherItemSheet campaignId={voucher.campaign.id} voucherId={voucher.id} />;
+  }
   return (
     <>
       <VoucherQrBlock
@@ -35,6 +42,15 @@ function ActiveVoucher({ voucher }: { voucher: CampaignVoucher }) {
 
       <ListGroup>
         <ListRow label={t("cmp.voucher.campaign")} value={voucher.campaign.name} />
+        {voucher.catalog_item && (
+          <ListRow label={t("cmp.voucher.item")} value={voucher.catalog_item.name} />
+        )}
+        {voucher.cashback_amount && (
+          <ListRow
+            label={t("cmp.voucher.cashback")}
+            value={t("cmp.loyalty.cashbackAmount").replace("{amount}", voucher.cashback_amount)}
+          />
+        )}
         <ListRow label={t("cmp.voucher.validUntil")} value={voucher.expires_label} />
       </ListGroup>
 

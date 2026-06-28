@@ -9,10 +9,12 @@
 import { api, API_URL } from "../client";
 import {
   adaptBusiness,
+  adaptBusinessLoyaltyProgram,
   adaptCampaign,
   adaptCampaignFeed,
   adaptCampaignVoucher,
   adaptCampaignWallet,
+  adaptCatalogItem,
   adaptGroupSession,
   adaptMyGroup,
 } from "./adapters";
@@ -20,7 +22,9 @@ import { session } from "./session";
 import { tokenStore } from "../tokens";
 import type {
   Business,
+  BusinessLoyaltyProgram,
   Campaign,
+  CampaignCatalogItem,
   CampaignFeed,
   CampaignFeedFilter,
   CategoryOption,
@@ -59,6 +63,9 @@ export interface CustomerApi {
   listNearby(params?: NearbyParams): Promise<Business[]>;
   listCategories(): Promise<CategoryOption[]>;
   getBusiness(id: string, params?: Pick<NearbyParams, "lat" | "lng">): Promise<Business>;
+  // ---- loyalty (multi-form-loyalty slice 2) ----
+  // Every active INDIVIDUAL program of a business + the viewer's state on each.
+  listBusinessLoyalty(businessId: string): Promise<BusinessLoyaltyProgram[]>;
   // ---- campaigns (plan §3) ----
   listCampaigns(params?: CampaignListParams): Promise<Campaign[]>;
   campaignFeed(filter?: CampaignFeedFilter): Promise<CampaignFeed>;
@@ -67,6 +74,13 @@ export interface CustomerApi {
   campaignWallet(): Promise<CampaignWallet>;
   getCampaignVoucher(id: string): Promise<CampaignVoucher>;
   presentCampaignVoucher(id: string): Promise<CampaignVoucher>;
+  // ---- points + item rewards (multi-form-loyalty slice 1/3) ----
+  // Redeem `points` from a POINTS campaign into a cashback voucher.
+  redeemPoints(campaignId: string, points: number): Promise<CampaignVoucher>;
+  // The catalog items a customer can pick for an item voucher (paginated).
+  campaignCatalog(campaignId: string): Promise<CampaignCatalogItem[]>;
+  // Resolve a customer-choice item voucher by selecting a catalog item.
+  selectVoucherItem(voucherId: string, catalogItemId: string): Promise<CampaignVoucher>;
   // Leader starts (or idempotently re-fetches) a group session; the optional
   // body sets visit time / name / note (backend contract).
   startGroupSession(input: StartGroupSessionInput): Promise<GroupSession>;
@@ -219,6 +233,10 @@ export const customerApi: CustomerApi = {
       .then((d) => d.results),
   getBusiness: (id, params) =>
     api.get<any>(`/api/businesses/${id}/${queryString(params)}`, { auth: false }).then(adaptBusiness),
+  listBusinessLoyalty: (businessId) =>
+    api
+      .get<Paginated<any>>(`/api/customer/businesses/${businessId}/loyalty/`)
+      .then((d) => (d.results ?? []).map(adaptBusinessLoyaltyProgram)),
   listCampaigns: (params) =>
     api
       .get<Paginated<any>>(`/api/customer/campaigns/${queryString(params)}`)
@@ -243,6 +261,20 @@ export const customerApi: CustomerApi = {
     api.get<any>(`/api/customer/campaign-vouchers/${id}/`).then(adaptCampaignVoucher),
   presentCampaignVoucher: (id) =>
     api.post<any>(`/api/customer/campaign-vouchers/${id}/present/`).then(adaptCampaignVoucher),
+  redeemPoints: (campaignId, points) =>
+    api
+      .post<any>(`/api/customer/campaigns/${campaignId}/redeem-points/`, { points })
+      .then(adaptCampaignVoucher),
+  campaignCatalog: (campaignId) =>
+    api
+      .get<Paginated<any>>(`/api/customer/campaigns/${campaignId}/catalog/`)
+      .then((d) => (d.results ?? []).map(adaptCatalogItem).filter((i): i is CampaignCatalogItem => i != null)),
+  selectVoucherItem: (voucherId, catalogItemId) =>
+    api
+      .post<any>(`/api/customer/campaign-vouchers/${voucherId}/select-item/`, {
+        catalog_item_id: catalogItemId,
+      })
+      .then(adaptCampaignVoucher),
   startGroupSession: ({ campaignId, visit_time, name, note }) =>
     api
       .post<any>(`/api/customer/campaigns/${campaignId}/group/start/`, { visit_time, name, note })

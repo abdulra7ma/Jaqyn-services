@@ -7,7 +7,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { adaptCampaign, adaptCampaignFeed, adaptGroupSession, adaptMyGroup } from "./adapters";
+import {
+  adaptBusinessLoyaltyProgram,
+  adaptCampaign,
+  adaptCampaignFeed,
+  adaptCampaignVoucher,
+  adaptGroupSession,
+  adaptMyGroup,
+} from "./adapters";
 
 // A campaign row shaped exactly like CampaignDetailSerializer, with `my_progress`
 // shaped like CampaignProgressSerializer (progress_count / required_count /
@@ -216,6 +223,113 @@ test("adaptGroupSession surfaces business fields, invite_url and visit/name/note
   assert.equal(s.visit_time, "2026-06-27T09:00:00Z");
   assert.equal(s.name, "Friday crew");
   assert.equal(s.note, "see you there");
+});
+
+// ---- multi-form-loyalty (slice 2/3) -----------------------------------------
+
+// POINTS campaigns: the rule carries the accrual basis + rate + cashback rate, and
+// my_progress carries the redeemable points balance.
+test("adaptCampaign maps the POINTS mechanic, rule rates and points_balance", () => {
+  const c = adaptCampaign({
+    id: "c-pts",
+    business: "b-1",
+    name: "Coffee Points",
+    campaign_type: "individual",
+    status: "active",
+    rule: {
+      mechanic: "points",
+      points_basis: "spend",
+      points_per_som: "0.01",
+      cashback_per_point: "1.00",
+    },
+    reward: { reward_type: "cashback", title: "Cashback" },
+    my_progress: { status: "in_progress", points_balance: 120, progress_count: 0, required_count: 0 },
+  });
+  assert.equal(c.rule.mechanic, "points");
+  assert.equal(c.rule.points_basis, "spend");
+  assert.equal(c.rule.points_per_som, "0.01");
+  assert.equal(c.rule.cashback_per_point, "1.00");
+  assert.equal(c.reward.type, "cashback");
+  assert.equal(c.my_progress?.points_balance, 120);
+});
+
+// Item rewards: the reward carries item_selection + an embedded catalog_item.
+test("adaptCampaign maps reward item_selection + catalog_item", () => {
+  const c = adaptCampaign({
+    id: "c-item",
+    business: "b-1",
+    name: "Visit 5",
+    campaign_type: "individual",
+    status: "active",
+    rule: { mechanic: "visit", required_count: 5 },
+    reward: {
+      reward_type: "free_item",
+      title: "Free item",
+      item_selection: "fixed",
+      catalog_item: { id: "ci-1", name: "Latte", price: "180.00", image: null },
+    },
+    my_progress: null,
+  });
+  assert.equal(c.reward.item_selection, "fixed");
+  assert.equal(c.reward.catalog_item?.name, "Latte");
+  assert.equal(c.reward.catalog_item?.price, "180.00");
+});
+
+// CASHBACK / item vouchers expose cashback_amount, catalog_item and item_selection.
+test("adaptCampaignVoucher maps cashback_amount, catalog_item and item_selection", () => {
+  const cashback = adaptCampaignVoucher({
+    id: "v-1",
+    code: "C-1",
+    status: "active",
+    cashback_amount: "120.00",
+    item_selection: null,
+    catalog_item: null,
+  });
+  assert.equal(cashback.cashback_amount, "120.00");
+  assert.equal(cashback.catalog_item, null);
+
+  const item = adaptCampaignVoucher({
+    id: "v-2",
+    code: "C-2",
+    status: "active",
+    item_selection: "customer",
+    catalog_item: { id: "ci-9", name: "Croissant", price: "90", image: null },
+  });
+  assert.equal(item.item_selection, "customer");
+  assert.equal(item.catalog_item?.name, "Croissant");
+});
+
+// The business-page loyalty list row (slice 2). Backend emits the flat shape.
+test("adaptBusinessLoyaltyProgram maps points and visit rows", () => {
+  const points = adaptBusinessLoyaltyProgram({
+    campaign_id: "c-pts",
+    name: "Coffee Points",
+    mechanic: "points",
+    reward_summary: "1 сом per point",
+    joined: true,
+    progress_count: 0,
+    target: 0,
+    points_balance: 120,
+    cashback_per_point: "1.00",
+  });
+  assert.equal(points.mechanic, "points");
+  assert.equal(points.points_balance, 120);
+  assert.equal(points.cashback_per_point, "1.00");
+
+  const visit = adaptBusinessLoyaltyProgram({
+    campaign_id: "c-vis",
+    name: "Visit 5",
+    mechanic: "visit",
+    reward_summary: "Free latte",
+    joined: true,
+    progress_count: 3,
+    target: 5,
+    points_balance: 0,
+    cashback_per_point: null,
+  });
+  assert.equal(visit.target, 5);
+  assert.equal(visit.progress_count, 3);
+  assert.equal(visit.cashback_per_point, null);
 });
 
 test("adaptMyGroup exposes campaign_id for the per-campaign active-group lookup", () => {
