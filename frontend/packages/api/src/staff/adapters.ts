@@ -48,10 +48,18 @@ export function adaptScanCustomerResult(raw: Raw): ScanCustomerResult {
     const campaign = row.campaign ?? {};
     const current = row.progress_count ?? 0;
     const goal = row.required_count ?? 0;
+    // mechanic comes from the row (multi-form contract); fall back to the
+    // campaign's nested rule for older payloads that nested it there.
+    const mechanic = (row.mechanic ?? campaign.rule?.mechanic ?? null) as CampaignScanRow["mechanic"];
+    // A social campaign has no mechanic but its own action; tag it so the chooser
+    // can render a "Confirm post" row.
+    const campaignType = String(row.campaign_type ?? campaign.campaign_type ?? "individual");
+    const effectiveMechanic = mechanic ?? (campaignType === "social" ? "social" : null);
     return {
       campaign_id: campaign.id,
       name: campaign.name ?? "",
       sub: ruleSub(campaign),
+      business_name: String(campaign.business?.name ?? campaign.business_name ?? ""),
       current_count: current,
       next_count: Math.min(current + 1, goal || current + 1),
       goal,
@@ -59,6 +67,16 @@ export function adaptScanCustomerResult(raw: Raw): ScanCustomerResult {
       // reason_code is a stable error code (e.g. CAMPAIGN_MIN_GAP); the screen
       // shows it as the sub-line when a row is blocked.
       reason: row.eligible ? null : (row.reason_code ?? null),
+      mechanic: effectiveMechanic,
+      campaign_type: campaignType,
+      reward_title: row.reward_title ?? null,
+      points_balance: row.points_balance ?? 0,
+      // Decimal strings are kept verbatim — parsed at the point of arithmetic so
+      // no float precision is introduced at the boundary.
+      points_per_som: row.points_per_som ?? null,
+      points_per_visit: row.points_per_visit ?? null,
+      cashback_per_point: row.cashback_per_point ?? null,
+      current_spend: String(row.current_spend ?? "0"),
     };
   });
   return {
@@ -87,6 +105,8 @@ export function adaptConfirmVisitResult(raw: Raw): ConfirmVisitResult {
     reward_title: voucher?.reward_title ?? null,
     // Voucher serializer exposes an ISO expires_at, not a human label.
     expires_label: voucher?.expires_at ?? null,
+    // New points balance after a points award (0 for non-points programs).
+    points_balance: raw.points_balance ?? 0,
   };
 }
 

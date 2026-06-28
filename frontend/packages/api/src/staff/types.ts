@@ -47,11 +47,18 @@ export type RecentActivity = {
 // is eligible to count toward, plus loyalty (plan D3). Then confirm a visit, or
 // scan + redeem a campaign reward voucher.
 
+// The loyalty form a row advances. Drives which chooser action and entry the
+// staff sees: stamp/visit/points-visit-basis = one tap; spend/points-spend-basis
+// = bill-amount keypad; social = confirm a post.
+export type ScanRowMechanic = "visit" | "stamp" | "spend" | "points" | "social" | null;
+
 export type CampaignScanRow = {
   campaign_id: string;
   name: string;
   // Sub-line: business + rule summary (e.g. "Manas Coffee · Visit 3× before 12:00").
   sub: string;
+  // Owning business name, shown as the row's secondary line in the chooser.
+  business_name: string;
   current_count: number;
   // Next count after this confirm (capped at goal).
   next_count: number;
@@ -59,6 +66,25 @@ export type CampaignScanRow = {
   eligible: boolean;
   // Why a campaign can't be counted right now (min-gap, daily cap, window…).
   reason: string | null;
+  // ---- multi-form loyalty (backend scan-row contract) ----
+  // The mechanic that decides the row's action + whether an amount is required.
+  mechanic: ScanRowMechanic;
+  // "individual" | "group" | "social" — the campaign family.
+  campaign_type: string;
+  // The reward unlocked on completion, for the success banner.
+  reward_title: string | null;
+  // Points the customer currently holds in this program (points mechanic).
+  points_balance: number;
+  // Points minted per som spent (spend-basis points). Decimal string; null when
+  // the program awards a flat per-visit amount instead.
+  points_per_som: string | null;
+  // Flat points minted per visit (visit-basis points). null on spend-basis.
+  points_per_visit: number | null;
+  // Som returned per point when the customer redeems. Decimal string; combines
+  // with points_per_som to compute the "% back" chip. null when not set.
+  cashback_per_point: string | null;
+  // Som spent so far toward a spend goal. Decimal string ("0" when none).
+  current_spend: string;
 };
 
 export type ScanCustomerResult = {
@@ -78,6 +104,9 @@ export type ConfirmVisitResult = {
   // Present on `completed`: the issued voucher's reward + expiry.
   reward_title: string | null;
   expires_label: string | null;
+  // Customer's points balance after the award (points mechanic). For a points
+  // confirm this is the NEW balance; 0 for non-points programs.
+  points_balance: number;
 };
 
 // One advanced-campaign leg (same shape as a confirm-visit outcome).

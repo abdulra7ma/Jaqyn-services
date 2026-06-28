@@ -40,12 +40,13 @@ export const useScanCustomerForCampaigns = () =>
 export const useResolveScan = () =>
   useMutation({ mutationFn: (token: string) => staffApi.resolveScan(token) });
 
-// One confirm advances both the loyalty card and the prioritized campaign.
+// Confirm ONE chosen program toward the customer. `amount` is the bill in som,
+// required for spend / spend-basis points, ignored otherwise.
 export const useConfirmVisitUnified = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { token: string; campaignId?: string }) =>
-      staffApi.confirmVisitUnified(body.token, body.campaignId),
+    mutationFn: (body: { token: string; campaignId?: string; amount?: string }) =>
+      staffApi.confirmVisitUnified(body.token, body.campaignId, body.amount),
     onSuccess: () => qc.invalidateQueries({ queryKey: sqk.activity }),
   });
 };
