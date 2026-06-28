@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { useBusinessReports } from "@jaqyn/api";
+import { useT } from "@jaqyn/i18n";
 import type {
   BusinessReport,
   ReportCohort,
@@ -23,20 +24,12 @@ const PANEL = `${CARD} p-5 sm:p-[22px]`;
 
 type Tab = "overview" | "retention" | "staff";
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: "overview", label: "Overview" },
-  { key: "retention", label: "Retention" },
-  { key: "staff", label: "Staff performance" },
-];
+const TABS: Tab[] = ["overview", "retention", "staff"];
 
-const PERIODS: { key: ReportPeriod; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "week", label: "This week" },
-  { key: "month", label: "This month" },
-  { key: "custom", label: "Custom" },
-];
+const PERIODS: ReportPeriod[] = ["today", "week", "month", "custom"];
 
 export default function BusinessReportsPage() {
+  const t = useT();
   const [tab, setTab] = useState<Tab>("overview");
   const [period, setPeriod] = useState<ReportPeriod>("month");
   const [range, setRange] = useState<{ date_from: string; date_to: string }>({ date_from: "", date_to: "" });
@@ -46,36 +39,36 @@ export default function BusinessReportsPage() {
   const report = reports.data;
 
   return (
-    <OwnerShell title="Reports">
+    <OwnerShell title={t("owner.nav.analytics")}>
       <div className="mx-auto max-w-[980px] animate-[jqIn_.3s_ease]">
           {/* tabs + period selector */}
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Report sections">
-              {TABS.map((t) => (
+            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={t("owner.reports.sections")}>
+              {TABS.map((item) => (
                 <button
-                  key={t.key}
+                  key={item}
                   role="tab"
-                  aria-selected={tab === t.key}
-                  onClick={() => setTab(t.key)}
+                  aria-selected={tab === item}
+                  onClick={() => setTab(item)}
                   className={`rounded-pill border px-4 py-2 text-[13px] font-semibold transition ${
-                    tab === t.key ? "border-brand bg-brand text-brand-fg" : "border-line bg-card text-subtle hover:text-ink"
+                    tab === item ? "border-brand bg-brand text-brand-fg" : "border-line bg-card text-subtle hover:text-ink"
                   }`}
                 >
-                  {t.label}
+                  {t(`owner.reports.tab.${item}`)}
                 </button>
               ))}
             </div>
-            <div className="flex flex-wrap gap-1" role="group" aria-label="Time period">
-              {PERIODS.map((p) => (
+            <div className="flex flex-wrap gap-1" role="group" aria-label={t("owner.reports.timePeriod")}>
+              {PERIODS.map((item) => (
                 <button
-                  key={p.key}
-                  onClick={() => setPeriod(p.key)}
-                  aria-pressed={period === p.key}
+                  key={item}
+                  onClick={() => setPeriod(item)}
+                  aria-pressed={period === item}
                   className={`rounded-pill px-3.5 py-2 text-[12.5px] font-semibold transition ${
-                    period === p.key ? "bg-brand text-brand-fg" : "text-subtle hover:text-ink"
+                    period === item ? "bg-brand text-brand-fg" : "text-subtle hover:text-ink"
                   }`}
                 >
-                  {p.label}
+                  {t(`owner.reports.period.${item}`)}
                 </button>
               ))}
             </div>
@@ -83,21 +76,21 @@ export default function BusinessReportsPage() {
 
           {period === "custom" && (
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <DateField label="From" value={range.date_from} onChange={(v) => setRange((r) => ({ ...r, date_from: v }))} />
-              <DateField label="To" value={range.date_to} onChange={(v) => setRange((r) => ({ ...r, date_to: v }))} />
+              <DateField label={t("owner.reports.from")} value={range.date_from} onChange={(v) => setRange((r) => ({ ...r, date_from: v }))} />
+              <DateField label={t("owner.reports.to")} value={range.date_to} onChange={(v) => setRange((r) => ({ ...r, date_to: v }))} />
             </div>
           )}
 
           <p className="mb-4 text-[12.5px] text-subtle">
-            Showing data for <b className="text-ink">{report?.range_label ?? PERIODS.find((p) => p.key === period)?.label}</b>
+            {t("owner.reports.showing")} <b className="text-ink">{report?.range_label ?? t(`owner.reports.period.${period}`)}</b>
           </p>
 
           {period === "custom" && !rangeReady ? (
-            <div className={`${PANEL} text-center text-[13.5px] text-subtle`}>Pick a start and end date to see your report.</div>
+            <div className={`${PANEL} text-center text-[13.5px] text-subtle`}>{t("owner.reports.pickRange")}</div>
           ) : reports.isError ? (
-            <div className={`${PANEL} text-center text-[13.5px] text-danger`}>Couldn’t load reports. Try again.</div>
+            <div className={`${PANEL} text-center text-[13.5px] text-danger`}>{t("owner.reports.error")}</div>
           ) : !report ? (
-            <div className={`${PANEL} text-subtle`}>Loading reports…</div>
+            <div className={`${PANEL} text-subtle`}>{t("owner.reports.loading")}</div>
           ) : tab === "overview" ? (
             <Overview report={report} />
           ) : tab === "retention" ? (
@@ -114,6 +107,7 @@ export default function BusinessReportsPage() {
 // Tabs
 // --------------------------------------------------------------------------- //
 function Overview({ report }: { report: BusinessReport }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
@@ -122,10 +116,10 @@ function Overview({ report }: { report: BusinessReport }) {
         ))}
       </div>
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <ChartCard title="Scans over time">
+        <ChartCard title={t("owner.reports.scansOverTime")}>
           <BarChart points={report.scans_over_time} variant="brand" />
         </ChartCard>
-        <ChartCard title="Busiest hours">
+        <ChartCard title={t("owner.reports.busiestHours")}>
           <BarChart points={report.busiest_hours} variant="peak" />
         </ChartCard>
       </div>
@@ -135,21 +129,22 @@ function Overview({ report }: { report: BusinessReport }) {
 }
 
 function Retention({ report }: { report: BusinessReport }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
         <ChartCard
-          title="New vs returning"
+          title={t("owner.reports.newVsReturning")}
           legend={
             <div className="flex gap-3.5 text-[12px] text-subtle">
-              <LegendDot className="bg-brand" label="New" />
-              <LegendDot className="bg-board" label="Returning" />
+              <LegendDot className="bg-brand" label={t("owner.reports.new")} />
+              <LegendDot className="bg-board" label={t("owner.reports.returning")} />
             </div>
           }
         >
           <StackedChart points={report.new_vs_returning} />
         </ChartCard>
-        <ChartCard title="Customer mix">
+        <ChartCard title={t("owner.reports.customerMix")}>
           <div className="mt-4 flex flex-col gap-[18px]">
             {report.cohorts.map((c) => (
               <CohortBar key={c.label} cohort={c} />
@@ -163,24 +158,25 @@ function Retention({ report }: { report: BusinessReport }) {
 }
 
 function Staff({ report }: { report: BusinessReport }) {
+  const tr = useT();
   const t = report.team_totals;
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <TotalCard label="Scans validated" value={t.scans} />
-        <TotalCard label="Rewards redeemed" value={t.redemptions} />
-        <TotalCard label="New sign-ups" value={t.signups} />
-        <TotalCard label="Active days" value={t.active_days} />
+        <TotalCard label={tr("owner.reports.scansValidated")} value={t.scans} />
+        <TotalCard label={tr("owner.reports.rewardsRedeemed")} value={t.redemptions} />
+        <TotalCard label={tr("owner.reports.newSignups")} value={t.signups} />
+        <TotalCard label={tr("owner.reports.activeDays")} value={t.active_days} />
       </div>
       {report.staff.length === 0 ? (
-        <div className={`${PANEL} text-center text-[13.5px] text-subtle`}>No staff activity in this period yet.</div>
+        <div className={`${PANEL} text-center text-[13.5px] text-subtle`}>{tr("owner.reports.noStaff")}</div>
       ) : (
         <div className={`${CARD} px-5 pb-3.5 pt-2 sm:px-[22px]`}>
           <div className="grid grid-cols-[2fr_1.4fr_1fr_0.8fr] gap-3 border-b border-line py-3 text-[11px] font-bold uppercase tracking-wider text-subtle">
-            <div>Team member</div>
-            <div>Scans validated</div>
-            <div>Sign-ups</div>
-            <div className="text-right">Trend</div>
+            <div>{tr("owner.reports.teamMember")}</div>
+            <div>{tr("owner.reports.scansValidated")}</div>
+            <div>{tr("owner.reports.signups")}</div>
+            <div className="text-right">{tr("owner.reports.trend")}</div>
           </div>
           {report.staff.map((m) => (
             <StaffRowView key={m.id} row={m} max={report.staff[0]?.scans ?? 1} />
@@ -196,14 +192,15 @@ function Staff({ report }: { report: BusinessReport }) {
 // Pieces
 // --------------------------------------------------------------------------- //
 function KpiCard({ kpi }: { kpi: ReportKpi }) {
+  const t = useT();
   return (
     <div className={`${CARD} p-[18px]`}>
       <div className="flex items-center justify-between">
-        <div className="text-[12px] text-subtle">{label(kpi.key)}</div>
+        <div className="text-[12px] text-subtle">{t(`owner.reports.kpi.${kpi.key}`)}</div>
         <Delta value={kpi.delta_pct} />
       </div>
       <div className="mt-2 font-display text-[26px] font-extrabold leading-none text-ink sm:text-[28px]">{kpi.value}</div>
-      <div className="mt-1 text-[11.5px] text-subtle">{kpi.hint}</div>
+      <div className="mt-1 text-[11.5px] text-subtle">{t(`owner.reports.kpiHint.${kpi.key}`)}</div>
     </div>
   );
 }
@@ -299,6 +296,7 @@ function CohortBar({ cohort }: { cohort: ReportCohort }) {
 }
 
 function StaffRowView({ row, max }: { row: ReportStaffRow; max: number }) {
+  const t = useT();
   return (
     <div className="grid grid-cols-[2fr_1.4fr_1fr_0.8fr] items-center gap-3 border-b border-line/60 py-3.5">
       <div className="flex items-center gap-3">
@@ -313,7 +311,7 @@ function StaffRowView({ row, max }: { row: ReportStaffRow; max: number }) {
           <div className="flex items-center gap-1.5 text-[14px] font-bold text-ink">
             {row.name}
             {row.top && (
-              <span className="rounded-pill bg-brand-muted px-2 py-0.5 text-[10px] font-bold text-amber-deep">Top</span>
+              <span className="rounded-pill bg-brand-muted px-2 py-0.5 text-[10px] font-bold text-amber-deep">{t("owner.reports.top")}</span>
             )}
           </div>
           <div className="text-[12px] text-subtle">{row.role}</div>
@@ -330,7 +328,7 @@ function StaffRowView({ row, max }: { row: ReportStaffRow; max: number }) {
       </div>
       <div>
         <div className="font-display text-[15px] font-bold text-ink">{row.signups}</div>
-        <div className="mt-0.5 text-[11px] text-subtle">{row.conversion_pct}% convert</div>
+        <div className="mt-0.5 text-[11px] text-subtle">{row.conversion_pct}% {t("owner.reports.convert")}</div>
       </div>
       <div className="text-right">
         <Delta value={row.trend_pct} />
@@ -379,10 +377,6 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
 // --------------------------------------------------------------------------- //
 // Helpers
 // --------------------------------------------------------------------------- //
-function label(key: string): string {
-  return key.replace(/_/g, " ").replace(/\bavg\b/i, "Avg.").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 function initials(name: string): string {
   return name
     .split(/\s+/)

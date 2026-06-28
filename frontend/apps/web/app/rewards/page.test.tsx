@@ -98,12 +98,14 @@ describe("Rewards — consolidated in-progress loyalty cards", () => {
         name: "Visit 5 times",
         business: { id: "b-manas", name: "Manas Coffee", category: "cafe", logo_url: null, area: "", address: "" },
         rule: { ...campaign({}).rule, mechanic: "visit" },
+        reward: { ...campaign({}).reward, title: "Manas visit reward" },
       }),
       campaign({
         id: "manas-points",
         name: "Coffee Points",
         business: { id: "b-manas", name: "Manas Coffee", category: "cafe", logo_url: null, area: "", address: "" },
         rule: { ...campaign({}).rule, mechanic: "points", cashback_per_point: "1" },
+        reward: { ...campaign({}).reward, title: "Manas points reward" },
         my_progress: { ...campaign({}).my_progress!, points_balance: 80 },
       }),
       campaign({
@@ -111,11 +113,12 @@ describe("Rewards — consolidated in-progress loyalty cards", () => {
         name: "Spend 5000",
         business: { id: "b-rams", name: "Rams Bakery", category: "bakery", logo_url: null, area: "", address: "" },
         rule: { ...campaign({}).rule, mechanic: "spend" },
+        reward: { ...campaign({}).reward, title: "Rams spend reward" },
       }),
     ];
     render(<RewardsPage />);
 
-    expect(screen.getByText("cmp.wallet.inProgress")).toBeInTheDocument();
+    expect(screen.getByText("cmp.wallet.loyaltyTitle")).toBeInTheDocument();
     // Two business cards.
     expect(screen.getByText("Manas Coffee")).toBeInTheDocument();
     expect(screen.getByText("Rams Bakery")).toBeInTheDocument();
@@ -123,16 +126,16 @@ describe("Rewards — consolidated in-progress loyalty cards", () => {
     // Manas has two programs → a switcher (visit + points tabs); first is active.
     expect(screen.getByText("cmp.loyalty.tab.visit")).toBeInTheDocument();
     expect(screen.getByText("cmp.loyalty.tab.points")).toBeInTheDocument();
-    expect(screen.getByText("Visit 5 times")).toBeInTheDocument();
-    expect(screen.queryByText("Coffee Points")).not.toBeInTheDocument();
+    expect(screen.getByText("Manas visit reward")).toBeInTheDocument();
+    expect(screen.queryByText("Manas points reward")).not.toBeInTheDocument();
 
-    // Switch to the points tab → its body (balance pill) shows.
+    // Switch to the points tab → its body (cashback "Use") shows.
     fireEvent.click(screen.getByText("cmp.loyalty.tab.points"));
-    expect(screen.getByText("Coffee Points")).toBeInTheDocument();
-    expect(screen.getByText("cmp.loyalty.points")).toBeInTheDocument();
+    expect(screen.getByText("Manas points reward")).toBeInTheDocument();
+    expect(screen.getByText("cmp.loyalty.use")).toBeInTheDocument();
 
     // Rams runs a single program → no tabs for it (only Manas' two tabs exist).
-    expect(screen.getByText("Spend 5000")).toBeInTheDocument();
+    expect(screen.getByText("Rams spend reward")).toBeInTheDocument();
     expect(screen.getAllByRole("tab")).toHaveLength(2);
   });
 });

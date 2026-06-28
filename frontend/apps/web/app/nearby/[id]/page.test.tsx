@@ -107,25 +107,30 @@ describe("Business page — consolidated loyalty card (multi-form-loyalty)", () 
     expect(screen.getByText("cmp.loyalty.tab.points")).toBeInTheDocument();
     expect(screen.getByText("cmp.loyalty.tab.visit")).toBeInTheDocument();
 
-    // First tab is active → points body (balance pill + redeem CTA, balance>0).
-    expect(screen.getByText("Coffee Points")).toBeInTheDocument();
-    expect(screen.getByText("cmp.loyalty.points")).toBeInTheDocument();
-    expect(screen.getByText("cmp.loyalty.redeem ›")).toBeInTheDocument();
-    expect(screen.queryByText("Visit 5 times")).not.toBeInTheDocument();
+    // First tab is active → points body (reward summary + cashback "Use", balance>0).
+    expect(screen.getByText("1 сом per point")).toBeInTheDocument();
+    expect(screen.getByText("cmp.loyalty.use")).toBeInTheDocument();
+    expect(screen.queryByText("Free latte")).not.toBeInTheDocument();
 
-    // Switch to the visit tab → its body (name + X/Y progress) now shows.
+    // Switch to the visit tab → its body (reward summary + dot counts) now shows.
     fireEvent.click(screen.getByText("cmp.loyalty.tab.visit"));
-    expect(screen.getByText("Visit 5 times")).toBeInTheDocument();
-    expect(screen.getByText("cmp.card.progress")).toBeInTheDocument();
-    expect(screen.queryByText("Coffee Points")).not.toBeInTheDocument();
+    expect(screen.getByText("Free latte")).toBeInTheDocument();
+    expect(screen.getByText("cmp.loyalty.visitsCount")).toBeInTheDocument();
+    expect(screen.queryByText("1 сом per point")).not.toBeInTheDocument();
   });
 
   it("renders no switcher when the business runs a single program", () => {
     loyalty.value = [
-      program({ campaign_id: "vis", name: "Visit 5 times", mechanic: "visit", target: 5, joined: true }),
+      program({
+        campaign_id: "vis",
+        mechanic: "visit",
+        target: 5,
+        joined: true,
+        reward_summary: "Free latte",
+      }),
     ];
     render(<BusinessProfilePage />);
-    expect(screen.getByText("Visit 5 times")).toBeInTheDocument();
+    expect(screen.getByText("Free latte")).toBeInTheDocument();
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
   });
 

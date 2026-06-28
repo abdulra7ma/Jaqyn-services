@@ -92,7 +92,12 @@ export default function RewardsPage() {
       {!isAuthenticated ? null : (
         <QueryBoundary query={wallet}>
           {(w) => {
-            const inProgress = feed.data?.followed ?? [];
+            // Loyalty cards = individual programs only (points/stamp/visit/spend).
+            // Group/social in-progress live elsewhere (the active-group banner +
+            // the campaigns feed), not in the loyalty wallet.
+            const inProgress = (feed.data?.followed ?? []).filter(
+              (c) => c.campaign_type === "individual",
+            );
             const businessGroups = groupByBusiness(inProgress);
             const empty = isWalletEmpty(w) && inProgress.length === 0 && !feed.isLoading;
 
@@ -105,7 +110,10 @@ export default function RewardsPage() {
 
                 {businessGroups.length > 0 && (
                   <section>
-                    <SectionLabel>{t("cmp.wallet.inProgress")}</SectionLabel>
+                    <SectionLabel>{t("cmp.wallet.loyaltyTitle")}</SectionLabel>
+                    <p className="mt-1 text-[12.5px] text-subtle">
+                      {t("cmp.wallet.loyaltySubtitle")}
+                    </p>
                     <div className="mt-3 flex flex-col gap-3">
                       {businessGroups.map((g) => (
                         <BusinessLoyaltyCard

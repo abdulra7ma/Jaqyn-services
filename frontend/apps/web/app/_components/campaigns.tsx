@@ -412,70 +412,139 @@ export function loyaltyTabLabel(
   return t(`cmp.loyalty.tab.${mechanic}` as Parameters<Translate>[0]);
 }
 
-/** Body for the active program inside a BusinessLoyaltyCard. */
+/** Loyalty type → pill label key + tone classes (matches the design's chips). */
+const LOYALTY_PILL: Record<
+  NonNullable<LoyaltyProgramView["mechanic"]>,
+  { key: string; cls: string }
+> = {
+  stamp: { key: "cmp.loyalty.pill.stamp", cls: "bg-brand-muted text-brand" },
+  points: { key: "cmp.loyalty.pill.cashback", cls: "bg-amber/15 text-amber-deep" },
+  visit: { key: "cmp.loyalty.pill.visits", cls: "bg-sage-soft text-ok" },
+  spend: { key: "cmp.loyalty.pill.spend", cls: "bg-amber/15 text-amber-deep" },
+};
+
+/** A row of stamp/visit dots: `filled` solid, the rest dashed outlines. */
+function ProgressDots({ filled, total }: { filled: number; total: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2" aria-hidden>
+      {Array.from({ length: total }).map((_, i) => (
+        <span
+          key={i}
+          className={cn(
+            "h-6 w-6 rounded-full",
+            i < filled ? "bg-brand" : "border-2 border-dashed border-line",
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Body for the active program inside a BusinessLoyaltyCard. Type-specific:
+ * stamp/visit show a dot row + "X of Y" + "N to go"; points shows the cashback
+ * balance in som + a "Use" button; spend keeps a progress bar. */
 function LoyaltyProgramBody({ program }: { program: LoyaltyProgramView }) {
   const t = useT();
-  const isPoints = program.mechanic === "points";
+  const mech = program.mechanic;
+  const isPoints = mech === "points";
+  const isStamp = mech === "stamp";
+  const isVisit = mech === "visit";
   const target = program.target > 0 ? program.target : 0;
-  const pct = target > 0 ? Math.min(100, Math.round((program.progressCount / target) * 100)) : 0;
-  // POINTS: a balance to spend turns the CTA into "Redeem cashback".
-  const canRedeem = isPoints && program.pointsBalance > 0;
-  const cta = canRedeem
-    ? t("cmp.loyalty.redeem")
-    : isPoints
-      ? t("cmp.loyalty.view")
-      : program.joined
-        ? t("cmp.card.continue")
-        : t("cmp.card.join");
+  const current = Math.max(0, Math.min(program.progressCount, target || program.progressCount));
+  const toGo = Math.max(0, target - current);
+  const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+  // Dots only read well for small targets; larger ones fall back to a bar.
+  const useDots = (isStamp || isVisit) && target > 0 && target <= 14;
+  // Cashback shown in som = balance × rate (display only; backend is authoritative).
+  const som = program.cashbackPerPoint
+    ? Math.round(Number(program.cashbackPerPoint) * program.pointsBalance)
+    : program.pointsBalance;
+  const pill = mech ? LOYALTY_PILL[mech] : null;
 
   return (
     <div>
+      {/* reward line + type pill */}
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-[15px] font-bold text-ink">{program.name}</p>
-          {program.rewardSummary && (
-            <p className="mt-0.5 truncate text-[12.5px] font-semibold text-brand">
-              {program.rewardSummary}
-            </p>
-          )}
-        </div>
-        {isPoints && (
-          <span className="flex-none rounded-pill bg-brand-muted px-2.5 py-1 text-[12.5px] font-bold text-brand">
-            {t("cmp.loyalty.points").replace("{count}", String(program.pointsBalance))}
+        {program.rewardSummary && (
+          <p className="min-w-0 flex-1 text-[13px] font-semibold text-subtle">
+            {program.rewardSummary}
+          </p>
+        )}
+        {pill && (
+          <span
+            className={cn(
+              "flex-none rounded-pill px-2.5 py-1 text-[11.5px] font-bold",
+              pill.cls,
+            )}
+          >
+            {t(pill.key as Parameters<Translate>[0])}
           </span>
         )}
       </div>
 
-      {isPoints ? (
-        <p className="mt-2 text-[12.5px] text-subtle">
-          {canRedeem && program.cashbackPerPoint
-            ? t("cmp.loyalty.cashbackHint").replace("{rate}", program.cashbackPerPoint)
-            : t("cmp.loyalty.pointsHint")}
-        </p>
-      ) : (
-        target > 0 && (
-          <div className="mt-3">
+      <div className="mt-3 border-t border-line pt-3">
+        {isPoints ? (
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-display text-ink">
+              <span className="text-[28px] font-extrabold text-ok">{som}</span>{" "}
+              <span className="text-[13px] font-bold text-subtle">
+                {t("cmp.loyalty.somCashback")}
+              </span>
+            </p>
+            {program.pointsBalance > 0 ? (
+              <Link
+                href={`/campaigns/${program.campaignId}`}
+                className="flex-none rounded-xl bg-sage px-5 py-2.5 text-[14px] font-bold text-white shadow-sage transition active:scale-[.98]"
+              >
+                {t("cmp.loyalty.use")}
+              </Link>
+            ) : (
+              <span className="flex-none text-[12px] font-semibold text-subtle">
+                {t("cmp.loyalty.pointsHint")}
+              </span>
+            )}
+          </div>
+        ) : useDots ? (
+          <>
+            <ProgressDots filled={current} total={target} />
+            <div className="mt-3 flex items-center justify-between text-[13px] font-semibold">
+              <span className="text-ink">
+                {t(isStamp ? "cmp.loyalty.stamps" : "cmp.loyalty.visitsCount")
+                  .replace("{count}", String(current))
+                  .replace("{total}", String(target))}
+              </span>
+              <Link href={`/campaigns/${program.campaignId}`} className="text-brand">
+                {!program.joined
+                  ? `${t("cmp.card.join")} ›`
+                  : t(isStamp ? "cmp.loyalty.toGo" : "cmp.loyalty.visitsToGo").replace(
+                      "{count}",
+                      String(toGo),
+                    )}
+              </Link>
+            </div>
+          </>
+        ) : (
+          // spend (money target) or large-target fallback: progress bar.
+          <>
             <div className="h-2 overflow-hidden rounded-pill bg-board">
               <div
                 className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <p className="mt-2 text-[12px] font-semibold text-subtle">
-              {t("cmp.card.progress")
-                .replace("{count}", String(program.progressCount))
-                .replace("{total}", String(target))}
-            </p>
-          </div>
-        )
-      )}
-
-      <Link
-        href={`/campaigns/${program.campaignId}`}
-        className="mt-3 flex items-center justify-end border-t border-line pt-2.5 text-[13px] font-bold text-brand"
-      >
-        {cta} ›
-      </Link>
+            <div className="mt-2 flex items-center justify-between text-[12.5px] font-semibold">
+              <span className="text-subtle">
+                {t("cmp.card.progress")
+                  .replace("{count}", String(current))
+                  .replace("{total}", String(target))}
+              </span>
+              <Link href={`/campaigns/${program.campaignId}`} className="text-brand">
+                {program.joined ? `${t("cmp.card.continue")} ›` : `${t("cmp.card.join")} ›`}
+              </Link>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
