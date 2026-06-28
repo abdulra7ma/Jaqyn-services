@@ -1,10 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Business, BusinessLoyaltyProgram } from "@jaqyn/api";
 
 // Mount the business page in isolation: stub the shell/params and mock the API at
 // the module boundary (MSW-style boundary mocking via vi.mock, matching the other
-// web tests). Asserts the multi-form-loyalty slice 2 "Loyalty" section.
+// web tests). Asserts the multi-form-loyalty consolidated "Loyalty" card + switcher.
 
 vi.mock("../../_components/CustomerShell", () => ({
   CustomerShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -71,8 +71,8 @@ vi.mock("@jaqyn/api", () => ({
 
 import BusinessProfilePage from "./page";
 
-describe("Business page — loyalty section (multi-form-loyalty slice 2)", () => {
-  it("renders a points balance row and a visit progress row", () => {
+describe("Business page — consolidated loyalty card (multi-form-loyalty)", () => {
+  it("renders ONE card with a tab per program and switches bodies on tab click", () => {
     loyalty.value = [
       program({
         campaign_id: "pts",
@@ -95,16 +95,38 @@ describe("Business page — loyalty section (multi-form-loyalty slice 2)", () =>
     ];
     render(<BusinessProfilePage />);
 
-    // Section heading + both program rows render (the test translator returns the
-    // i18n key verbatim, so we assert on keys + the program names/values).
+    // Section heading + ONE card carrying the business name in its header (the
+    // page <h1> also shows the name, so the loyalty card header is the 2nd match;
+    // the test translator returns the i18n key verbatim, so we assert on keys).
     expect(screen.getByText("cmp.loyalty.title")).toBeInTheDocument();
+    expect(screen.getAllByText("Manas Coffee")).toHaveLength(2);
+
+    // Two programs → a tablist with one tab per program (labels from the mechanic).
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs).toHaveLength(2);
+    expect(screen.getByText("cmp.loyalty.tab.points")).toBeInTheDocument();
+    expect(screen.getByText("cmp.loyalty.tab.visit")).toBeInTheDocument();
+
+    // First tab is active → points body (balance pill + redeem CTA, balance>0).
     expect(screen.getByText("Coffee Points")).toBeInTheDocument();
-    // Points row → balance pill (key) + a "Redeem cashback" affordance (balance>0).
     expect(screen.getByText("cmp.loyalty.points")).toBeInTheDocument();
     expect(screen.getByText("cmp.loyalty.redeem ›")).toBeInTheDocument();
-    // Visit row → its name + the X/Y progress key line.
+    expect(screen.queryByText("Visit 5 times")).not.toBeInTheDocument();
+
+    // Switch to the visit tab → its body (name + X/Y progress) now shows.
+    fireEvent.click(screen.getByText("cmp.loyalty.tab.visit"));
     expect(screen.getByText("Visit 5 times")).toBeInTheDocument();
     expect(screen.getByText("cmp.card.progress")).toBeInTheDocument();
+    expect(screen.queryByText("Coffee Points")).not.toBeInTheDocument();
+  });
+
+  it("renders no switcher when the business runs a single program", () => {
+    loyalty.value = [
+      program({ campaign_id: "vis", name: "Visit 5 times", mechanic: "visit", target: 5, joined: true }),
+    ];
+    render(<BusinessProfilePage />);
+    expect(screen.getByText("Visit 5 times")).toBeInTheDocument();
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
   });
 
   it("omits the loyalty section entirely when the business runs no programs", () => {

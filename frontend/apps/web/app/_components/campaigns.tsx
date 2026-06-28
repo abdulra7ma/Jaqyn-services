@@ -366,6 +366,193 @@ export function LoyaltyProgramRow({ program }: { program: BusinessLoyaltyProgram
 }
 
 /**
+ * A single loyalty program flattened for the consolidated business card
+ * (multi-form-loyalty). One card aggregates every program a business runs; the
+ * card's switcher flips between these views. Mechanic may be null when the source
+ * is an arbitrary Campaign whose rule has no mechanic (group/social) — such a view
+ * falls back to the program name for its tab label and shows a progress body.
+ */
+export type LoyaltyProgramView = {
+  campaignId: string;
+  name: string;
+  mechanic: "points" | "stamp" | "visit" | "spend" | null;
+  rewardSummary: string;
+  joined: boolean;
+  progressCount: number;
+  target: number;
+  pointsBalance: number;
+  cashbackPerPoint: string | null;
+};
+
+/**
+ * Short per-program tab label for the loyalty switcher (multi-form-loyalty). Maps
+ * the mechanic to a stable namespaced i18n key (cmp.loyalty.tab.*); when the
+ * mechanic is null (non-points/visit/stamp/spend) it falls back to the program's
+ * own name so the tab is never blank.
+ */
+export function loyaltyTabLabel(
+  t: Translate,
+  mechanic: LoyaltyProgramView["mechanic"],
+  name: string,
+): string {
+  if (mechanic === null) return name;
+  return t(`cmp.loyalty.tab.${mechanic}` as Parameters<Translate>[0]);
+}
+
+/** Body for the active program inside a BusinessLoyaltyCard. */
+function LoyaltyProgramBody({ program }: { program: LoyaltyProgramView }) {
+  const t = useT();
+  const isPoints = program.mechanic === "points";
+  const target = program.target > 0 ? program.target : 0;
+  const pct = target > 0 ? Math.min(100, Math.round((program.progressCount / target) * 100)) : 0;
+  // POINTS: a balance to spend turns the CTA into "Redeem cashback".
+  const canRedeem = isPoints && program.pointsBalance > 0;
+  const cta = canRedeem
+    ? t("cmp.loyalty.redeem")
+    : isPoints
+      ? t("cmp.loyalty.view")
+      : program.joined
+        ? t("cmp.card.continue")
+        : t("cmp.card.join");
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-[15px] font-bold text-ink">{program.name}</p>
+          {program.rewardSummary && (
+            <p className="mt-0.5 truncate text-[12.5px] font-semibold text-brand">
+              {program.rewardSummary}
+            </p>
+          )}
+        </div>
+        {isPoints && (
+          <span className="flex-none rounded-pill bg-brand-muted px-2.5 py-1 text-[12.5px] font-bold text-brand">
+            {t("cmp.loyalty.points").replace("{count}", String(program.pointsBalance))}
+          </span>
+        )}
+      </div>
+
+      {isPoints ? (
+        <p className="mt-2 text-[12.5px] text-subtle">
+          {canRedeem && program.cashbackPerPoint
+            ? t("cmp.loyalty.cashbackHint").replace("{rate}", program.cashbackPerPoint)
+            : t("cmp.loyalty.pointsHint")}
+        </p>
+      ) : (
+        target > 0 && (
+          <div className="mt-3">
+            <div className="h-2 overflow-hidden rounded-pill bg-board">
+              <div
+                className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[12px] font-semibold text-subtle">
+              {t("cmp.card.progress")
+                .replace("{count}", String(program.progressCount))
+                .replace("{total}", String(target))}
+            </p>
+          </div>
+        )
+      )}
+
+      <Link
+        href={`/campaigns/${program.campaignId}`}
+        className="mt-3 flex items-center justify-end border-t border-line pt-2.5 text-[13px] font-bold text-brand"
+      >
+        {cta} ›
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * The consolidated per-business loyalty card (multi-form-loyalty). Renders one
+ * card for a business with a header (logo + name) and, when the business runs more
+ * than one program, a keyboard-accessible segmented-tabs switcher (role=tablist /
+ * tab / tabpanel) to flip between programs; a single program renders without tabs.
+ * Each program body's primary affordance is a Link into the campaign detail.
+ * Shown on both the business page and the Rewards "In progress" row.
+ */
+export function BusinessLoyaltyCard({
+  business,
+  programs,
+}: {
+  business: { name: string; logo_url: string | null };
+  programs: LoyaltyProgramView[];
+}) {
+  const t = useT();
+  const [active, setActive] = useState(0);
+  // `current` is the active program; the fallback to programs[0] keeps the type
+  // non-optional (the early return below guards the empty case).
+  const current = programs[Math.min(active, programs.length - 1)] ?? programs[0];
+  const multi = programs.length > 1;
+  if (!current) return null;
+
+  return (
+    <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
+      <div className="flex items-center gap-2.5">
+        <GlyphTile glyph="🏷️" size={42} image={business.logo_url} />
+        <p className="min-w-0 flex-1 truncate font-display text-[15px] font-bold text-ink">
+          {business.name}
+        </p>
+      </div>
+
+      {multi && (
+        <div
+          role="tablist"
+          aria-label={business.name}
+          className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {programs.map((p, i) => {
+            const selected = i === active;
+            return (
+              <button
+                key={p.campaignId}
+                type="button"
+                role="tab"
+                id={`loyalty-tab-${p.campaignId}`}
+                aria-selected={selected}
+                aria-controls={`loyalty-panel-${p.campaignId}`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setActive(i)}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowRight") {
+                    e.preventDefault();
+                    setActive((i + 1) % programs.length);
+                  } else if (e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    setActive((i - 1 + programs.length) % programs.length);
+                  }
+                }}
+                className={cn(
+                  "flex-none rounded-pill border px-3.5 py-1.5 text-[13px] font-semibold transition",
+                  selected
+                    ? "border-brand bg-brand text-brand-fg"
+                    : "border-line bg-card text-subtle active:scale-[.98]",
+                )}
+              >
+                {loyaltyTabLabel(t, p.mechanic, p.name)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div
+        role={multi ? "tabpanel" : undefined}
+        id={multi ? `loyalty-panel-${current.campaignId}` : undefined}
+        aria-labelledby={multi ? `loyalty-tab-${current.campaignId}` : undefined}
+        className="mt-3"
+      >
+        <LoyaltyProgramBody program={current} />
+      </div>
+    </div>
+  );
+}
+
+/**
  * Points balance + "Redeem cashback" surface for a POINTS campaign detail
  * (multi-form-loyalty slice 3). The customer enters how many points to redeem
  * (defaulting to the full balance) and sees the resulting cashback at the

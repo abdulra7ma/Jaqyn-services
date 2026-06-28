@@ -46,7 +46,7 @@ function GalleryPhoto({ photo }: { photo: { id: string; image_url: string; capti
   );
 }
 import { CustomerShell } from "../../_components/CustomerShell";
-import { LoyaltyProgramRow } from "../../_components/campaigns";
+import { BusinessLoyaltyCard, type LoyaltyProgramView } from "../../_components/campaigns";
 import { QueryBoundary } from "../../_components/QueryBoundary";
 import { ListGroup, ListRow } from "../../_components/kit";
 import { isOpenNow } from "../../_lib/hours";
@@ -136,11 +136,22 @@ export default function BusinessProfilePage() {
                   >
                     {t("cmp.loyalty.title")}
                   </h2>
-                  <div className="flex flex-col gap-2.5">
-                    {loyalty.data?.map((program) => (
-                      <LoyaltyProgramRow key={program.campaign_id} program={program} />
-                    ))}
-                  </div>
+                  <BusinessLoyaltyCard
+                    business={{ name: b.name, logo_url: b.logo_url ?? null }}
+                    programs={(loyalty.data ?? []).map(
+                      (p): LoyaltyProgramView => ({
+                        campaignId: p.campaign_id,
+                        name: p.name,
+                        mechanic: p.mechanic,
+                        rewardSummary: p.reward_summary,
+                        joined: p.joined,
+                        progressCount: p.progress_count,
+                        target: p.target,
+                        pointsBalance: p.points_balance,
+                        cashbackPerPoint: p.cashback_per_point,
+                      }),
+                    )}
+                  />
                 </section>
               )}
 

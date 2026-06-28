@@ -7,16 +7,69 @@
 // /campaigns feed ("From places you go"); surfacing them here too makes the
 // Rewards tab read as a full loyalty wallet (cards + earned rewards).
 
-import { useCampaignFeed, useCampaignWallet, type CampaignWallet } from "@jaqyn/api";
+import {
+  useCampaignFeed,
+  useCampaignWallet,
+  type Campaign,
+  type CampaignWallet,
+} from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { CustomerShell } from "../_components/CustomerShell";
 import { QueryBoundary } from "../_components/QueryBoundary";
-import { CampaignCarouselCard, VoucherCard, VoucherRow } from "../_components/campaigns";
+import {
+  BusinessLoyaltyCard,
+  VoucherCard,
+  VoucherRow,
+  type LoyaltyProgramView,
+} from "../_components/campaigns";
 import { PageTitle } from "../_components/kit";
 import { useRequireAuth } from "../_lib/auth";
 
 function isWalletEmpty(w: CampaignWallet): boolean {
   return w.active.length === 0 && w.used.length === 0 && w.expired.length === 0;
+}
+
+// One BusinessLoyaltyCard per business: the business header + its programs.
+type BusinessGroup = {
+  business: { id: string; name: string; logo_url: string | null };
+  programs: LoyaltyProgramView[];
+};
+
+/** Flatten an in-progress Campaign into a switcher program view. */
+function toProgramView(c: Campaign): LoyaltyProgramView {
+  const p = c.my_progress;
+  return {
+    campaignId: c.id,
+    name: c.name,
+    mechanic: c.rule.mechanic,
+    rewardSummary: c.reward.title,
+    joined: p?.joined ?? true,
+    progressCount: p?.current_count ?? 0,
+    target: p?.target_count ?? c.rule.required_count ?? 0,
+    pointsBalance: p?.points_balance ?? 0,
+    cashbackPerPoint: c.rule.cashback_per_point ?? null,
+  };
+}
+
+/**
+ * Group the in-progress feed by business so the "In progress" row shows ONE card
+ * per business (its programs behind a switcher). First-seen order is preserved so
+ * the row stays stable across refetches.
+ */
+function groupByBusiness(campaigns: Campaign[]): BusinessGroup[] {
+  const groups = new Map<string, BusinessGroup>();
+  for (const c of campaigns) {
+    const existing = groups.get(c.business.id);
+    if (existing) {
+      existing.programs.push(toProgramView(c));
+    } else {
+      groups.set(c.business.id, {
+        business: { id: c.business.id, name: c.business.name, logo_url: c.business.logo_url },
+        programs: [toProgramView(c)],
+      });
+    }
+  }
+  return [...groups.values()];
 }
 
 function SectionLabel({ children }: { children: string }) {
@@ -40,6 +93,7 @@ export default function RewardsPage() {
         <QueryBoundary query={wallet}>
           {(w) => {
             const inProgress = feed.data?.followed ?? [];
+            const businessGroups = groupByBusiness(inProgress);
             const empty = isWalletEmpty(w) && inProgress.length === 0 && !feed.isLoading;
 
             return (
@@ -49,14 +103,16 @@ export default function RewardsPage() {
 
                 {empty && <p className="mt-8 text-sm text-subtle">{t("cmp.wallet.empty")}</p>}
 
-                {inProgress.length > 0 && (
+                {businessGroups.length > 0 && (
                   <section>
                     <SectionLabel>{t("cmp.wallet.inProgress")}</SectionLabel>
-                    <div className="-mx-5 mt-3 flex snap-x gap-3 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {inProgress.map((c) => (
-                        <div key={c.id} className="snap-start">
-                          <CampaignCarouselCard campaign={c} />
-                        </div>
+                    <div className="mt-3 flex flex-col gap-3">
+                      {businessGroups.map((g) => (
+                        <BusinessLoyaltyCard
+                          key={g.business.id}
+                          business={g.business}
+                          programs={g.programs}
+                        />
                       ))}
                     </div>
                   </section>
