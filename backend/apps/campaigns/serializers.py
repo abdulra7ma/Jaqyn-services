@@ -9,6 +9,8 @@ voucher QR url) without a second round-trip.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from rest_framework import serializers
 from rest_framework.utils.serializer_helpers import ReturnDict
 
@@ -832,10 +834,18 @@ class UnifiedConfirmVisitSerializer(serializers.Serializer):
     ``campaign_id`` is optional: when omitted the service picks the single
     prioritized eligible campaign (§14); when present the staff tapped a specific
     campaign and that one is targeted.
+
+    ``amount`` is the staff-entered bill for the chosen program. It is shape-only
+    here (a non-negative decimal); whether it is *required* is a business rule the
+    service enforces — a SPEND mechanic or a POINTS spend-basis program needs a
+    positive amount, every other mechanic ignores it.
     """
 
     token = serializers.CharField(max_length=128)
     campaign_id = serializers.UUIDField(required=False)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, min_value=Decimal("0")
+    )
 
 
 class ScanVoucherSerializer(serializers.Serializer):
@@ -871,13 +881,33 @@ class ConfirmSocialSerializer(serializers.Serializer):
 
 
 class EligibleCampaignViewSerializer(serializers.Serializer):
-    """Shape of one :class:`StaffScannerService.EligibleCampaignView` row."""
+    """Shape of one :class:`StaffScannerService.EligibleCampaignView` row.
+
+    Beyond the eligibility + progress fields, each row exposes the per-program
+    fields the staff loyalty chooser binds to render a program by type and preview
+    a POINTS award: ``mechanic``, ``campaign_type``, ``reward_title``, the
+    customer's ``points_balance`` and ``current_spend``, and the POINTS accrual /
+    cashback rates (``points_per_som``, ``points_per_visit``,
+    ``cashback_per_point`` — ``null`` for non-points programs).
+    """
 
     campaign = CampaignSerializer()
     eligible = serializers.BooleanField()
     reason_code = serializers.CharField(allow_null=True)
     progress_count = serializers.IntegerField()
     required_count = serializers.IntegerField()
+    mechanic = serializers.CharField(allow_null=True)
+    campaign_type = serializers.CharField()
+    reward_title = serializers.CharField(allow_null=True)
+    points_balance = serializers.IntegerField()
+    points_per_som = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    points_per_visit = serializers.IntegerField(allow_null=True)
+    cashback_per_point = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    current_spend = serializers.DecimalField(max_digits=12, decimal_places=2)
 
 
 class CustomerScanResultSerializer(serializers.Serializer):
@@ -902,14 +932,22 @@ class ProgressResultSerializer(serializers.Serializer):
     """Shape of a :class:`CampaignProgressService.ProgressResult` (confirm-visit).
 
     ``voucher`` is populated only when ``completed`` is ``True`` (the visit
-    finished a cycle and minted a reward).
+    finished a cycle and minted a reward). ``points_balance`` echoes the
+    participant's redeemable points balance *after* the action so a POINTS award
+    can show the updated total; it is the running balance for every mechanic
+    (0 when no points are tracked).
     """
 
     campaign = CampaignSerializer()
     completed = serializers.BooleanField()
     progress_count = serializers.IntegerField()
     required_count = serializers.IntegerField()
+    points_balance = serializers.SerializerMethodField()
     voucher = serializers.SerializerMethodField()
+
+    def get_points_balance(self, obj) -> int:
+        participant = getattr(obj, "participant", None)
+        return participant.points_balance if participant is not None else 0
 
     def get_voucher(self, obj) -> dict | None:
         if obj.voucher is None:

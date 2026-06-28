@@ -1,9 +1,12 @@
 """Staff scanner invariants (plan §1.2 / D2 / D3)."""
 
+from decimal import Decimal
+
 import pytest
 
-from apps.campaigns.models import CampaignRewardVoucher
+from apps.campaigns.models import CampaignRewardVoucher, CampaignRule
 from apps.campaigns.services import StaffScannerService, CampaignRewardService
+from apps.campaigns.services.progress import CampaignProgressService
 from apps.qr.models import QRCodeToken, ScanLog
 from apps.qr.services import get_or_create_customer_profile_token
 from apps.campaigns.tests.helpers import make_business, make_campaign, make_customer, make_staff
@@ -29,6 +32,37 @@ def test_scan_customer_qr_lists_eligible_campaigns():
     assert view.eligible is True
     assert view.required_count == 3
     assert view.progress_count == 0
+
+
+def test_scan_customer_qr_includes_points_program_fields():
+    """A POINTS program is surfaced eligible with its mechanic + accrual fields."""
+    business = make_business()
+    customer = make_customer()
+    staff = make_staff(business)
+    campaign = make_campaign(
+        business,
+        mechanic=CampaignRule.Mechanic.POINTS,
+        points_basis=CampaignRule.PointsBasis.SPEND,
+        points_per_som=Decimal("0.10"),
+        cashback_per_point=Decimal("0.50"),
+    )
+    # Give the customer an existing balance so the row reports it.
+    CampaignProgressService.record_campaign_action(
+        campaign, customer, amount_spend=Decimal("100")
+    )
+    token = get_or_create_customer_profile_token(customer)
+
+    result = StaffScannerService.scan_customer_qr(staff, token.token)
+
+    view = next(v for v in result.campaigns if v.campaign.id == campaign.id)
+    assert view.eligible is True
+    assert view.mechanic == CampaignRule.Mechanic.POINTS
+    assert view.campaign_type == campaign.campaign_type
+    assert view.reward_title is not None
+    assert view.points_balance == 10  # floor(0.10 * 100)
+    assert view.points_per_som == Decimal("0.10")
+    assert view.cashback_per_point == Decimal("0.50")
+    assert view.points_per_visit is None
 
 
 def test_scan_non_customer_token_rejected():

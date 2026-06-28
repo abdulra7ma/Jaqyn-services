@@ -25,6 +25,7 @@ from apps.campaigns.models import (
     CampaignAction,
     CampaignParticipant,
     CampaignRewardVoucher,
+    CampaignRule,
 )
 
 
@@ -234,6 +235,14 @@ class CampaignEligibilityService:
         customer (completion) eligibility → daily limit → min-gap → reward limit.
         ``check_branch`` is folded in as a no-op for MVP. Returns an
         :class:`EligibilityResult`; never raises and never writes.
+
+        A POINTS-mechanic INDIVIDUAL campaign is a running cashback balance with
+        no completion target (multi-form-loyalty design §1): staff may award
+        points on any visit. It is therefore eligible whenever active and within
+        the run window — the completion (already-completed), daily-limit, min-gap,
+        and reward-limit gates do not apply (those gate reaching a target / minting
+        a voucher, which a POINTS award never does). The participant-cap still
+        applies so a full campaign cannot auto-join a new customer.
         """
         now = now or timezone.now()
 
@@ -247,6 +256,14 @@ class CampaignEligibilityService:
             return EligibilityResult(
                 campaign, False, IneligibilityReason.PARTICIPANT_LIMIT
             )
+
+        rule = getattr(campaign, "rule", None)
+        if rule is not None and rule.mechanic == CampaignRule.Mechanic.POINTS:
+            # POINTS accrues a balance and never completes/mints a voucher, so the
+            # remaining target/voucher gates do not apply — staff award points on
+            # any visit while the campaign is active and in-window.
+            return EligibilityResult(campaign, True, None)
+
         if not cls.check_customer_eligibility(campaign, participant):
             return EligibilityResult(
                 campaign, False, IneligibilityReason.ALREADY_COMPLETED
@@ -268,14 +285,14 @@ class CampaignEligibilityService:
 
         Used by the staff-scan surface to surface every campaign the customer
         could progress (and the reason for any that are blocked). Prefetches the
-        rule and the customer's participant rows to keep the per-campaign checks
-        free of N+1 queries.
+        rule, the reward, and the customer's participant rows to keep the
+        per-campaign checks and the staff-chooser row fields free of N+1 queries.
         """
         now = now or timezone.now()
         campaigns = list(
             Campaign.objects.filter(
                 business=business, status=Campaign.Status.ACTIVE
-            ).select_related("rule")
+            ).select_related("rule", "reward")
         )
         participant_by_campaign = {
             p.campaign_id: p
