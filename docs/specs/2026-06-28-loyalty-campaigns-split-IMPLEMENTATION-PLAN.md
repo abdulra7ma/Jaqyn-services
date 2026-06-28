@@ -17,34 +17,35 @@
 | Spend | Spend is **loyalty-only** (POINTS spend-basis). Individual campaigns are **visit/action count challenges only** (no spend threshold). |
 | Data | **Pre-launch clean cut.** No backfill. Trim campaigns + add loyalty app + reseed. |
 | Loyalty join | **Auto-create** the membership (card) on first staff award. ALSO allow a customer to "Join" from the business page (creates membership at 0 so the card shows immediately). |
-| Branch base | Branch off **`feat/multi-form-loyalty`** (the loyalty UI to re-point lives there), NOT `main`. |
+| Branch base | **`main`** — multi-form loyalty is now MERGED to main (merge `deb68ba`), so the loyalty UI to re-point is already on main. Work on branch **`feat/loyalty-app-split`** (already created off main, with your in-progress BusinessSheet/MyQrSheet refactor restored in the working tree). |
 
 ## 1. Phase 0 — Branch + isolated database + how to run
 
-### 1.1 Branch
+### 1.1 Branch (ALREADY DONE)
+`feat/loyalty-app-split` is already created off `main`. Just confirm you're on it:
 ```bash
-git checkout feat/multi-form-loyalty
-git pull --ff-only 2>/dev/null || true
-git checkout -b feat/loyalty-app-split
+git checkout feat/loyalty-app-split
 ```
 All work lands on `feat/loyalty-app-split`. Commit per task (Conventional Commits,
 end every message with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`).
 
 ### 1.2 Isolated Postgres database (do NOT touch the current dev DB)
-The dev stack runs in Docker; its DB is `railway` on container `jaqyn-services-db-1`.
-Create a SEPARATE database so the split's migrations/seed never clobber it:
+The dev stack runs in Docker; its DB is `jaqyn` on container `jaqyn-services-db-1`
+(local creds: user `jaqyn` / password `jaqyn` / db `jaqyn` — NOT the prod `postgres`/`railway`).
+**`jaqyn_split` has ALREADY been created, migrated, and seeded** by the plan author —
+verify it exists; only recreate if missing:
 ```bash
-docker exec jaqyn-services-db-1 psql -U postgres -d postgres \
-  -c "CREATE DATABASE jaqyn_split OWNER postgres;"
+docker exec jaqyn-services-db-1 psql -U jaqyn -d jaqyn \
+  -c "CREATE DATABASE jaqyn_split OWNER jaqyn;"   # already done; errors with 'already exists'
 ```
 Run all management commands for this work against `jaqyn_split` via an env override
 on the existing web container (does not disturb the running server, which keeps using
-`railway`):
+`jaqyn`):
 ```bash
 docker exec -e POSTGRES_DB=jaqyn_split jaqyn-services-web-1 python manage.py migrate
 docker exec -e POSTGRES_DB=jaqyn_split jaqyn-services-web-1 python manage.py seed_demo
 ```
-For LIVE end-to-end (Phase 10) run a SECOND backend bound to `jaqyn_split` on port 8001
+For LIVE end-to-end (Phase 9) run a SECOND backend bound to `jaqyn_split` on port 8001
 so the main stack stays untouched:
 ```bash
 docker exec -d -e POSTGRES_DB=jaqyn_split -e PORT=8001 jaqyn-services-web-1 \
@@ -56,10 +57,10 @@ docker exec -d -e POSTGRES_DB=jaqyn_split -e PORT=8001 jaqyn-services-web-1 \
 Point the frontend preview at it: `API_PROXY_TARGET=http://127.0.0.1:8001 pnpm dev`.
 (Backend unit tests always use the throwaway `config.settings.test` DB — unaffected.)
 
-### 1.3 Acceptance for Phase 0
-- `git branch --show-current` → `feat/loyalty-app-split`.
-- `docker exec jaqyn-services-db-1 psql -U postgres -lqt | grep jaqyn_split` → present.
-- `migrate` + `seed_demo` against `jaqyn_split` succeed; the main `railway` DB is unchanged.
+### 1.3 Acceptance for Phase 0 (already satisfied)
+- `git branch --show-current` → `feat/loyalty-app-split` (off main).
+- `docker exec jaqyn-services-db-1 psql -U jaqyn -lqt | grep jaqyn_split` → present.
+- `migrate` + `seed_demo` against `jaqyn_split` succeed; the main `jaqyn` DB is unchanged.
 
 ## 2. Phase 1 — Backend: `apps.loyalty` models
 
@@ -385,8 +386,8 @@ campaigns trim + tests → 5 unified staff scan → 6 FE api split → 7 custome
 - Business: separate Loyalty + Campaigns sections.
 - Staff: one scan → loyalty award (incl. bill amount) + campaign progress.
 - All gates green; E2E smoke (§9) passes on the isolated `jaqyn_split` DB; the main dev DB
-  (`railway`) untouched.
+  (`jaqyn`) untouched.
 
 ## 12. Cleanup after verification
-- Drop the scratch DB when done: `docker exec jaqyn-services-db-1 psql -U postgres -d postgres -c "DROP DATABASE jaqyn_split;"`
+- Drop the scratch DB when done: `docker exec jaqyn-services-db-1 psql -U jaqyn -d jaqyn -c "DROP DATABASE jaqyn_split WITH (FORCE);"`
 - Do NOT merge to main without the user's go-ahead.
