@@ -7,13 +7,18 @@ hard-fails.
 """
 
 from datetime import timedelta
+from decimal import Decimal
 
 import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.campaigns.models import CampaignRewardVoucher
+from apps.campaigns.models import (
+    CampaignParticipant,
+    CampaignRewardVoucher,
+    CampaignRule,
+)
 from apps.campaigns.services import StaffScannerService
 from apps.campaigns.tests.helpers import (
     make_business,
@@ -199,3 +204,128 @@ def test_min_gap_on_one_campaign_does_not_block_others():
     skipped_ids = {sc.campaign_id for sc in result.skipped_campaigns}
     assert c_open.id in advanced_ids
     assert c_blocked.id in skipped_ids
+
+
+# --- choose-one confirm with a bill amount (redesigned staff loyalty scan) ----
+
+
+def test_confirm_points_spend_basis_awards_by_rate_and_returns_balance():
+    """POST /visit/ with campaign_id + amount on a POINTS spend-basis program
+    awards floor(points_per_som × amount) and returns the new points_balance."""
+    business = make_business()
+    customer = make_customer()
+    staff = make_staff(business)
+    campaign = make_campaign(
+        business,
+        mechanic=CampaignRule.Mechanic.POINTS,
+        points_basis=CampaignRule.PointsBasis.SPEND,
+        points_per_som=Decimal("0.10"),  # 1 point per 10 som
+        cashback_per_point=Decimal("0.50"),
+    )
+    token = get_or_create_customer_profile_token(customer)
+
+    client = _auth_client(staff)
+    resp = client.post(
+        "/api/staff/campaigns/visit/",
+        {"token": token.token, "campaign_id": str(campaign.id), "amount": "250"},
+        format="json",
+    )
+
+    assert resp.status_code == 200, resp.content
+    rows = resp.json()["data"]["campaigns"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["campaign"]["id"] == str(campaign.id)
+    assert row["points_balance"] == 25  # floor(0.10 * 250)
+    assert row["completed"] is False
+    participant = CampaignParticipant.objects.get(campaign=campaign, customer=customer)
+    assert participant.points_balance == 25
+
+
+def test_confirm_stamp_with_campaign_id_no_amount_increments_by_one():
+    """A STAMP program targeted by campaign_id with no amount still counts one."""
+    business = make_business()
+    customer = make_customer()
+    staff = make_staff(business)
+    campaign = make_campaign(
+        business, mechanic=CampaignRule.Mechanic.STAMP, required_count=5
+    )
+    token = get_or_create_customer_profile_token(customer)
+
+    client = _auth_client(staff)
+    resp = client.post(
+        "/api/staff/campaigns/visit/",
+        {"token": token.token, "campaign_id": str(campaign.id)},
+        format="json",
+    )
+
+    assert resp.status_code == 200, resp.content
+    rows = resp.json()["data"]["campaigns"]
+    assert len(rows) == 1
+    assert rows[0]["progress_count"] == 1
+    assert rows[0]["completed"] is False
+
+
+def test_confirm_spend_requires_amount_then_accumulates():
+    """A SPEND program targeted by campaign_id rejects a missing amount (400) and
+    accumulates current_spend when the amount is provided."""
+    business = make_business()
+    customer = make_customer()
+    staff = make_staff(business)
+    campaign = make_campaign(
+        business,
+        mechanic=CampaignRule.Mechanic.SPEND,
+        required_spend=Decimal("1000"),
+        min_spend=Decimal("0"),
+    )
+    token = get_or_create_customer_profile_token(customer)
+    client = _auth_client(staff)
+
+    # Missing amount → 400 (service-enforced business rule).
+    missing = client.post(
+        "/api/staff/campaigns/visit/",
+        {"token": token.token, "campaign_id": str(campaign.id)},
+        format="json",
+    )
+    assert missing.status_code == 400, missing.content
+
+    # With amount → accumulates onto current_spend.
+    ok = client.post(
+        "/api/staff/campaigns/visit/",
+        {"token": token.token, "campaign_id": str(campaign.id), "amount": "300"},
+        format="json",
+    )
+    assert ok.status_code == 200, ok.content
+    rows = ok.json()["data"]["campaigns"]
+    assert len(rows) == 1
+    participant = CampaignParticipant.objects.get(campaign=campaign, customer=customer)
+    assert participant.current_spend == Decimal("300")
+
+
+def test_confirm_points_visit_basis_no_amount_awards_per_visit():
+    """A POINTS visit-basis program targeted by campaign_id with no amount awards
+    the rule's points_per_visit."""
+    business = make_business()
+    customer = make_customer()
+    staff = make_staff(business)
+    campaign = make_campaign(
+        business,
+        mechanic=CampaignRule.Mechanic.POINTS,
+        points_basis=CampaignRule.PointsBasis.VISIT,
+        points_per_visit=10,
+        cashback_per_point=Decimal("0.50"),
+    )
+    token = get_or_create_customer_profile_token(customer)
+
+    client = _auth_client(staff)
+    resp = client.post(
+        "/api/staff/campaigns/visit/",
+        {"token": token.token, "campaign_id": str(campaign.id)},
+        format="json",
+    )
+
+    assert resp.status_code == 200, resp.content
+    rows = resp.json()["data"]["campaigns"]
+    assert len(rows) == 1
+    assert rows[0]["points_balance"] == 10
+    assert rows[0]["completed"] is False

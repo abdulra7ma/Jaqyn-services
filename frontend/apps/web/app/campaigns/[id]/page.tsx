@@ -1,12 +1,12 @@
 "use client";
 
-import { useCampaign, useJoinCampaign, type Campaign } from "@jaqyn/api";
+import { useCampaign, useJoinCampaign, useRedeemPoints, type Campaign } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { useParams, useRouter } from "next/navigation";
 import { CustomerShell } from "../../_components/CustomerShell";
 import { QueryBoundary } from "../../_components/QueryBoundary";
 import { GroupCampaignDetail } from "../../_components/group-detail";
-import { howItWorks, missionLine, ruleLines } from "../../_components/campaigns";
+import { PointsRedeemCard, howItWorks, missionLine, ruleLines } from "../../_components/campaigns";
 import { useRequireAuth } from "../../_lib/auth";
 
 function CtaBar({ campaign }: { campaign: Campaign }) {
@@ -42,6 +42,10 @@ function CtaBar({ campaign }: { campaign: Campaign }) {
       onClick: () => router.push(`/campaigns/${campaign.id}/group`),
       tone: "brand",
     };
+  } else if (campaign.rule.mechanic === "points") {
+    // POINTS programs accrue passively (staff scans add points) and redeem via the
+    // in-page PointsRedeemCard — there is no "show visit QR" action bar to add.
+    cta = null;
   } else {
     cta = {
       label: t("cmp.detail.showQr"),
@@ -50,9 +54,10 @@ function CtaBar({ campaign }: { campaign: Campaign }) {
     };
   }
 
-  // Ended/cancelled campaigns the customer never completed: no action.
+  // Ended/cancelled campaigns the customer never completed: no action. A joined
+  // points program also has no action bar (redemption lives in PointsRedeemCard).
   const inactive = (campaign.status === "ended" || campaign.status === "cancelled") && !p?.completed;
-  if (inactive) return null;
+  if (inactive || !cta) return null;
 
   return (
     <div className="sticky bottom-0 -mx-4 mt-6 bg-gradient-to-t from-cream from-[26%] to-transparent px-4 pb-[calc(16px+env(safe-area-inset-bottom))] pt-3.5 sm:-mx-6 sm:px-6">
@@ -142,8 +147,11 @@ export default function CampaignDetailPage() {
                   </div>
                 </div>
 
-                {/* progress (joined only) */}
-                {p?.joined && target > 0 && (
+                {/* POINTS: balance + redeem-cashback surface (slice 3). */}
+                {p?.joined && c.rule.mechanic === "points" && <PointsRedeemCard campaign={c} />}
+
+                {/* progress (joined only; non-points individual) */}
+                {p?.joined && c.rule.mechanic !== "points" && target > 0 && (
                   <div className="mt-4 rounded-[18px] border border-line bg-card p-4">
                     <div className="flex items-baseline justify-between">
                       <span className="text-[13px] font-semibold text-subtle">

@@ -430,6 +430,12 @@ export type CampaignPayload = {
   required_count?: number | null;
   // INDIVIDUAL spend mechanic: total spend (decimal string) to complete.
   required_spend?: string | null;
+  // INDIVIDUAL points mechanic (multi-form-loyalty slice 3): accrual basis +
+  // the per-action rate (one of per-visit / per-som) + the cashback rate.
+  points_basis?: "visit" | "spend" | null;
+  points_per_visit?: number | null;
+  points_per_som?: string | null;
+  cashback_per_point?: string | null;
   max_count_per_day?: number | null;
   // minimum_time_between_actions: ISO 8601 duration string (e.g. "PT4H") accepted
   // by the backend DurationField. Null clears the constraint.
@@ -445,6 +451,10 @@ export type CampaignPayload = {
   reward_description?: string;
   expiry_days_after_unlock?: number;
   max_rewards?: number | null;
+  // Item rewards (multi-form-loyalty slice 3): fixed (business presets the item)
+  // vs customer (chosen at redemption); catalog_item_id set only when fixed.
+  item_selection?: "fixed" | "customer" | null;
+  catalog_item_id?: string | null;
   // Limits.
   max_participants?: number | null;
   repeat_policy?: "once" | "repeatable";

@@ -7,7 +7,7 @@
 // backend publish rules for UX — the service is the authority. Submit calls
 // useCreateCampaign and routes to the new campaign's detail.
 
-import { useCreateCampaign, type BusinessCampaignType } from "@jaqyn/api";
+import { useCatalog, useCreateCampaign, type BusinessCampaignType } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -158,7 +158,82 @@ function StepOutcome({
 
 // ---- Step 2: adaptive form -------------------------------------------------
 
-const MECHANICS = ["visit", "stamp", "spend"] as const;
+const MECHANICS = ["visit", "stamp", "spend", "points"] as const;
+
+/** A two-option pill toggle (basis / item-selection). */
+function Toggle<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="mt-4">
+      <span className={LABEL}>{label}</span>
+      <div className="mt-1.5 flex gap-1.5">
+        {options.map((o) => {
+          const active = value === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => onChange(o.value)}
+              aria-pressed={active}
+              className={`flex-1 rounded-xl border-[1.5px] px-2 py-3 text-[12.5px] font-semibold transition ${
+                active ? "border-brand bg-brand-muted text-brand-deep" : "border-line bg-card text-subtle"
+              }`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Reward-item selection (multi-form-loyalty slice 3): fixed preset item vs
+ * customer-chosen. When fixed, a CatalogItem picker fed by the owner's catalog. */
+function ItemRewardPicker({ form, set }: { form: CampaignForm; set: SetFn }) {
+  const t = useT();
+  const catalog = useCatalog();
+  return (
+    <>
+      <Toggle
+        label={t("cmp.biz.form.itemSelection")}
+        value={form.itemSelection}
+        options={[
+          { value: "fixed", label: t("cmp.biz.form.item.fixed") },
+          { value: "customer", label: t("cmp.biz.form.item.customer") },
+        ]}
+        onChange={(v) => set("itemSelection", v)}
+      />
+      {form.itemSelection === "fixed" && (
+        <label className="mt-4 block">
+          <span className={LABEL}>{t("cmp.biz.form.catalogItem")}</span>
+          <select
+            value={form.catalogItemId}
+            onChange={(e) => set("catalogItemId", e.target.value)}
+            className={FIELD}
+          >
+            <option value="">{t("cmp.biz.form.catalogItem.placeholder")}</option>
+            {(catalog.data ?? []).map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+                {item.price ? ` · ${item.price}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </>
+  );
+}
 
 function StepDetails({ form, set }: { form: CampaignForm; set: SetFn }) {
   const t = useT();
@@ -176,7 +251,7 @@ function StepDetails({ form, set }: { form: CampaignForm; set: SetFn }) {
         <>
           <div className="mt-4">
             <span className={LABEL}>{t("cmp.biz.form.mechanic")}</span>
-            <div className="mt-1.5 flex gap-1.5">
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
               {MECHANICS.map((m) => {
                 const active = form.mechanic === m;
                 return (
@@ -185,7 +260,7 @@ function StepDetails({ form, set }: { form: CampaignForm; set: SetFn }) {
                     type="button"
                     onClick={() => set("mechanic", m)}
                     aria-pressed={active}
-                    className={`flex-1 rounded-xl border-[1.5px] px-2 py-3 text-[12.5px] font-semibold transition ${
+                    className={`rounded-xl border-[1.5px] px-2 py-3 text-[12.5px] font-semibold transition ${
                       active ? "border-brand bg-brand-muted text-brand-deep" : "border-line bg-card text-subtle"
                     }`}
                   >
@@ -195,23 +270,61 @@ function StepDetails({ form, set }: { form: CampaignForm; set: SetFn }) {
               })}
             </div>
           </div>
-          <div className="mt-4">
-            {form.mechanic === "spend" ? (
-              <Field
-                label={t("cmp.biz.form.requiredSpend")}
-                value={form.requiredSpend}
-                onChange={(v) => set("requiredSpend", v)}
-                inputMode="numeric"
+
+          {form.mechanic === "points" ? (
+            <>
+              <Toggle
+                label={t("cmp.biz.form.pointsBasis")}
+                value={form.pointsBasis}
+                options={[
+                  { value: "visit", label: t("cmp.biz.form.pointsBasis.visit") },
+                  { value: "spend", label: t("cmp.biz.form.pointsBasis.spend") },
+                ]}
+                onChange={(v) => set("pointsBasis", v)}
               />
-            ) : (
-              <Field
-                label={t(form.mechanic === "stamp" ? "cmp.biz.form.requiredStamps" : "cmp.biz.form.requiredVisits")}
-                value={form.requiredCount}
-                onChange={(v) => set("requiredCount", v)}
-                inputMode="numeric"
-              />
-            )}
-          </div>
+              <div className="mt-4 flex gap-3.5">
+                {form.pointsBasis === "spend" ? (
+                  <Field
+                    label={t("cmp.biz.form.pointsPerSom")}
+                    value={form.pointsPerSom}
+                    onChange={(v) => set("pointsPerSom", v)}
+                    inputMode="numeric"
+                  />
+                ) : (
+                  <Field
+                    label={t("cmp.biz.form.pointsPerVisit")}
+                    value={form.pointsPerVisit}
+                    onChange={(v) => set("pointsPerVisit", v)}
+                    inputMode="numeric"
+                  />
+                )}
+                <Field
+                  label={t("cmp.biz.form.cashbackPerPoint")}
+                  value={form.cashbackPerPoint}
+                  onChange={(v) => set("cashbackPerPoint", v)}
+                  inputMode="numeric"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="mt-4">
+              {form.mechanic === "spend" ? (
+                <Field
+                  label={t("cmp.biz.form.requiredSpend")}
+                  value={form.requiredSpend}
+                  onChange={(v) => set("requiredSpend", v)}
+                  inputMode="numeric"
+                />
+              ) : (
+                <Field
+                  label={t(form.mechanic === "stamp" ? "cmp.biz.form.requiredStamps" : "cmp.biz.form.requiredVisits")}
+                  value={form.requiredCount}
+                  onChange={(v) => set("requiredCount", v)}
+                  inputMode="numeric"
+                />
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -254,6 +367,10 @@ function StepDetails({ form, set }: { form: CampaignForm; set: SetFn }) {
           onChange={(v) => set("rewardTitle", v)}
           placeholder={t("cmp.biz.form.rewardTitlePlaceholder")}
         />
+        {/* Item-reward selection — only for visit/stamp/spend (points pays cashback). */}
+        {form.type === "individual" && form.mechanic !== "points" && (
+          <ItemRewardPicker form={form} set={set} />
+        )}
       </div>
       <div className="mt-4 flex items-end gap-3.5">
         <Field

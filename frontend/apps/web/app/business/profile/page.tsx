@@ -32,15 +32,7 @@ const FIELD =
 const LABEL = "text-xs font-bold text-subtle";
 const CARD = "rounded-[18px] border border-line bg-card p-5";
 
-const CATEGORIES = [
-  ["cafe", "Cafe"],
-  ["restaurant", "Restaurant"],
-  ["bakery", "Bakery"],
-  ["barber", "Barber"],
-  ["beauty", "Beauty"],
-  ["retail", "Retail"],
-  ["other", "Other"],
-];
+const CATEGORIES = ["cafe", "restaurant", "bakery", "barber", "beauty", "retail", "other"];
 const PRICE_LEVELS = ["c", "cc", "ccc"];
 const ACCENTS = ["#C25E3C", "#5E8B6A", "#E7A23E", "#6A6BC2", "#B0563A"];
 
@@ -97,9 +89,9 @@ export default function BusinessProfilePage() {
         onError: (err: unknown) => {
           const code = (err as { code?: string })?.code;
           if (code === "GALLERY_LIMIT_REACHED") {
-            setSaved("Gallery is full (8 photos max)");
+            setSaved(t("owner.profile.galleryFull"));
           } else {
-            setSaved("Gallery upload failed");
+            setSaved(t("owner.profile.galleryUploadFailed"));
           }
           setTimeout(() => setSaved(null), 2500);
         },
@@ -115,7 +107,7 @@ export default function BusinessProfilePage() {
       { id, file },
       {
         onError: () => {
-          setSaved("Image upload failed");
+          setSaved(t("owner.profile.imageUploadFailed"));
           setTimeout(() => setSaved(null), 2500);
         },
       },
@@ -198,11 +190,11 @@ export default function BusinessProfilePage() {
       },
       {
         onSuccess: () => {
-          setSaved("Profile saved");
+          setSaved(t("owner.profile.saved"));
           setTimeout(() => setSaved(null), 2000);
         },
         onError: () => {
-          setSaved("Save failed — check fields");
+          setSaved(t("owner.profile.saveFailed"));
           setTimeout(() => setSaved(null), 2500);
         },
       },
@@ -210,7 +202,7 @@ export default function BusinessProfilePage() {
   }
 
   const tagList = tags.split(",").map((t) => t.trim()).filter(Boolean);
-  const catLabel = CATEGORIES.find(([v]) => v === cat)?.[1] ?? cat;
+  const catLabel = CATEGORIES.includes(cat) ? t(`owner.profile.category.${cat}`) : cat;
   const completion = onboarding.data?.completion_score ?? me.data?.completion_score ?? 0;
   const missing = onboarding.data?.missing_required_fields ?? me.data?.missing_required_fields ?? [];
   const readyToSubmit = missing.length === 0 && items.length > 0;
@@ -219,42 +211,42 @@ export default function BusinessProfilePage() {
   function submitForReview() {
     submit.mutate(undefined, {
       onSuccess: () => {
-        setSaved("Submitted for verification");
+        setSaved(t("owner.profile.submitted"));
         setTimeout(() => setSaved(null), 2400);
         onboarding.refetch();
       },
       onError: (e: unknown) => {
-        setSaved((e as { message?: string })?.message ?? "Complete required fields first");
+        setSaved((e as { message?: string })?.message ?? t("owner.profile.completeFirst"));
         setTimeout(() => setSaved(null), 2800);
       },
     });
   }
 
   return (
-    <OwnerShell title="Business Profile">
+    <OwnerShell title={t("owner.profile.title")}>
       <div className="mx-auto flex w-full max-w-[1000px] flex-wrap items-start gap-6 sm:gap-[22px]">
         {/* form column */}
         <div className="flex min-w-0 max-w-[600px] flex-1 flex-col gap-4 lg:basis-[420px]">
           <div className={CARD}>
-            <div className="font-display text-[15px] font-bold text-ink">Public profile</div>
-            <div className="mt-[3px] text-[12.5px] text-subtle">Shown to customers on your Jaqyn profile.</div>
+            <div className="font-display text-[15px] font-bold text-ink">{t("owner.profile.publicProfile")}</div>
+            <div className="mt-[3px] text-[12.5px] text-subtle">{t("owner.profile.publicHint")}</div>
             <label className="mt-3.5 block">
-              <span className={LABEL}>Business name</span>
+              <span className={LABEL}>{t("owner.profile.businessName")}</span>
               <input value={name} onChange={(e) => setName(e.target.value)} className={`${FIELD} mt-1.5`} />
             </label>
             <div className="mt-3.5 flex gap-3">
               <label className="flex-1">
-                <span className={LABEL}>Category</span>
+                <span className={LABEL}>{t("owner.profile.category")}</span>
                 <select value={cat} onChange={(e) => setCat(e.target.value)} className={`${FIELD} mt-1.5`}>
-                  {CATEGORIES.map(([v, l]) => (
+                  {CATEGORIES.map((v) => (
                     <option key={v} value={v}>
-                      {l}
+                      {t(`owner.profile.category.${v}`)}
                     </option>
                   ))}
                 </select>
               </label>
               <div className="flex-1">
-                <span className={LABEL}>Price level</span>
+                <span className={LABEL}>{t("owner.profile.priceLevel")}</span>
                 <div className="mt-1.5 flex gap-1.5">
                   {PRICE_LEVELS.map((p) => {
                     const sel = price === p;
@@ -272,7 +264,7 @@ export default function BusinessProfilePage() {
               </div>
             </div>
             <label className="mt-3.5 block">
-              <span className={LABEL}>Description</span>
+              <span className={LABEL}>{t("biz.description")}</span>
               <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={3} className={`${FIELD} mt-1.5 resize-none leading-relaxed`} />
             </label>
           </div>
@@ -280,8 +272,8 @@ export default function BusinessProfilePage() {
           <div className={CARD}>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="font-display text-[15px] font-bold text-ink">Profile completion</div>
-                <div className="mt-[3px] text-[12.5px] text-subtle">Required before your profile can be reviewed and published.</div>
+                <div className="font-display text-[15px] font-bold text-ink">{t("owner.profile.completion")}</div>
+                <div className="mt-[3px] text-[12.5px] text-subtle">{t("owner.profile.completionHint")}</div>
               </div>
               <span className="rounded-pill bg-brand-muted px-3 py-1 text-[12.5px] font-bold text-brand">{completion}%</span>
             </div>
@@ -301,67 +293,67 @@ export default function BusinessProfilePage() {
               </div>
             ) : (
               <div className="mt-3 rounded-xl bg-sage-soft px-3.5 py-3 text-[13px] font-semibold text-ok">
-                Required fields complete. Add polish here, then submit for verification.
+                {t("owner.profile.requiredComplete")}
               </div>
             )}
           </div>
 
           <div className={CARD}>
-            <div className="font-display text-[15px] font-bold text-ink">Contact &amp; location</div>
+            <div className="font-display text-[15px] font-bold text-ink">{t("owner.profile.contactLocation")}</div>
             <div className="mt-3.5 flex gap-3">
               <label className="flex-1">
-                <span className={LABEL}>Phone</span>
+                <span className={LABEL}>{t("biz.phone")}</span>
                 <input value={phone} onChange={(e) => setPhone(e.target.value)} className={`${FIELD} mt-1.5`} />
               </label>
               <label className="flex-1">
-                <span className={LABEL}>Public email</span>
+                <span className={LABEL}>{t("owner.profile.publicEmail")}</span>
                 <input value={email} onChange={(e) => setEmail(e.target.value)} className={`${FIELD} mt-1.5`} />
               </label>
             </div>
             <div className="mt-3.5 flex gap-3">
               <label className="flex-1">
-                <span className={LABEL}>Address</span>
+                <span className={LABEL}>{t("biz.address")}</span>
                 <input value={address} onChange={(e) => setAddress(e.target.value)} className={`${FIELD} mt-1.5`} />
               </label>
               <label className="flex-1">
-                <span className={LABEL}>Area</span>
+                <span className={LABEL}>{t("biz.area")}</span>
                 <input value={area} onChange={(e) => setArea(e.target.value)} className={`${FIELD} mt-1.5`} />
               </label>
             </div>
             <div className="mt-3.5 flex gap-3">
               <label className="flex-1">
-                <span className={LABEL}>Website</span>
+                <span className={LABEL}>{t("owner.profile.website")}</span>
                 <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" className={`${FIELD} mt-1.5`} />
               </label>
               <label className="flex-1">
-                <span className={LABEL}>Instagram</span>
-                <input value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@handle or URL" className={`${FIELD} mt-1.5`} />
+                <span className={LABEL}>{t("biz.instagram")}</span>
+                <input value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder={t("owner.profile.instagramPlaceholder")} className={`${FIELD} mt-1.5`} />
               </label>
             </div>
             <div className="mt-3.5 flex gap-3">
               <label className="flex-1">
-                <span className={LABEL}>City</span>
+                <span className={LABEL}>{t("owner.profile.city")}</span>
                 <input value={city} onChange={(e) => setCity(e.target.value)} className={`${FIELD} mt-1.5`} />
               </label>
               <label className="flex-1">
-                <span className={LABEL}>Working hours</span>
+                <span className={LABEL}>{t("owner.profile.hours")}</span>
                 <input value={hours} onChange={(e) => setHours(e.target.value)} placeholder="Mon-Fri 09:00-21:00" className={`${FIELD} mt-1.5`} />
               </label>
             </div>
             <div className="mt-3.5 flex gap-3">
               <label className="flex-1">
-                <span className={LABEL}>Latitude</span>
+                <span className={LABEL}>{t("owner.profile.latitude")}</span>
                 <input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="42.8746" className={`${FIELD} mt-1.5`} />
               </label>
               <label className="flex-1">
-                <span className={LABEL}>Longitude</span>
+                <span className={LABEL}>{t("owner.profile.longitude")}</span>
                 <input value={lng} onChange={(e) => setLng(e.target.value)} placeholder="74.5698" className={`${FIELD} mt-1.5`} />
               </label>
             </div>
             {/* Map-based location picker — updates lat/lng (and address when available)
                 immediately on search, marker drag, or map click. */}
             <div className="mt-3.5">
-              <span className={LABEL}>Pick on map</span>
+              <span className={LABEL}>{t("owner.profile.pickMap")}</span>
               <div className="mt-1.5">
                 <LocationPicker
                   lat={lat}
@@ -377,7 +369,7 @@ export default function BusinessProfilePage() {
           </div>
 
           <div className={CARD}>
-            <div className="font-display text-[15px] font-bold text-ink">Appearance</div>
+            <div className="font-display text-[15px] font-bold text-ink">{t("owner.profile.appearance")}</div>
 
             {/* Brand image (logo) + background image (cover) uploads. */}
             <div className="mt-3.5 flex flex-wrap items-end gap-4">
@@ -441,7 +433,7 @@ export default function BusinessProfilePage() {
 
             <div className="mt-3.5 flex items-start gap-5">
               <label className="flex-none">
-                <span className={LABEL}>Icon</span>
+                <span className={LABEL}>{t("owner.profile.icon")}</span>
                 <input
                   value={glyph}
                   onChange={(e) => setGlyph(e.target.value)}
@@ -450,7 +442,7 @@ export default function BusinessProfilePage() {
                 />
               </label>
               <div className="flex-1">
-                <span className={LABEL}>Accent color</span>
+                <span className={LABEL}>{t("owner.profile.accent")}</span>
                 <div className="mt-[9px] flex gap-2.5">
                   {ACCENTS.map((a) => (
                     <button
@@ -465,42 +457,42 @@ export default function BusinessProfilePage() {
               </div>
             </div>
             <label className="mt-3.5 block">
-              <span className={LABEL}>Tags · comma separated</span>
+              <span className={LABEL}>{t("owner.profile.tags")}</span>
               <input value={tags} onChange={(e) => setTags(e.target.value)} className={`${FIELD} mt-1.5`} />
             </label>
           </div>
 
           <div className={CARD}>
             <div className="flex items-center justify-between">
-              <div className="font-display text-[15px] font-bold text-ink">Menu</div>
-              <span className="text-xs text-subtle">Shown on your customer profile</span>
+              <div className="font-display text-[15px] font-bold text-ink">{t("owner.profile.menu")}</div>
+              <span className="text-xs text-subtle">{t("owner.profile.menuHint")}</span>
             </div>
             <div className="mt-3.5 flex flex-wrap items-end gap-2.5">
               <label className="min-w-[150px] flex-[2]">
-                <span className={LABEL}>Item</span>
+                <span className={LABEL}>{t("owner.profile.item")}</span>
                 <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Cappuccino" className={`${FIELD} mt-1.5`} />
               </label>
               <label className="min-w-[120px] flex-1">
-                <span className={LABEL}>Section</span>
+                <span className={LABEL}>{t("owner.profile.section")}</span>
                 <select value={draft.group} onChange={(e) => setDraft({ ...draft, group: e.target.value })} className={`${FIELD} mt-1.5`}>
                   {["Coffee", "Kitchen", "Desserts", "Menu"].map((g) => (
                     <option key={g} value={g}>
-                      {g}
+                      {t(`owner.profile.menuGroup.${g.toLowerCase()}`)}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="w-[92px] flex-none">
-                <span className={LABEL}>Price</span>
+                <span className={LABEL}>{t("owner.profile.price")}</span>
                 <input value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} placeholder="150 c" className={`${FIELD} mt-1.5`} />
               </label>
               <button onClick={addMenu} disabled={addItem.isPending} className="flex-none rounded-xl bg-brand px-[18px] py-3 text-sm font-bold text-brand-fg disabled:opacity-60">
-                + Add
+                {t("owner.profile.add")}
               </button>
             </div>
             <div className="mt-3.5 flex flex-col gap-2">
               {items.length === 0 ? (
-                <div className="p-[18px] text-center text-[13px] text-subtle">No menu items yet — add your first above.</div>
+                <div className="p-[18px] text-center text-[13px] text-subtle">{t("owner.profile.menuEmpty")}</div>
               ) : (
                 items.map((it) => (
                   <div key={it.id} className="flex items-center gap-3 rounded-xl border border-line bg-[#FBF7F0] px-3.5 py-3">
@@ -509,7 +501,7 @@ export default function BusinessProfilePage() {
                       <div
                         className="flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-[10px] border border-line bg-card"
                         onClick={() => catalogInputRefs.current[it.id]?.click()}
-                        title="Upload item image"
+                        title={t("owner.profile.uploadItemImage")}
                       >
                         {it.image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -548,9 +540,9 @@ export default function BusinessProfilePage() {
           <div className={CARD}>
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-display text-[15px] font-bold text-ink">Gallery</div>
+                <div className="font-display text-[15px] font-bold text-ink">{t("owner.profile.gallery")}</div>
                 <div className="mt-[3px] text-[12.5px] text-subtle">
-                  Photos shown on your customer profile.
+                  {t("owner.profile.galleryHint")}
                 </div>
               </div>
               <span className="rounded-pill bg-brand-muted px-2.5 py-1 text-[12.5px] font-bold text-brand">
@@ -566,7 +558,7 @@ export default function BusinessProfilePage() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={img.image_url}
-                      alt={img.caption || "Gallery photo"}
+                      alt={img.caption || t("owner.profile.galleryPhoto")}
                       className="h-full w-full object-cover"
                     />
                     <button
@@ -574,7 +566,7 @@ export default function BusinessProfilePage() {
                       onClick={() => deleteGallery.mutate(img.id)}
                       disabled={deleteGallery.isPending}
                       className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-ink/70 text-[11px] text-cream opacity-0 transition group-hover:opacity-100 disabled:opacity-40"
-                      aria-label="Delete photo"
+                      aria-label={t("owner.profile.deletePhoto")}
                     >
                       ×
                     </button>
@@ -585,7 +577,7 @@ export default function BusinessProfilePage() {
 
             {galleryImages.length === 0 && (
               <div className="mt-3.5 rounded-xl border border-dashed border-line bg-[#FBF7F0] p-[18px] text-center text-[13px] text-subtle">
-                No gallery photos yet — upload up to 8.
+                {t("owner.profile.galleryEmpty")}
               </div>
             )}
 
@@ -605,23 +597,23 @@ export default function BusinessProfilePage() {
               className="mt-3.5 w-full rounded-xl border-[1.5px] border-line bg-card px-3.5 py-2.5 text-[13px] font-bold text-ink disabled:opacity-60"
             >
               {uploadGallery.isPending
-                ? "Uploading…"
+                ? t("owner.profile.uploading")
                 : galleryFull
-                  ? "Gallery full (8/8)"
-                  : "Add photos"}
+                  ? t("owner.profile.galleryFullShort")
+                  : t("owner.profile.addPhotos")}
             </button>
           </div>
 
           <div className="flex gap-[11px]">
             <Link href={publicHref} className="flex flex-1 items-center justify-center rounded-[14px] border-[1.5px] border-line bg-card py-[15px] text-[14.5px] font-semibold text-ink">
-              View as customer
+              {t("owner.profile.viewCustomer")}
             </Link>
             <button
               onClick={save}
               disabled={update.isPending}
               className="flex-[1.6] rounded-[14px] bg-brand py-[15px] text-[14.5px] font-bold text-brand-fg shadow-glow transition hover:brightness-105 disabled:opacity-60"
             >
-              {update.isPending ? "Saving…" : "Save profile"}
+              {update.isPending ? t("owner.profile.saving") : t("owner.profile.save")}
             </button>
           </div>
           <button
@@ -629,13 +621,13 @@ export default function BusinessProfilePage() {
             disabled={!readyToSubmit || submit.isPending}
             className="rounded-[14px] bg-ink py-[15px] text-[14.5px] font-bold text-cream shadow-card disabled:opacity-45"
           >
-            {submit.isPending ? "Submitting…" : "Submit for verification"}
+            {submit.isPending ? t("owner.profile.submitting") : t("owner.profile.submit")}
           </button>
         </div>
 
         {/* preview column */}
         <div className="w-full flex-none sm:w-[300px]">
-          <div className="mb-[11px] text-xs font-bold uppercase tracking-[0.05em] text-subtle">Customer preview</div>
+          <div className="mb-[11px] text-xs font-bold uppercase tracking-[0.05em] text-subtle">{t("owner.profile.customerPreview")}</div>
           <div className="overflow-hidden rounded-[18px] border border-line bg-card shadow-card">
             <div
               className="flex h-[118px] items-end justify-center pb-3.5"
@@ -656,7 +648,7 @@ export default function BusinessProfilePage() {
             </div>
             <div className="px-[18px] pb-5 pt-4">
               <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0 font-display text-lg font-bold text-ink">{name || "Your business"}</div>
+                <div className="min-w-0 font-display text-lg font-bold text-ink">{name || t("owner.profile.yourBusiness")}</div>
                 <span className="flex-none text-[12.5px] font-bold text-subtle">{price}</span>
               </div>
               <div className="mt-[3px] text-[13px] text-subtle">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useBusiness } from "@jaqyn/api";
+import { useBusiness, useBusinessLoyalty } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Badge, Card } from "@jaqyn/ui";
 import Link from "next/link";
@@ -46,6 +46,7 @@ function GalleryPhoto({ photo }: { photo: { id: string; image_url: string; capti
   );
 }
 import { CustomerShell } from "../../_components/CustomerShell";
+import { BusinessLoyaltyCard, type LoyaltyProgramView } from "../../_components/campaigns";
 import { QueryBoundary } from "../../_components/QueryBoundary";
 import { ListGroup, ListRow } from "../../_components/kit";
 import { isOpenNow } from "../../_lib/hours";
@@ -54,6 +55,8 @@ export default function BusinessProfilePage() {
   const t = useT();
   const { id } = useParams<{ id: string }>();
   const business = useBusiness(id);
+  // The business's active loyalty programs + the viewer's state (multi-form-loyalty §2).
+  const loyalty = useBusinessLoyalty(id);
 
   return (
     <CustomerShell title={t("nearby.title")} back="/nearby" showNav={false} hideChromeTitle>
@@ -123,6 +126,35 @@ export default function BusinessProfilePage() {
                 {b.public_email && <ListRow label="Email" value={b.public_email} />}
               </ListGroup>
 
+              {/* Loyalty programs the customer can join/continue/redeem (slice 2).
+                  Omitted entirely when the business runs none. */}
+              {(loyalty.data?.length ?? 0) > 0 && (
+                <section aria-labelledby="loyalty-heading">
+                  <h2
+                    id="loyalty-heading"
+                    className="mb-2.5 px-1 font-display text-sm font-bold text-ink"
+                  >
+                    {t("cmp.loyalty.title")}
+                  </h2>
+                  <BusinessLoyaltyCard
+                    business={{ name: b.name, logo_url: b.logo_url ?? null }}
+                    programs={(loyalty.data ?? []).map(
+                      (p): LoyaltyProgramView => ({
+                        campaignId: p.campaign_id,
+                        name: p.name,
+                        mechanic: p.mechanic,
+                        rewardSummary: p.reward_summary,
+                        joined: p.joined,
+                        progressCount: p.progress_count,
+                        target: p.target,
+                        pointsBalance: p.points_balance,
+                        cashbackPerPoint: p.cashback_per_point,
+                      }),
+                    )}
+                  />
+                </section>
+              )}
+
               {renderHours(b.working_hours) && (
                 <Card>
                   <p className="mb-2 font-display text-sm font-bold text-ink">{t("business.hours")}</p>
@@ -130,19 +162,9 @@ export default function BusinessProfilePage() {
                 </Card>
               )}
 
-              {b.rewards && b.rewards.length > 0 && (
-                <Card>
-                  <p className="font-display text-sm font-bold text-ink">Loyalty rewards</p>
-                  <div className="mt-3 flex flex-col gap-2">
-                    {b.rewards.map((r) => (
-                      <div key={r.id} className="rounded-xl bg-[#FBF7F0] p-3">
-                        <div className="text-sm font-bold text-ink">{r.title}</div>
-                        <div className="mt-1 text-xs font-semibold text-brand">{r.reward_description}</div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              )}
+              {/* The business's loyalty programs render in the single
+                  BusinessLoyaltyCard above (multi-form-loyalty); the old static
+                  b.rewards list was a duplicate and was removed. */}
 
               {b.group_offers && b.group_offers.length > 0 && (
                 <Card>

@@ -5,29 +5,31 @@
 // graceful empty states when there's no history yet. Design from Jaqyn.dc.html.
 
 import { useBusinessMe, useDashboard } from "@jaqyn/api";
+import { useT } from "@jaqyn/i18n";
 import Link from "next/link";
 import { OwnerShell } from "../_components/OwnerShell";
 
 const CARD = "rounded-[18px] border border-line bg-card p-5";
-const DAYS = ["M", "T", "W", "T", "F", "S", "S"];
+const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
 export default function BusinessDashboardPage() {
+  const t = useT();
   const me = useBusinessMe();
   const dash = useDashboard();
 
   const m = dash.data?.metrics;
   const metrics = [
-    { label: "Total customers", value: m?.customers ?? 0, sub: `+${m?.new_customers ?? 0} this month` },
-    { label: "Scans this month", value: m?.total_scans ?? 0, sub: `${m?.scans ?? 0} recent`, accent: true },
-    { label: "Returning", value: m?.returning_customers ?? 0, sub: "repeat customers" },
-    { label: "Rewards redeemed", value: m?.rewards_redeemed ?? 0, sub: `${m?.rewards_issued ?? 0} issued` },
+    { label: t("owner.dashboard.totalCustomers"), value: m?.customers ?? 0, sub: `+${m?.new_customers ?? 0} ${t("owner.dashboard.thisMonth")}` },
+    { label: t("owner.dashboard.scansMonth"), value: m?.total_scans ?? 0, sub: `${m?.scans ?? 0} ${t("owner.dashboard.recent")}`, accent: true },
+    { label: t("owner.dashboard.returning"), value: m?.returning_customers ?? 0, sub: t("owner.dashboard.repeatCustomers") },
+    { label: t("owner.dashboard.rewardsRedeemed"), value: m?.rewards_redeemed ?? 0, sub: `${m?.rewards_issued ?? 0} ${t("owner.dashboard.issued")}` },
   ];
 
   return (
-    <OwnerShell title="Dashboard">
+    <OwnerShell title={t("owner.nav.dashboard")}>
       {me.isError ? (
         <div className={`${CARD} max-w-md`}>
-          <p className="text-sm text-ink">No business yet — activate your owner invite to get started.</p>
+          <p className="text-sm text-ink">{t("owner.dashboard.noBusiness")}</p>
         </div>
       ) : (
         <div className="flex animate-[jqIn_.3s_ease] flex-col gap-[18px]">
@@ -46,19 +48,19 @@ export default function BusinessDashboardPage() {
           <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-[1.5fr_1fr]">
             <div className="rounded-[18px] border border-line bg-card p-[22px]">
               <div className="flex items-center justify-between">
-                <div className="font-display text-base font-bold text-ink">Scans this week</div>
-                <span className="text-[12.5px] text-subtle">{m?.total_scans ?? 0} total</span>
+                <div className="font-display text-base font-bold text-ink">{t("owner.dashboard.scansWeek")}</div>
+                <span className="text-[12.5px] text-subtle">{m?.total_scans ?? 0} {t("owner.dashboard.total")}</span>
               </div>
               {(m?.total_scans ?? 0) === 0 ? (
                 <div className="flex h-[160px] items-center justify-center text-[13.5px] text-subtle">
-                  No scan history yet — it appears as customers visit.
+                  {t("owner.dashboard.noScans")}
                 </div>
               ) : (
                 <div className="mt-6 flex h-[160px] items-end gap-3">
                   {DAYS.map((d, i) => (
                     <div key={i} className="flex h-full flex-1 flex-col items-center justify-end gap-2.5">
                       <div className="w-full rounded-t-lg bg-[#E8CDA9]" style={{ height: "30%", borderRadius: "8px 8px 4px 4px" }} />
-                      <div className="text-[11.5px] font-semibold text-subtle">{d}</div>
+                      <div className="text-[11.5px] font-semibold text-subtle">{t(`owner.dashboard.day.${d}`)}</div>
                     </div>
                   ))}
                 </div>
@@ -66,9 +68,9 @@ export default function BusinessDashboardPage() {
             </div>
 
             <div className="rounded-[18px] border border-line bg-card p-[22px]">
-              <div className="font-display text-base font-bold text-ink">Today&apos;s activity</div>
+              <div className="font-display text-base font-bold text-ink">{t("owner.dashboard.todayActivity")}</div>
               <div className="flex h-[160px] items-center justify-center text-center text-[13px] text-subtle">
-                Customer activity will show here as visits and redemptions happen.
+                {t("owner.dashboard.activityEmpty")}
               </div>
             </div>
           </div>
@@ -76,17 +78,17 @@ export default function BusinessDashboardPage() {
           <div className="flex flex-col items-start justify-between gap-4 rounded-[18px] bg-brand-gradient p-[22px] text-brand-fg sm:flex-row sm:items-center">
             <div>
               <div className="text-xs font-bold uppercase tracking-[0.05em] opacity-85">
-                Loyalty program
+                {t("owner.dashboard.loyaltyProgram")}
               </div>
               <div className="mt-[7px] font-display text-xl font-bold">
-                Manage your rewards
+                {t("owner.dashboard.manageRewards")}
               </div>
               <div className="mt-1.5 text-[13px] opacity-90">
-                Reward repeat customers and bring them back.
+                {t("owner.dashboard.manageRewardsHint")}
               </div>
             </div>
             <Link href="/business/rewards" className="flex-none whitespace-nowrap rounded-[13px] bg-card px-5 py-3.5 text-sm font-bold text-brand-deep">
-              Manage program
+              {t("owner.dashboard.manageProgram")}
             </Link>
           </div>
         </div>

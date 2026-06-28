@@ -104,6 +104,10 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
 
 // The single adaptive create form, kept as plain strings for the inputs. Coerced
 // into a CampaignPayload by toPayload() at submit (the validated boundary).
+// Item-reward selection mode (multi-form-loyalty slice 3): a preset catalog item
+// vs the customer picking one at redemption.
+export type ItemSelectionMode = "fixed" | "customer";
+
 export type CampaignForm = {
   type: BusinessCampaignType;
   mechanic: BusinessCampaignMechanic;
@@ -111,6 +115,11 @@ export type CampaignForm = {
   // individual
   requiredCount: string;
   requiredSpend: string;
+  // individual — points (multi-form-loyalty slice 3)
+  pointsBasis: "visit" | "spend";
+  pointsPerVisit: string;
+  pointsPerSom: string;
+  cashbackPerPoint: string;
   // group
   groupSize: string;
   checkinWindow: string;
@@ -118,6 +127,9 @@ export type CampaignForm = {
   instagram: string;
   // reward
   rewardTitle: string;
+  // Item-reward selection for visit/stamp/spend (multi-form-loyalty slice 3).
+  itemSelection: ItemSelectionMode;
+  catalogItemId: string;
   // limits
   maxParticipants: string;
   repeatable: boolean;
@@ -129,10 +141,17 @@ export const CAMPAIGN_FORM_DEFAULT: CampaignForm = {
   name: "",
   requiredCount: "5",
   requiredSpend: "1000",
+  // POINTS defaults: 1 pt per visit / 1 pt per 100 сом, 1 сом per point cashback.
+  pointsBasis: "visit",
+  pointsPerVisit: "1",
+  pointsPerSom: "0.01",
+  cashbackPerPoint: "1",
   groupSize: "3",
   checkinWindow: "15",
   instagram: "",
   rewardTitle: "",
+  itemSelection: "customer",
+  catalogItemId: "",
   maxParticipants: "1000",
   repeatable: false,
 };
@@ -154,6 +173,13 @@ const num = (v: string): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+// A decimal string (price/rate) passed through unchanged when non-empty; null
+// when blank so the backend keeps its default rather than receiving "".
+const dec = (v: string): string | null => {
+  const trimmed = v.trim();
+  return trimmed ? trimmed : null;
+};
+
 /**
  * Coerce the string-backed create form into the typed CampaignPayload sent to the
  * service (the codebase's adapter idiom in place of zod). Only the fields the
@@ -172,10 +198,28 @@ export function toPayload(form: CampaignForm): CampaignPayload {
     base.group_checkin_window_minutes = num(form.checkinWindow);
   } else if (form.type === "individual") {
     base.mechanic = form.mechanic;
-    if (form.mechanic === "spend") {
-      base.required_spend = form.requiredSpend.trim() || null;
+    if (form.mechanic === "points") {
+      // POINTS → cashback: send the basis + the matching rate + cashback rate, and
+      // mark the reward as cashback so the backend mints money-off vouchers.
+      base.reward_type = "cashback";
+      base.points_basis = form.pointsBasis;
+      if (form.pointsBasis === "spend") {
+        base.points_per_som = dec(form.pointsPerSom);
+      } else {
+        base.points_per_visit = num(form.pointsPerVisit);
+      }
+      base.cashback_per_point = dec(form.cashbackPerPoint);
     } else {
-      base.required_count = num(form.requiredCount);
+      // visit/stamp/spend: an item/discount reward. The owner picks whether the
+      // item is preset (fixed → catalog_item_id) or customer-chosen.
+      if (form.mechanic === "spend") {
+        base.required_spend = form.requiredSpend.trim() || null;
+      } else {
+        base.required_count = num(form.requiredCount);
+      }
+      base.item_selection = form.itemSelection;
+      base.catalog_item_id =
+        form.itemSelection === "fixed" ? form.catalogItemId || null : null;
     }
   } else if (form.type === "social") {
     base.instagram_handle = form.instagram.trim() || null;
@@ -191,5 +235,19 @@ export function toPayload(form: CampaignForm): CampaignPayload {
 export function createError(form: CampaignForm): string | null {
   if (!form.name.trim()) return "cmp.biz.form.invalid.name";
   if (!form.rewardTitle.trim()) return "cmp.biz.form.invalid.reward";
+  if (form.type === "individual" && form.mechanic === "points") {
+    // Cashback rate is what turns points into money — required for a points program.
+    if (!dec(form.cashbackPerPoint)) return "cmp.biz.form.invalid.cashback";
+    const rate = form.pointsBasis === "spend" ? dec(form.pointsPerSom) : form.pointsPerVisit.trim();
+    if (!rate) return "cmp.biz.form.invalid.pointsRate";
+  }
+  if (
+    form.type === "individual" &&
+    form.mechanic !== "points" &&
+    form.itemSelection === "fixed" &&
+    !form.catalogItemId
+  ) {
+    return "cmp.biz.form.invalid.item";
+  }
   return null;
 }

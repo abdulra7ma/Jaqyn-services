@@ -62,15 +62,23 @@ export const staffApi = {
   // replaces the old visit/redeem mode toggle; no writes happen here.
   resolveScan: (token: string): Promise<ScanDispatchResult> =>
     api.post<any>("/api/staff/campaigns/scan/", { token }).then(adaptScanDispatch),
-  // One confirm advances BOTH the regular loyalty card and the prioritized
-  // eligible campaign. Omit campaign_id to let the backend auto-pick. The backend
-  // returns 200 even when one (or neither) leg advanced; only an invalid token
-  // errors. Maps the raw two-leg envelope through adaptUnifiedScan.
-  confirmVisitUnified: (token: string, campaignId?: string): Promise<UnifiedScanResult> =>
+  // Confirm ONE program toward this customer (choose-one chooser). campaign_id
+  // selects the program; amount is the bill in som, REQUIRED for a "spend"
+  // mechanic and for spend-basis "points", IGNORED otherwise. The backend returns
+  // 200 even when the program did not advance; only an invalid token errors. Maps
+  // the raw envelope through adaptUnifiedScan (campaigns[0] is the chosen program).
+  confirmVisitUnified: (
+    token: string,
+    campaignId?: string,
+    amount?: string,
+  ): Promise<UnifiedScanResult> =>
     api
       .post<any>("/api/staff/campaigns/visit/", {
         token,
         ...(campaignId ? { campaign_id: campaignId } : {}),
+        // Send amount only when provided; the backend ignores it for mechanics
+        // that don't need a bill, but omitting keeps the payload minimal.
+        ...(amount != null ? { amount } : {}),
       })
       .then(adaptUnifiedScan),
   async scanCampaignVoucher(token: string): Promise<CampaignVoucherScanResult> {

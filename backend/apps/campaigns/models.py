@@ -73,10 +73,20 @@ class CampaignRule(TimeStampedModel):
     class Mechanic(models.TextChoices):
         # INDIVIDUAL sub-discriminator: how an individual campaign advances. VISIT
         # counts visits, STAMP counts stamps (honoring max_banked), SPEND
-        # accumulates a money threshold. Source: campaigns-restructure design §3.
+        # accumulates a money threshold, POINTS accrues a redeemable balance.
+        # Source: campaigns-restructure design §3 + multi-form-loyalty design §1
+        # (POINTS → cashback).
         VISIT = "visit", "Visit"
         STAMP = "stamp", "Stamp"
         SPEND = "spend", "Spend"
+        POINTS = "points", "Points"
+
+    class PointsBasis(models.TextChoices):
+        # How a POINTS-mechanic campaign earns points: a fixed amount per counted
+        # visit, or a per-som rate on the visit's bill. Source: multi-form-loyalty
+        # design §1 (points accrual: business chooses per-visit or per-spend).
+        VISIT = "visit", "Per visit"
+        SPEND = "spend", "Per spend"
 
     campaign = models.OneToOneField(Campaign, on_delete=models.CASCADE, related_name="rule")
     rule_type = models.CharField(max_length=32, choices=RuleType.choices)
@@ -93,6 +103,22 @@ class CampaignRule(TimeStampedModel):
     # (unlimited) and only meaningful for STAMP. Source: campaigns-restructure
     # design §3 (CampaignRule.max_banked).
     max_banked = models.PositiveIntegerField(blank=True, null=True)
+    # POINTS-mechanic accrual basis (visit | spend). Nullable because only a
+    # POINTS-mechanic INDIVIDUAL campaign sets it. Source: multi-form-loyalty
+    # design §1 (points_basis: visit | spend).
+    points_basis = models.CharField(max_length=16, choices=PointsBasis.choices, blank=True, null=True)
+    # Points awarded per counted visit on the VISIT points basis. PositiveInt,
+    # nullable — only a points/visit-basis campaign sets it. Source:
+    # multi-form-loyalty design §1 (points_per_visit, PositiveInt).
+    points_per_visit = models.PositiveIntegerField(blank=True, null=True)
+    # Points awarded per som spent on the SPEND points basis. Decimal for exact
+    # money arithmetic; nullable — only a points/spend-basis campaign sets it.
+    # Source: multi-form-loyalty design §1 (points_per_som, Decimal).
+    points_per_som = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    # Som of cashback granted per point at redemption time. Decimal for exact
+    # money; nullable — only a POINTS campaign sets it. Source: multi-form-loyalty
+    # design §1 (cashback_per_point, Decimal — som per point at redemption).
+    cashback_per_point = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     minimum_time_between_actions = models.DurationField(blank=True, null=True)
     max_count_per_day = models.PositiveIntegerField(blank=True, null=True)
     required_group_size = models.PositiveIntegerField(blank=True, null=True)
@@ -109,6 +135,17 @@ class CampaignReward(TimeStampedModel):
         DISCOUNT = "discount", "Discount"
         UPGRADE = "upgrade", "Upgrade"
         CUSTOM = "custom", "Custom"
+        # Som-off cashback minted when a POINTS balance is redeemed. Source:
+        # multi-form-loyalty design §1 (reward_type gains CASHBACK).
+        CASHBACK = "cashback", "Cashback"
+
+    class ItemSelection(models.TextChoices):
+        # For an item reward (FREE_ITEM/DISCOUNT against a CatalogItem): the
+        # business either fixes the item up-front, or lets the customer choose at
+        # redemption. Source: multi-form-loyalty design §1 (item_selection:
+        # fixed | customer).
+        FIXED = "fixed", "Fixed item"
+        CUSTOMER = "customer", "Customer chooses"
 
     class ReceiverType(models.TextChoices):
         LEADER = "leader", "Leader"
@@ -123,6 +160,21 @@ class CampaignReward(TimeStampedModel):
     expiry_days_after_unlock = models.PositiveIntegerField(blank=True, null=True)
     max_redemptions = models.PositiveIntegerField(blank=True, null=True)
     reward_receiver_type = models.CharField(max_length=32, choices=ReceiverType.choices, default=ReceiverType.LEADER)
+    # How the rewarded CatalogItem is chosen (fixed | customer). Nullable — only an
+    # item-bearing FREE_ITEM/DISCOUNT reward sets it. Source: multi-form-loyalty
+    # design §1 (item_selection: fixed | customer).
+    item_selection = models.CharField(max_length=16, choices=ItemSelection.choices, blank=True, null=True)
+    # The fixed CatalogItem granted when item_selection == fixed. SET_NULL so a
+    # deleted menu item does not cascade-delete the reward config; related_name="+"
+    # because no reverse accessor is needed. Nullable for non-item / customer-choice
+    # rewards. Source: multi-form-loyalty design §1 (catalog_item FK, set when fixed).
+    catalog_item = models.ForeignKey(
+        "businesses.CatalogItem",
+        on_delete=models.SET_NULL,
+        related_name="+",
+        blank=True,
+        null=True,
+    )
 
     def __str__(self):
         return f"{self.title} ({self.campaign.name})"
@@ -143,6 +195,13 @@ class CampaignParticipant(TimeStampedModel):
     # exact money; default 0. Untouched by VISIT/STAMP/GROUP/SOCIAL campaigns.
     # Source: campaigns-restructure design §3 (CampaignParticipant.current_spend).
     current_spend = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Redeemable points balance for a POINTS-mechanic INDIVIDUAL campaign: each
+    # counted action accrues points here (it is never reset by progress and never
+    # auto-completes the campaign), and a redemption deducts them under a row lock.
+    # PositiveInt, default 0. Untouched by VISIT/STAMP/SPEND/GROUP/SOCIAL
+    # campaigns. Source: multi-form-loyalty design §1 (points_balance, PositiveInt
+    # default 0; POINTS programs accrue here, never auto-complete).
+    points_balance = models.PositiveIntegerField(default=0)
     # Self-entered Instagram follower count at join for a SOCIAL campaign. Feeds the
     # analytics "reach" triplet (sum of follower_count). Nullable — only SOCIAL
     # participants set it. Source: campaigns-restructure design §3.
@@ -225,6 +284,23 @@ class CampaignRewardVoucher(TimeStampedModel):
     business = models.ForeignKey("businesses.Business", on_delete=models.PROTECT, related_name="campaign_vouchers")
     reward = models.ForeignKey(CampaignReward, on_delete=models.PROTECT, related_name="vouchers")
     participant = models.ForeignKey(CampaignParticipant, on_delete=models.PROTECT, related_name="vouchers", blank=True, null=True)
+    # The CatalogItem this voucher grants — preset (fixed reward) or chosen by the
+    # customer at redemption (customer-choice reward). SET_NULL so deleting a menu
+    # item does not delete issued vouchers; related_name="+" (no reverse accessor).
+    # Nullable: a cashback/discount voucher, or a customer-choice item voucher
+    # before the item is picked, has none. Source: multi-form-loyalty design §1.
+    catalog_item = models.ForeignKey(
+        "businesses.CatalogItem",
+        on_delete=models.SET_NULL,
+        related_name="+",
+        blank=True,
+        null=True,
+    )
+    # Som of cashback this voucher is worth, set on a CASHBACK voucher minted by
+    # redeeming a POINTS balance (points × rule.cashback_per_point). Decimal for
+    # exact money; nullable for all non-cashback vouchers. Source:
+    # multi-form-loyalty design §1 (cashback_amount, Decimal; CASHBACK vouchers).
+    cashback_amount = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     voucher_code = models.CharField(max_length=32, unique=True)
     qr_token = models.ForeignKey("qr.QRCodeToken", on_delete=models.SET_NULL, related_name="campaign_vouchers", blank=True, null=True)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.ACTIVE)

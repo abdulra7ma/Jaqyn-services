@@ -9,6 +9,8 @@ voucher QR url) without a second round-trip.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from rest_framework import serializers
 from rest_framework.utils.serializer_helpers import ReturnDict
 
@@ -36,6 +38,13 @@ class CampaignRuleSerializer(serializers.ModelSerializer):
             "required_spend",
             "min_spend",
             "max_banked",
+            # Points → cashback fields (multi-form-loyalty design §1). Nullable;
+            # only a POINTS-mechanic campaign sets them. Read and write so the
+            # create wizard can author a points program.
+            "points_basis",
+            "points_per_visit",
+            "points_per_som",
+            "cashback_per_point",
             "minimum_time_between_actions",
             "max_count_per_day",
             "required_group_size",
@@ -57,6 +66,11 @@ class CampaignRewardSerializer(serializers.ModelSerializer):
             "expiry_days_after_unlock",
             "max_redemptions",
             "reward_receiver_type",
+            # Item-reward fields (multi-form-loyalty design §1). ``item_selection``
+            # (fixed|customer) and ``catalog_item`` (the preset item PK when fixed)
+            # are read+write so the create wizard can author an item reward.
+            "item_selection",
+            "catalog_item",
         )
 
 
@@ -296,6 +310,9 @@ class CampaignProgressSerializer(serializers.ModelSerializer):
             "status",
             "progress_count",
             "required_count",
+            # Redeemable points for a POINTS program (multi-form-loyalty §1); 0 for
+            # every other mechanic. Surfaced so the customer card shows the balance.
+            "points_balance",
             "completion_cycle",
             "joined_at",
             "completed_at",
@@ -509,6 +526,13 @@ class CampaignRewardVoucherSerializer(serializers.ModelSerializer):
     qr_url = serializers.SerializerMethodField()
     reward_title = serializers.CharField(source="reward.title", read_only=True)
     reward_description = serializers.CharField(source="reward.description", read_only=True)
+    reward_type = serializers.CharField(source="reward.reward_type", read_only=True)
+    # How the item is chosen for this voucher's reward (fixed|customer|null). The FE
+    # reads this to decide whether to show a "pick from menu" sheet at present time.
+    item_selection = serializers.CharField(source="reward.item_selection", read_only=True, default=None)
+    # The granted CatalogItem (id + name), preset or customer-chosen; null when none
+    # has been attached yet (cashback voucher, or unpicked customer-choice item).
+    catalog_item = serializers.SerializerMethodField()
     campaign_name = serializers.CharField(source="campaign.name", read_only=True)
     business_name = serializers.CharField(source="business.name", read_only=True)
     redeemed_by = serializers.SerializerMethodField()
@@ -523,6 +547,12 @@ class CampaignRewardVoucherSerializer(serializers.ModelSerializer):
             "qr_url",
             "reward_title",
             "reward_description",
+            "reward_type",
+            "item_selection",
+            "catalog_item",
+            # Som-off value of a CASHBACK voucher (multi-form-loyalty §1); null on
+            # every non-cashback voucher.
+            "cashback_amount",
             "campaign",
             "campaign_name",
             "business",
@@ -535,6 +565,18 @@ class CampaignRewardVoucherSerializer(serializers.ModelSerializer):
             "created_at",
         )
         read_only_fields = fields
+
+    def get_catalog_item(self, obj: CampaignRewardVoucher) -> dict | None:
+        """Return the attached CatalogItem as ``{id, name, price}``, or ``None``.
+
+        Reads ``obj.catalog_item`` (the preset or customer-chosen item). ``None``
+        when no item is attached — a cashback voucher, or a customer-choice item
+        voucher before the customer has picked.
+        """
+        item = getattr(obj, "catalog_item", None)
+        if item is None:
+            return None
+        return {"id": str(item.id), "name": item.name, "price": item.price}
 
     def get_qr_url(self, obj: CampaignRewardVoucher) -> str | None:
         if obj.qr_token is None:
@@ -712,6 +754,47 @@ class CancelVoucherSerializer(serializers.Serializer):
     reason = serializers.CharField(max_length=500)
 
 
+class RedeemPointsSerializer(serializers.Serializer):
+    """Customer redeem-points input — a positive whole ``points`` amount (§1).
+
+    Shape-only: a positive integer. The balance check and cashback math live in
+    :meth:`CampaignRewardService.redeem_points`.
+    """
+
+    points = serializers.IntegerField(min_value=1)
+
+
+class SelectVoucherItemSerializer(serializers.Serializer):
+    """Customer select-item input — the chosen ``catalog_item_id`` (§1).
+
+    Shape-only: a UUID. Ownership, the customer-choice gate, and the
+    same-business item check live in :meth:`CampaignRewardService.select_voucher_item`.
+    """
+
+    catalog_item_id = serializers.UUIDField()
+
+
+class LoyaltyProgramSerializer(serializers.Serializer):
+    """Shape of one :class:`LoyaltyProgramView` row (multi-form-loyalty design §2).
+
+    Read-only presentation of a business's loyalty program + the requesting
+    customer's state, backing the business-page "Loyalty" section. Each field maps
+    1:1 to the dataclass; ``cashback_per_point`` is null for non-POINTS programs.
+    """
+
+    campaign_id = serializers.CharField()
+    name = serializers.CharField()
+    mechanic = serializers.CharField()
+    reward_summary = serializers.CharField(allow_blank=True)
+    joined = serializers.BooleanField()
+    progress_count = serializers.IntegerField()
+    target = serializers.IntegerField()
+    points_balance = serializers.IntegerField()
+    cashback_per_point = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+
+
 class CampaignImageUploadSerializer(serializers.Serializer):
     """Campaign image-upload input — a single ``image`` file (social-share feature).
 
@@ -751,10 +834,18 @@ class UnifiedConfirmVisitSerializer(serializers.Serializer):
     ``campaign_id`` is optional: when omitted the service picks the single
     prioritized eligible campaign (§14); when present the staff tapped a specific
     campaign and that one is targeted.
+
+    ``amount`` is the staff-entered bill for the chosen program. It is shape-only
+    here (a non-negative decimal); whether it is *required* is a business rule the
+    service enforces — a SPEND mechanic or a POINTS spend-basis program needs a
+    positive amount, every other mechanic ignores it.
     """
 
     token = serializers.CharField(max_length=128)
     campaign_id = serializers.UUIDField(required=False)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, min_value=Decimal("0")
+    )
 
 
 class ScanVoucherSerializer(serializers.Serializer):
@@ -790,13 +881,33 @@ class ConfirmSocialSerializer(serializers.Serializer):
 
 
 class EligibleCampaignViewSerializer(serializers.Serializer):
-    """Shape of one :class:`StaffScannerService.EligibleCampaignView` row."""
+    """Shape of one :class:`StaffScannerService.EligibleCampaignView` row.
+
+    Beyond the eligibility + progress fields, each row exposes the per-program
+    fields the staff loyalty chooser binds to render a program by type and preview
+    a POINTS award: ``mechanic``, ``campaign_type``, ``reward_title``, the
+    customer's ``points_balance`` and ``current_spend``, and the POINTS accrual /
+    cashback rates (``points_per_som``, ``points_per_visit``,
+    ``cashback_per_point`` — ``null`` for non-points programs).
+    """
 
     campaign = CampaignSerializer()
     eligible = serializers.BooleanField()
     reason_code = serializers.CharField(allow_null=True)
     progress_count = serializers.IntegerField()
     required_count = serializers.IntegerField()
+    mechanic = serializers.CharField(allow_null=True)
+    campaign_type = serializers.CharField()
+    reward_title = serializers.CharField(allow_null=True)
+    points_balance = serializers.IntegerField()
+    points_per_som = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    points_per_visit = serializers.IntegerField(allow_null=True)
+    cashback_per_point = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    current_spend = serializers.DecimalField(max_digits=12, decimal_places=2)
 
 
 class CustomerScanResultSerializer(serializers.Serializer):
@@ -821,14 +932,22 @@ class ProgressResultSerializer(serializers.Serializer):
     """Shape of a :class:`CampaignProgressService.ProgressResult` (confirm-visit).
 
     ``voucher`` is populated only when ``completed`` is ``True`` (the visit
-    finished a cycle and minted a reward).
+    finished a cycle and minted a reward). ``points_balance`` echoes the
+    participant's redeemable points balance *after* the action so a POINTS award
+    can show the updated total; it is the running balance for every mechanic
+    (0 when no points are tracked).
     """
 
     campaign = CampaignSerializer()
     completed = serializers.BooleanField()
     progress_count = serializers.IntegerField()
     required_count = serializers.IntegerField()
+    points_balance = serializers.SerializerMethodField()
     voucher = serializers.SerializerMethodField()
+
+    def get_points_balance(self, obj) -> int:
+        participant = getattr(obj, "participant", None)
+        return participant.points_balance if participant is not None else 0
 
     def get_voucher(self, obj) -> dict | None:
         if obj.voucher is None:

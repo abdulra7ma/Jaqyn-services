@@ -2,16 +2,19 @@
 
 import {
   useConfirmGroup,
+  useConfirmSocial,
   useConfirmVisitUnified,
   useRedeemCampaignVoucher,
   useResolveScan,
 } from "@jaqyn/api";
 import type {
+  CampaignScanRow,
   CampaignVoucherScanResult,
   ConfirmGroupResult,
   GroupVoucherScan,
   ScanCustomerResult,
   ScanDispatchResult,
+  UnifiedCampaignLeg,
   UnifiedScanResult,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
@@ -27,8 +30,13 @@ import { SheetBackdrop, SHEET_STYLE } from "./_components/SheetBackdrop";
 // ─── overlay state ──────────────────────────────────────────────────────────────
 
 type OverlayState =
-  | { kind: "visit_eligibility"; result: ScanCustomerResult }
-  | { kind: "visit_unified"; result: UnifiedScanResult }
+  // The "Apply loyalty" chooser — one row per program, choose one to advance.
+  | { kind: "chooser"; result: ScanCustomerResult }
+  // Bill-amount keypad for a spend / spend-basis-points program.
+  | { kind: "amount"; result: ScanCustomerResult; row: CampaignScanRow }
+  // Focused success for the single program that was just confirmed. `awarded` is
+  // the points added this confirm (null for non-points programs).
+  | { kind: "single_result"; leg: UnifiedCampaignLeg; customerName: string; awarded: number | null }
   | { kind: "group_eligible"; group: GroupVoucherScan }
   | { kind: "reward_valid"; result: CampaignVoucherScanResult }
   | { kind: "reward_redeemed"; rewardTitle: string }
@@ -36,6 +44,27 @@ type OverlayState =
   | { kind: "invalid"; title: string; reason: string }
   | { kind: "error"; message: string }
   | null;
+
+// ─── multi-form loyalty helpers ─────────────────────────────────────────────────
+
+/** True when a row needs a bill amount entered before it can be confirmed:
+ *  a "spend" mechanic, or "points" on a spend basis (points_per_som set). */
+function needsAmount(row: CampaignScanRow): boolean {
+  if (row.mechanic === "spend") return true;
+  if (row.mechanic === "points") return row.points_per_som != null;
+  return false;
+}
+
+/** Cashback percentage for a points program, or null when not computable.
+ *  pct = round(points_per_som × cashback_per_point × 100). Both come from the
+ *  business config as decimal strings; parsed here only for display. */
+function cashbackPct(row: CampaignScanRow): number | null {
+  if (row.points_per_som == null || row.cashback_per_point == null) return null;
+  const pps = Number(row.points_per_som);
+  const cpp = Number(row.cashback_per_point);
+  if (!Number.isFinite(pps) || !Number.isFinite(cpp)) return null;
+  return Math.round(pps * cpp * 100);
+}
 
 // ─── shared sheet primitives ────────────────────────────────────────────────────
 
@@ -72,24 +101,35 @@ function CountdownBar({ duration, onDone }: { duration: number; onDone: () => vo
   );
 }
 
-// ─── sheet: visit eligibility (read-only preview of what one confirm advances) ──
+// ─── sheet: loyalty chooser ("Apply loyalty" — pure choose-one) ─────────────────
 
-function VisitEligibilitySheet({
+// One row per program. ONE TAP on a row's action does it: visit/stamp/social and
+// visit-basis points confirm immediately; spend / spend-basis points open the
+// bill keypad. Eligible rows first; ineligible rows are disabled at 55% with a
+// humanized reason. No apply-all, no global confirm.
+function LoyaltyChooserSheet({
   result,
-  onConfirm,
+  onPickRow,
+  onConfirmRow,
+  onConfirmSocial,
   onDismiss,
-  isPending,
+  pendingCampaignId,
 }: {
   result: ScanCustomerResult;
-  onConfirm: () => void;
+  // Spend / spend-basis points → open the keypad for this row.
+  onPickRow: (row: CampaignScanRow) => void;
+  // One-tap mechanics (visit / stamp / visit-basis points) → confirm now.
+  onConfirmRow: (row: CampaignScanRow) => void;
+  // Social → confirm the post now.
+  onConfirmSocial: (row: CampaignScanRow) => void;
   onDismiss: () => void;
-  isPending: boolean;
+  // The campaign currently being confirmed (so its action shows a spinner).
+  pendingCampaignId: string | null;
 }) {
   const t = useT();
   const initial = (result.customer.name.trim()[0] ?? "•").toUpperCase();
-  // Confirm is always allowed: one confirm advances the whole eligible set
-  // (loyalty card + every stacking campaign + one prioritized default).
-  const canConfirm = !isPending;
+  // Eligible rows first; preserve relative order within each group.
+  const rows = [...result.rows].sort((a, b) => Number(b.eligible) - Number(a.eligible));
 
   return (
     <SheetBackdrop onDismiss={onDismiss}>
@@ -103,39 +143,24 @@ function VisitEligibilitySheet({
           }}>{initial}</div>
           <div>
             <div style={{ font: "700 16px 'Bricolage Grotesque',sans-serif" }}>{result.customer.name}</div>
-            <div style={{ fontSize: 12, color: "var(--soft, #8C7A6A)" }}>+996 {result.customer.phone}</div>
+            <div style={{ fontSize: 12, color: "var(--soft, #8C7A6A)" }}>+996 {maskPhone(result.customer.phone)}</div>
           </div>
         </div>
 
         <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)", marginTop: 18 }}>
-          {t("staff.campaign.eligibleTap")}
+          {t("staff.chooser.title")}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 11 }}>
-          {result.rows.map((row) => (
-            <div
+          {rows.map((row) => (
+            <ChooserRow
               key={row.campaign_id}
-              style={{
-                display: "flex", alignItems: "center", gap: 11, textAlign: "left",
-                width: "100%", padding: "12px 14px", borderRadius: 13,
-                background: "#F8F4EC",
-                opacity: row.eligible ? 1 : 0.55,
-              }}
-            >
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>{row.name}</span>
-                <span style={{ display: "block", fontSize: 12, color: "var(--soft, #8C7A6A)", marginTop: 1 }}>
-                  {row.eligible ? row.sub : row.reason ?? row.sub}
-                </span>
-              </span>
-              <span style={{
-                font: "700 14px 'Bricolage Grotesque',sans-serif",
-                whiteSpace: "nowrap",
-                color: row.eligible ? "var(--accent, #C25E3C)" : "var(--soft, #8C7A6A)",
-              }}>
-                {row.current_count}→{row.next_count}/{row.goal}
-              </span>
-            </div>
+              row={row}
+              pending={pendingCampaignId === row.campaign_id}
+              onPick={onPickRow}
+              onConfirm={onConfirmRow}
+              onConfirmSocial={onConfirmSocial}
+            />
           ))}
 
           {result.none_eligible && (
@@ -150,23 +175,8 @@ function VisitEligibilitySheet({
 
         <button
           type="button"
-          onClick={onConfirm}
-          disabled={!canConfirm}
-          style={{
-            width: "100%", marginTop: 18, padding: 16, border: "none", borderRadius: 16,
-            background: canConfirm ? "var(--accent, #C25E3C)" : "#EFE3D1",
-            color: canConfirm ? "#fff" : "var(--soft, #8C7A6A)",
-            font: "700 16px 'Hanken Grotesk',sans-serif",
-            cursor: canConfirm ? "pointer" : "not-allowed",
-            boxShadow: canConfirm ? "0 12px 26px -8px rgba(160,73,42,.55)" : "none",
-          }}
-        >
-          {isPending ? "…" : t("staff.campaign.confirmVisit")}
-        </button>
-        <button
-          type="button"
           onClick={onDismiss}
-          style={{ width: "100%", marginTop: 9, padding: 12, border: "none", borderRadius: 14, background: "none", color: "var(--soft, #8C7A6A)", font: "600 14px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+          style={{ width: "100%", marginTop: 14, padding: 12, border: "none", borderRadius: 14, background: "none", color: "var(--soft, #8C7A6A)", font: "600 14px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
         >
           {t("common.cancel")}
         </button>
@@ -175,26 +185,264 @@ function VisitEligibilitySheet({
   );
 }
 
-// ─── sheet: combined visit (loyalty + campaign in one confirm) ──────────────────
+// Mask the middle of the phone for the chooser header (e.g. "70••••567").
+function maskPhone(phone: string): string {
+  const p = phone.replace(/\s/g, "");
+  if (p.length <= 5) return p;
+  return `${p.slice(0, 2)}••••${p.slice(-3)}`;
+}
 
-// One confirm advances every stacking campaign and one prioritized default.
-// Each campaign renders its own row; a completed campaign gets the celebratory
-// amber/gift treatment; skipped candidates show a muted reason line. The green
-// success flash + countdown are kept.
-function VisitUnifiedSheet({
-  result,
+// The state line + per-mechanic action for one chooser row.
+function ChooserRow({
+  row,
+  pending,
+  onPick,
+  onConfirm,
+  onConfirmSocial,
+}: {
+  row: CampaignScanRow;
+  pending: boolean;
+  onPick: (row: CampaignScanRow) => void;
+  onConfirm: (row: CampaignScanRow) => void;
+  onConfirmSocial: (row: CampaignScanRow) => void;
+}) {
+  const t = useT();
+
+  // The customer's current state for this program, by mechanic.
+  let stateLine: string;
+  if (row.mechanic === "stamp") {
+    stateLine = t("staff.chooser.stampsState").replace("{progress}", String(row.current_count)).replace("{required}", String(row.goal));
+  } else if (row.mechanic === "spend") {
+    stateLine = t("staff.chooser.spendState").replace("{current}", row.current_spend).replace("{required}", String(row.goal));
+  } else if (row.mechanic === "points") {
+    stateLine = t("staff.chooser.pointsState").replace("{balance}", String(row.points_balance));
+  } else if (row.mechanic === "social") {
+    stateLine = row.business_name;
+  } else {
+    stateLine = t("staff.chooser.visitsState").replace("{progress}", String(row.current_count)).replace("{required}", String(row.goal));
+  }
+
+  // The action label + handler, by mechanic.
+  let actionLabel: string;
+  let onAction: () => void;
+  if (row.mechanic === "stamp") {
+    actionLabel = t("staff.chooser.addStamp");
+    onAction = () => onConfirm(row);
+  } else if (row.mechanic === "spend") {
+    actionLabel = t("staff.chooser.enterBill");
+    onAction = () => onPick(row);
+  } else if (row.mechanic === "points") {
+    if (row.points_per_som != null) {
+      actionLabel = t("staff.chooser.enterBill");
+      onAction = () => onPick(row);
+    } else {
+      // Visit-basis: flat per-visit award, no amount.
+      actionLabel = t("staff.chooser.addPoints").replace("{n}", String(row.points_per_visit ?? 0));
+      onAction = () => onConfirm(row);
+    }
+  } else if (row.mechanic === "social") {
+    actionLabel = t("staff.chooser.confirmPost");
+    onAction = () => onConfirmSocial(row);
+  } else {
+    actionLabel = t("staff.chooser.countVisit");
+    onAction = () => onConfirm(row);
+  }
+
+  const pct = row.mechanic === "points" ? cashbackPct(row) : null;
+  const disabled = !row.eligible || pending;
+
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: 11,
+        width: "100%", padding: "12px 14px", borderRadius: 13,
+        background: "#F8F4EC",
+        opacity: row.eligible ? 1 : 0.55,
+      }}
+    >
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 14, fontWeight: 700 }}>{row.name}</span>
+          {pct != null && (
+            <span style={{ font: "700 10.5px 'Hanken Grotesk',sans-serif", padding: "2px 7px", borderRadius: 99, background: "#E4F0E7", color: "#3F7355" }}>
+              {t("staff.chooser.pctBack").replace("{pct}", String(pct))}
+            </span>
+          )}
+        </span>
+        <span style={{ display: "block", fontSize: 12, color: "var(--soft, #8C7A6A)", marginTop: 2 }}>
+          {row.eligible ? stateLine : humanizeReason(t, row.reason)}
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={onAction}
+        disabled={disabled}
+        style={{
+          flexShrink: 0, padding: "9px 14px", border: "none", borderRadius: 11,
+          background: disabled ? "#EFE3D1" : "var(--accent, #C25E3C)",
+          color: disabled ? "var(--soft, #8C7A6A)" : "#fff",
+          font: "700 13px 'Hanken Grotesk',sans-serif", whiteSpace: "nowrap",
+          cursor: disabled ? "not-allowed" : "pointer",
+        }}
+      >
+        {pending ? "…" : actionLabel}
+      </button>
+    </div>
+  );
+}
+
+// Humanize a backend reason_code into a sentence, falling back to the raw code.
+// Keys live under staff.reason.*; an unknown code shows itself so it's never lost.
+function humanizeReason(t: (k: string) => string, code: string | null): string {
+  if (!code) return "";
+  const key = `staff.reason.${code}`;
+  const copy = t(key);
+  return copy === key ? code : copy;
+}
+
+// ─── sheet: bill-amount keypad (spend / spend-basis points) ─────────────────────
+
+function AmountSheet({
+  row,
+  onConfirm,
+  onBack,
+  isPending,
+}: {
+  row: CampaignScanRow;
+  onConfirm: (amount: string) => void;
+  onBack: () => void;
+  isPending: boolean;
+}) {
+  const t = useT();
+  // Whole som only — the bill amount is keyed digit by digit as a string so no
+  // float is introduced; leading "0" is dropped.
+  const [amount, setAmount] = useState("0");
+  const amountNum = Number(amount);
+  const valid = amountNum > 0 && !isPending;
+
+  const press = (d: string) => setAmount((a) => (a === "0" ? d : a + d));
+  const backspace = () => setAmount((a) => (a.length <= 1 ? "0" : a.slice(0, -1)));
+
+  const isPoints = row.mechanic === "points";
+  const pps = isPoints && row.points_per_som != null ? Number(row.points_per_som) : 0;
+  const cpp = isPoints && row.cashback_per_point != null ? Number(row.cashback_per_point) : 0;
+  const awardedPts = Math.floor(pps * amountNum);
+  const somBack = Math.floor(pps * amountNum * cpp);
+
+  const confirmLabel = isPoints ? t("staff.amount.award") : t("staff.amount.count");
+  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"];
+
+  return (
+    <SheetBackdrop onDismiss={onBack}>
+      <div style={{ ...SHEET_STYLE, paddingTop: 22, paddingRight: 22, paddingLeft: 22, paddingBottom: "calc(26px + env(safe-area-inset-bottom, 0px))" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label={t("common.back")}
+            style={{ border: "none", background: "none", cursor: "pointer", color: "var(--soft, #8C7A6A)", font: "700 18px 'Hanken Grotesk',sans-serif", padding: "2px 6px" }}
+          >
+            ‹
+          </button>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>{row.name}</div>
+        </div>
+
+        <div style={{ fontSize: 12, color: "var(--soft, #8C7A6A)", marginTop: 12 }}>
+          {t("staff.amount.enterBill")}
+        </div>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 6, marginTop: 4 }}>
+          <span style={{ font: "800 44px 'Bricolage Grotesque',sans-serif", letterSpacing: "-.02em" }}>{amount}</span>
+          <span style={{ fontSize: 16, color: "var(--soft, #8C7A6A)", fontWeight: 700 }}>{t("staff.amount.som")}</span>
+        </div>
+
+        {isPoints && (
+          <div style={{ textAlign: "center", marginTop: 8, fontSize: 13, color: "#3F7355", fontWeight: 600, minHeight: 18 }}>
+            {amountNum > 0
+              ? t("staff.amount.pointsPreview")
+                  .replace("{pts}", String(awardedPts))
+                  .replace("{som}", String(somBack))
+              : ""}
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 9, marginTop: 16 }}>
+          {keys.map((k, i) =>
+            k === "" ? (
+              <div key={`spacer-${i}`} />
+            ) : (
+              <button
+                key={k}
+                type="button"
+                onClick={() => (k === "⌫" ? backspace() : press(k))}
+                aria-label={k === "⌫" ? t("staff.amount.backspace") : k}
+                style={{
+                  padding: "16px 0", border: "none", borderRadius: 14, background: "#F4ECDF",
+                  font: "700 22px 'Bricolage Grotesque',sans-serif", color: "var(--ink, #2E241D)", cursor: "pointer",
+                }}
+              >
+                {k}
+              </button>
+            ),
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onConfirm(amount)}
+          disabled={!valid}
+          style={{
+            width: "100%", marginTop: 16, padding: 16, border: "none", borderRadius: 16,
+            background: valid ? "var(--accent, #C25E3C)" : "#EFE3D1",
+            color: valid ? "#fff" : "var(--soft, #8C7A6A)",
+            font: "700 16px 'Hanken Grotesk',sans-serif",
+            cursor: valid ? "pointer" : "not-allowed",
+            boxShadow: valid ? "0 12px 26px -8px rgba(160,73,42,.55)" : "none",
+          }}
+        >
+          {isPending ? "…" : confirmLabel}
+        </button>
+      </div>
+    </SheetBackdrop>
+  );
+}
+
+// ─── sheet: single-program success (choose-one result) ──────────────────────────
+
+// Focused success for the one program just confirmed. Shows the program name and
+// its new state (stamp/visit progress, or points "+awarded → balance"); a reward
+// banner appears when the program completed and a voucher was issued. `awarded`
+// is the points added this confirm (null for non-points programs), computed by
+// the caller from the bill amount since the leg carries only the new balance.
+function SingleResultSheet({
+  leg,
+  customerName,
+  awarded,
   onDismiss,
 }: {
-  result: UnifiedScanResult;
+  leg: UnifiedCampaignLeg;
+  customerName: string;
+  awarded: number | null;
   onDismiss: () => void;
 }) {
   const t = useT();
-  const { campaigns, skipped_campaigns } = result;
-  const campaignComplete = campaigns.some((c) => c.state === "completed");
+  const completed = leg.state === "completed";
+  const isPoints = awarded != null;
 
-  // A completed campaign warrants the longer, amber celebratory treatment.
-  const flashColor = campaignComplete ? "var(--amber, #E7A23E)" : "var(--sage, #3F7355)";
-  const duration = campaignComplete ? 3200 : 2800;
+  // A completion warrants the longer, amber celebratory treatment.
+  const flashColor = completed ? "var(--amber, #E7A23E)" : "var(--sage, #3F7355)";
+  const duration = completed ? 3200 : 2800;
+
+  // The new-state line, by what we know about the leg.
+  let stateLine: string;
+  if (isPoints) {
+    stateLine = t("staff.result.pointsAwarded")
+      .replace("{awarded}", String(awarded))
+      .replace("{balance}", String(leg.points_balance));
+  } else {
+    stateLine = t("cmp.staff.campaignProgress")
+      .replace("{current}", String(leg.current_count))
+      .replace("{goal}", String(leg.goal));
+  }
 
   return (
     <SheetBackdrop dim="rgba(8,6,3,.5)" onDismiss={onDismiss}>
@@ -210,93 +458,41 @@ function VisitUnifiedSheet({
             boxShadow: "0 14px 30px -8px rgba(94,139,106,.6)",
           }}>✓</div>
           <div style={{ fontSize: 13.5, color: "var(--soft, #8C7A6A)", fontWeight: 600, marginTop: 14 }}>
-            {result.customer.name} · {t("cmp.staff.bothCounted")}
+            {customerName} · {t("cmp.staff.bothCounted")}
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
-          {/* Campaign legs: empty-state, then each advanced campaign, then skipped */}
-          {campaigns.length === 0 && skipped_campaigns.length === 0 && (
-            <VisitLegRow
-              icon="🎯"
-              title={t("cmp.staff.campaignTitle")}
-              heading=""
-              value={null}
-              muted={t("cmp.staff.noCampaign")}
-            />
-          )}
-          {campaigns.map((c) =>
-            c.state === "completed" ? (
-              <div key={c.campaign_name} style={{ background: "#FBEFD9", borderRadius: 14, padding: "14px 16px", textAlign: "center" }}>
-                <div style={{ fontSize: 30, animation: "jqPop .5s ease" }}>🎉</div>
-                <div style={{ font: "800 18px 'Bricolage Grotesque',sans-serif", color: "#B07A1E", marginTop: 4 }}>{c.campaign_name}</div>
-                <div style={{ display: "inline-block", background: "#fff", color: "#B07A1E", borderRadius: 11, padding: "7px 14px", marginTop: 8, font: "700 14px 'Bricolage Grotesque',sans-serif" }}>
-                  🎁 {t("cmp.staff.campaignComplete").replace("{reward}", c.reward_title ?? "")}
-                </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 11, background: "#F8F4EC", borderRadius: 14, padding: "13px 15px" }}>
+            <span style={{ fontSize: 18 }}>🎯</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)" }}>{t("cmp.staff.campaignTitle")}</span>
+              <span style={{ display: "block", font: "700 15px 'Bricolage Grotesque',sans-serif", marginTop: 2 }}>{leg.campaign_name}</span>
+            </span>
+            <span style={{ font: "700 15px 'Bricolage Grotesque',sans-serif", whiteSpace: "nowrap", color: "var(--accent, #C25E3C)" }}>
+              {stateLine}
+            </span>
+          </div>
+
+          {completed && (
+            <div style={{ background: "#FBEFD9", borderRadius: 14, padding: "14px 16px", textAlign: "center" }}>
+              <div style={{ fontSize: 30, animation: "jqPop .5s ease" }}>🎉</div>
+              <div style={{ display: "inline-block", background: "#fff", color: "#B07A1E", borderRadius: 11, padding: "7px 14px", marginTop: 8, font: "700 14px 'Bricolage Grotesque',sans-serif" }}>
+                🎁 {t("cmp.staff.campaignComplete").replace("{reward}", leg.reward_title ?? "")}
               </div>
-            ) : (
-              <VisitLegRow
-                key={c.campaign_name}
-                icon="🎯"
-                title={t("cmp.staff.campaignTitle")}
-                heading={c.campaign_name}
-                value={t("cmp.staff.campaignProgress")
-                  .replace("{current}", String(c.current_count))
-                  .replace("{goal}", String(c.goal))}
-                muted={null}
-              />
-            ),
+            </div>
           )}
-          {skipped_campaigns.map((s) => (
-            <VisitLegRow
-              key={s.campaign_id}
-              icon="🎯"
-              title={t("cmp.staff.campaignTitle")}
-              heading={s.name}
-              value={null}
-              muted={t("cmp.staff.noCampaignReason").replace("{reason}", s.reason_code)}
-            />
-          ))}
         </div>
+
+        <button
+          type="button"
+          onClick={onDismiss}
+          style={{ width: "100%", marginTop: 16, padding: 13, border: "none", borderRadius: 14, background: "#F4ECDF", color: "var(--ink, #2E241D)", font: "700 15px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+        >
+          {t("staff.result.done")}
+        </button>
       </div>
     </SheetBackdrop>
-  );
-}
-
-// One leg (loyalty or campaign) of the combined visit sheet. Either a live row
-// (title + heading + progress value) or a muted skipped line when the leg is null.
-function VisitLegRow({
-  icon,
-  title,
-  heading,
-  value,
-  muted,
-}: {
-  icon: string;
-  title: string;
-  heading: string;
-  value: string | null;
-  muted: string | null;
-}) {
-  if (muted) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: 11, background: "#F6F0E6", borderRadius: 14, padding: "13px 15px" }}>
-        <span style={{ fontSize: 18, opacity: 0.5 }}>{icon}</span>
-        <span style={{ fontSize: 12.5, color: "var(--soft, #8C7A6A)", lineHeight: 1.4 }}>{muted}</span>
-      </div>
-    );
-  }
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 11, background: "#F8F4EC", borderRadius: 14, padding: "13px 15px" }}>
-      <span style={{ fontSize: 18 }}>{icon}</span>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)" }}>{title}</span>
-        <span style={{ display: "block", font: "700 15px 'Bricolage Grotesque',sans-serif", marginTop: 2 }}>{heading}</span>
-      </span>
-      <span style={{ font: "700 15px 'Bricolage Grotesque',sans-serif", whiteSpace: "nowrap", color: "var(--accent, #C25E3C)" }}>
-        {value}
-      </span>
-    </div>
   );
 }
 
@@ -578,10 +774,14 @@ export default function StaffScanPage() {
 
   const resolveScan = useResolveScan();
   const confirmVisit = useConfirmVisitUnified();
+  const confirmSocial = useConfirmSocial();
   const redeemVoucher = useRedeemCampaignVoucher();
   const confirmGroup = useConfirmGroup();
 
   const [overlay, setOverlay] = useState<OverlayState>(null);
+  // The campaign whose action is in flight (drives the per-row spinner). Cleared
+  // on success/error so a failed tap re-enables the row.
+  const [pendingCampaignId, setPendingCampaignId] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   // Incremented on dismiss so QrScanner remounts and auto-restarts after each scan.
   const [scanKey, setScanKey] = useState(0);
@@ -607,10 +807,12 @@ export default function StaffScanPage() {
 
   const dismiss = () => {
     setOverlay(null);
+    setPendingCampaignId(null);
     busyRef.current = false;
     setScanKey((k) => k + 1);
     resolveScan.reset();
     confirmVisit.reset();
+    confirmSocial.reset();
     redeemVoucher.reset();
     confirmGroup.reset();
   };
@@ -630,7 +832,7 @@ export default function StaffScanPage() {
     resolveScan.mutate(token, {
       onSuccess(dispatch: ScanDispatchResult) {
         if (dispatch.kind === "customer") {
-          setOverlay({ kind: "visit_eligibility", result: dispatch.customer });
+          setOverlay({ kind: "chooser", result: dispatch.customer });
           return;
         }
         if (dispatch.kind === "voucher") {
@@ -657,17 +859,85 @@ export default function StaffScanPage() {
     });
   };
 
-  const handleConfirmVisit = () => {
-    if (overlay?.kind !== "visit_eligibility") return;
-    // One confirm advances the whole eligible set: the loyalty card plus every
-    // stacking campaign and one prioritized default. No per-campaign override.
+  // Build the single-program success overlay from a confirm response. The chosen
+  // program is campaigns[0] (the backend advances exactly the one we named); fall
+  // back to a generic counted leg if the program did not advance (e.g. capped).
+  const showSingleResult = (data: UnifiedScanResult, row: CampaignScanRow, awarded: number | null) => {
+    const leg: UnifiedCampaignLeg =
+      data.campaigns[0] ?? {
+        state: "counted",
+        customer_name: data.customer.name,
+        campaign_name: row.name,
+        current_count: row.current_count,
+        goal: row.goal,
+        reward_title: row.reward_title,
+        expires_label: null,
+        points_balance: row.points_balance,
+      };
+    setOverlay({ kind: "single_result", leg, customerName: data.customer.name, awarded });
+    setPendingCampaignId(null);
+  };
+
+  // One-tap mechanics (visit / stamp / visit-basis points): confirm with no amount.
+  const handleConfirmRow = (row: CampaignScanRow) => {
+    setPendingCampaignId(row.campaign_id);
     confirmVisit.mutate(
-      { token: scannedTokenRef.current },
+      { token: scannedTokenRef.current, campaignId: row.campaign_id },
       {
         onSuccess(data) {
-          setOverlay({ kind: "visit_unified", result: data });
+          // Visit-basis points award a flat per-visit amount; surface it.
+          const awarded = row.mechanic === "points" ? row.points_per_visit ?? 0 : null;
+          showSingleResult(data, row, awarded);
         },
-        onError(error) { showError(error); },
+        onError(error) { setPendingCampaignId(null); showError(error); },
+      },
+    );
+  };
+
+  // Spend / spend-basis points: open the bill keypad for this row.
+  const handlePickRow = (row: CampaignScanRow) => {
+    if (overlay?.kind !== "chooser") return;
+    setOverlay({ kind: "amount", result: overlay.result, row });
+  };
+
+  // Keypad submit: confirm the chosen program with the entered bill amount.
+  const handleConfirmAmount = (amount: string) => {
+    if (overlay?.kind !== "amount") return;
+    const { row } = overlay;
+    setPendingCampaignId(row.campaign_id);
+    confirmVisit.mutate(
+      { token: scannedTokenRef.current, campaignId: row.campaign_id, amount },
+      {
+        onSuccess(data) {
+          // Points awarded this confirm = floor(points_per_som × amount); spend
+          // programs award no points, so show progress instead (awarded = null).
+          const awarded =
+            row.mechanic === "points" && row.points_per_som != null
+              ? Math.floor(Number(row.points_per_som) * Number(amount))
+              : null;
+          showSingleResult(data, row, awarded);
+        },
+        onError(error) { setPendingCampaignId(null); showError(error); },
+      },
+    );
+  };
+
+  // Social: confirm the post, then show the single-program success.
+  const handleConfirmSocialRow = (row: CampaignScanRow) => {
+    setPendingCampaignId(row.campaign_id);
+    confirmSocial.mutate(
+      { token: scannedTokenRef.current, campaignId: row.campaign_id },
+      {
+        onSuccess(leg) {
+          setOverlay({
+            kind: "single_result",
+            leg,
+            customerName: leg.customer_name,
+            awarded: null,
+          });
+          setPendingCampaignId(null);
+        },
+        onError(error) { setPendingCampaignId(null); showError(error); },
       },
     );
   };
@@ -779,16 +1049,31 @@ export default function StaffScanPage() {
         {!cameraActive && <CameraOff onEnable={() => setCameraActive(true)} onManual={handleScan} />}
 
         {/* ── Result sheets ── */}
-        {overlay?.kind === "visit_eligibility" && (
-          <VisitEligibilitySheet
+        {overlay?.kind === "chooser" && (
+          <LoyaltyChooserSheet
             result={overlay.result}
-            onConfirm={handleConfirmVisit}
+            onPickRow={handlePickRow}
+            onConfirmRow={handleConfirmRow}
+            onConfirmSocial={handleConfirmSocialRow}
             onDismiss={dismiss}
+            pendingCampaignId={pendingCampaignId}
+          />
+        )}
+        {overlay?.kind === "amount" && (
+          <AmountSheet
+            row={overlay.row}
+            onConfirm={handleConfirmAmount}
+            onBack={() => setOverlay({ kind: "chooser", result: overlay.result })}
             isPending={confirmVisit.isPending}
           />
         )}
-        {overlay?.kind === "visit_unified" && (
-          <VisitUnifiedSheet result={overlay.result} onDismiss={dismiss} />
+        {overlay?.kind === "single_result" && (
+          <SingleResultSheet
+            leg={overlay.leg}
+            customerName={overlay.customerName}
+            awarded={overlay.awarded}
+            onDismiss={dismiss}
+          />
         )}
         {overlay?.kind === "group_eligible" && (
           <GroupEligibleSheet group={overlay.group} onConfirm={handleConfirmGroup} onDismiss={dismiss} isPending={confirmGroup.isPending} />

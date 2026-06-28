@@ -8,14 +8,19 @@
 import { session } from "./session";
 import type {
   Business,
+  BusinessLoyaltyProgram,
   Campaign,
+  CampaignCatalogItem,
   CampaignFeed,
+  CampaignMechanic,
   CampaignProgress,
   CampaignVoucher,
   CampaignWallet,
   GroupSession,
   GroupSessionMember,
+  ItemSelection,
   MyGroup,
+  PointsBasis,
   RewardProgram,
 } from "./types";
 
@@ -111,7 +116,36 @@ function normalizeMechanic(raw: string | undefined): Campaign["rule"]["mechanic"
   if (raw === "stamp") return "stamp";
   if (raw === "spend") return "spend";
   if (raw === "visit") return "visit";
+  if (raw === "points") return "points";
   return null;
+}
+
+// Normalize the POINTS accrual basis (multi-form-loyalty). Null for non-points.
+function normalizePointsBasis(raw: string | undefined): PointsBasis | null {
+  if (raw === "visit") return "visit";
+  if (raw === "spend") return "spend";
+  return null;
+}
+
+// Normalize the item-reward selection mode (multi-form-loyalty). Null when the
+// reward is not an item program.
+function normalizeItemSelection(raw: string | undefined): ItemSelection | null {
+  if (raw === "fixed") return "fixed";
+  if (raw === "customer") return "customer";
+  return null;
+}
+
+// Boundary validation for a catalog item embedded in a reward/voucher payload or
+// returned from the catalog endpoint. Null in → null out (no item set).
+export function adaptCatalogItem(raw: Raw | null | undefined): CampaignCatalogItem | null {
+  if (!raw) return null;
+  return {
+    id: raw.id,
+    name: raw.name ?? "",
+    // Backend serializes price as a decimal string; coerce defensively.
+    price: raw.price != null ? String(raw.price) : "",
+    image: raw.image ?? raw.image_url ?? null,
+  };
 }
 
 function adaptCampaignProgress(raw: Raw | null | undefined): CampaignProgress | null {
@@ -132,6 +166,8 @@ function adaptCampaignProgress(raw: Raw | null | undefined): CampaignProgress | 
     target_count: raw.required_count ?? raw.target_count ?? raw.goal ?? null,
     completed,
     voucher_id: raw.voucher_id ?? null,
+    // POINTS programs carry a redeemable balance (multi-form-loyalty slice 1).
+    points_balance: raw.points_balance ?? 0,
   };
 }
 
@@ -231,6 +267,12 @@ export function adaptCampaign(raw: Raw): Campaign {
       // GROUP per-member minimum spend (decimal string) — null when no minimum.
       min_spend: rule.min_spend != null ? String(rule.min_spend) : (rule.minSpend ?? null),
       group_checkin_window_minutes: rule.group_checkin_window_minutes ?? null,
+      // POINTS accrual + cashback rate (multi-form-loyalty slice 1 CampaignRule).
+      points_basis: normalizePointsBasis(rule.points_basis),
+      points_per_visit: rule.points_per_visit ?? null,
+      points_per_som: rule.points_per_som != null ? String(rule.points_per_som) : null,
+      cashback_per_point:
+        rule.cashback_per_point != null ? String(rule.cashback_per_point) : null,
     },
     reward: {
       // Backend serializes reward_type / reward_receiver_type (not type / receiver).
@@ -240,6 +282,9 @@ export function adaptCampaign(raw: Raw): Campaign {
       expiry_days_after_unlock: reward.expiry_days_after_unlock ?? reward.expiryDays ?? 7,
       max_redemptions: reward.max_redemptions ?? reward.max ?? null,
       receiver: reward.reward_receiver_type ?? reward.receiver ?? undefined,
+      // Item-reward selection mode + preset item (multi-form-loyalty CampaignReward).
+      item_selection: normalizeItemSelection(reward.item_selection),
+      catalog_item: adaptCatalogItem(reward.catalog_item),
     },
     my_progress: adaptCampaignProgress(raw.my_progress),
     instagram_handle: raw.instagram_handle ?? null,
@@ -309,6 +354,34 @@ export function adaptCampaignVoucher(raw: Raw): CampaignVoucher {
     // (branch scope is deferred — plan D5); both stay null.
     redeemed_by: raw.redeemed_by ?? raw.redeemedBy ?? null,
     redeemed_branch: raw.redeemed_branch ?? raw.branch ?? null,
+    // CASHBACK voucher amount (decimal string) — null for item vouchers.
+    cashback_amount: raw.cashback_amount != null ? String(raw.cashback_amount) : null,
+    // Item vouchers carry the chosen/preset CatalogItem + the selection mode so the
+    // present screen can offer "Choose your item" for unresolved customer-choice ones.
+    catalog_item: adaptCatalogItem(raw.catalog_item),
+    item_selection: ((): ItemSelection | null => {
+      if (raw.item_selection === "fixed") return "fixed";
+      if (raw.item_selection === "customer") return "customer";
+      return null;
+    })(),
+  };
+}
+
+// Boundary validation for one GET /customer/businesses/{id}/loyalty/ row
+// (multi-form-loyalty slice 2). The backend emits the flat shape below directly.
+export function adaptBusinessLoyaltyProgram(raw: Raw): BusinessLoyaltyProgram {
+  const mechanic = (normalizeMechanic(raw.mechanic) ?? "visit") as CampaignMechanic;
+  return {
+    campaign_id: raw.campaign_id ?? raw.id ?? "",
+    name: raw.name ?? "",
+    mechanic,
+    reward_summary: raw.reward_summary ?? "",
+    joined: raw.joined ?? false,
+    progress_count: raw.progress_count ?? 0,
+    target: raw.target ?? 0,
+    points_balance: raw.points_balance ?? 0,
+    cashback_per_point:
+      raw.cashback_per_point != null ? String(raw.cashback_per_point) : null,
   };
 }
 

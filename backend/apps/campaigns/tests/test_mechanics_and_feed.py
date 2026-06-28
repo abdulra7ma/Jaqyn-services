@@ -299,6 +299,40 @@ def test_customer_feed_splits_followed_and_discover():
     assert followed_ids.isdisjoint(discover_ids)
 
 
+def test_followed_keeps_all_joined_once_campaigns():
+    """All joined ONCE campaigns stay in `followed` when none have paid out.
+
+    Regression: chaining the ONCE pay-out exclude and the joined_only filter on
+    the same `participants` relation dropped joined campaigns even with zero
+    completed/redeemed participants (a multi-join ORM trap). The customer here
+    joined THREE ONCE programs and completed none — all three must appear.
+    """
+    business = make_business()
+    customer = make_customer()
+    joined = []
+    for mech in ("visit", "stamp", "points"):
+        c = make_campaign(
+            business,
+            mechanic=mech,
+            cashback_per_point=Decimal("1") if mech == "points" else None,
+            points_basis="visit" if mech == "points" else None,
+            points_per_visit=10 if mech == "points" else None,
+            completion_limit=Campaign.CompletionLimit.ONCE,
+        )
+        CampaignParticipant.objects.create(
+            campaign=c, customer=customer, status=CampaignParticipant.Status.IN_PROGRESS
+        )
+        joined.append(c)
+
+    client = _auth(customer)
+    resp = client.get("/api/customer/campaigns/feed/")
+
+    assert resp.status_code == 200
+    followed_ids = {c["id"] for c in resp.data["data"]["followed"]}
+    for c in joined:
+        assert str(c.id) in followed_ids
+
+
 def test_customer_feed_group_filter():
     business = make_business()
     customer = make_customer()

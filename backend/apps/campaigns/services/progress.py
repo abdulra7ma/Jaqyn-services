@@ -233,7 +233,8 @@ class CampaignProgressService:
     ) -> ProgressResult:
         """Count one verified action toward an INDIVIDUAL campaign, completing it if due.
 
-        Branches on the rule's mechanic (§13/§19, campaigns-restructure design §4):
+        Branches on the rule's mechanic (§13/§19, campaigns-restructure design §4,
+        multi-form-loyalty design §1):
 
         * **VISIT** / **STAMP** — each counted action increments ``progress_count``
           by one; the campaign completes when ``progress_count`` reaches the rule's
@@ -246,6 +247,16 @@ class CampaignProgressService:
           ``VALIDATION_ERROR`` when missing/non-positive, or below the rule's
           ``min_spend``); it is accumulated onto ``current_spend`` and the campaign
           completes when ``current_spend`` reaches the rule's ``required_spend``.
+        * **POINTS** — the action *accrues points* onto ``points_balance`` (under
+          the participant lock) and **never** advances completion or mints a
+          voucher: a POINTS program is a running balance the customer later redeems
+          for cashback, not a reach-a-target loop. On the ``visit`` points basis
+          the award is the rule's ``points_per_visit``; on the ``spend`` basis it is
+          ``floor(points_per_som × amount_spend)`` and the action carries
+          ``amount_spend`` (validated like SPEND). The reported
+          ``progress_count``/``required_count`` echo the new balance with a 0
+          target so the caller can render the balance; ``completed`` is always
+          ``False``.
 
         Runs inside one atomic block. Acquires two row locks in a *fixed order* —
         the ``Campaign`` row first, then the participant row — so the reward cap
@@ -297,9 +308,15 @@ class CampaignProgressService:
             mechanic = cls._mechanic(campaign)
             rule = getattr(campaign, "rule", None)
 
-            # SPEND mechanic requires a positive amount at/above the rule minimum.
+            # SPEND mechanic, and a POINTS campaign on the spend basis, both need a
+            # positive amount at/above the rule minimum (the staff bill amount).
             spend_amount: Decimal | None = None
-            if mechanic == CampaignRule.Mechanic.SPEND:
+            needs_amount = mechanic == CampaignRule.Mechanic.SPEND or (
+                mechanic == CampaignRule.Mechanic.POINTS
+                and rule is not None
+                and rule.points_basis == CampaignRule.PointsBasis.SPEND
+            )
+            if needs_amount:
                 spend_amount = cls._validate_spend_amount(rule, amount_spend)
 
             action = CampaignAction.objects.create(
@@ -324,7 +341,21 @@ class CampaignProgressService:
             if participant.status == CampaignParticipant.Status.JOINED:
                 participant.status = CampaignParticipant.Status.IN_PROGRESS
 
-            if mechanic == CampaignRule.Mechanic.SPEND:
+            if mechanic == CampaignRule.Mechanic.POINTS:
+                # POINTS accrues a balance and never advances completion. The
+                # participant row was select_for_update'd above, so this
+                # read-modify-write of points_balance is fully locked.
+                awarded = cls._points_awarded(rule, spend_amount)
+                participant.points_balance = (
+                    (participant.points_balance or 0) + awarded
+                )
+                update_fields.append("points_balance")
+                completed = False
+                progress_now = participant.points_balance
+                # A POINTS program has no completion target — report 0 so the
+                # caller renders a balance, not an X/Y bar.
+                required_now = 0
+            elif mechanic == CampaignRule.Mechanic.SPEND:
                 participant.current_spend = (
                     participant.current_spend or Decimal("0")
                 ) + spend_amount
@@ -387,6 +418,27 @@ class CampaignProgressService:
             required_count=required_now,
             voucher=voucher,
         )
+
+    @staticmethod
+    def _points_awarded(
+        rule: CampaignRule | None, spend_amount: Decimal | None
+    ) -> int:
+        """Return the whole points a POINTS action awards (multi-form-loyalty §1).
+
+        On the ``visit`` basis the award is the rule's ``points_per_visit`` (0 when
+        unset). On the ``spend`` basis it is ``floor(points_per_som × spend_amount)``
+        — points are whole units, so a fractional product is truncated down; the
+        money rate is a ``Decimal`` so the multiplication is exact, never float.
+        Returns 0 (never negative) when the rule or its rate is unconfigured.
+        """
+        if rule is None:
+            return 0
+        if rule.points_basis == CampaignRule.PointsBasis.SPEND:
+            if rule.points_per_som is None or spend_amount is None:
+                return 0
+            return int(rule.points_per_som * spend_amount)
+        # visit basis (the default for a POINTS campaign without an explicit basis)
+        return int(rule.points_per_visit or 0)
 
     @staticmethod
     def _validate_spend_amount(

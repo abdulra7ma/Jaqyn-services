@@ -39,6 +39,7 @@ function fromBackendMechanic(raw: string | undefined): BusinessCampaignMechanic 
   if (raw === "stamp") return "stamp";
   if (raw === "spend") return "spend";
   if (raw === "visit") return "visit";
+  if (raw === "points") return "points";
   return null;
 }
 
@@ -49,6 +50,8 @@ function ruleTypeFor(type: BusinessCampaignType, mechanic?: BusinessCampaignMech
   if (type === "group") return "group_checkin";
   if (mechanic === "spend") return "spend";
   if (mechanic === "stamp") return "stamp";
+  // POINTS is a balance mechanic with no completion target (multi-form-loyalty).
+  if (mechanic === "points") return "points";
   return "visit_count";
 }
 
@@ -251,7 +254,17 @@ export function toCampaignWritePayload(payload: Partial<CampaignPayload>): Raw {
       rule.group_checkin_window_minutes = payload.group_checkin_window_minutes;
   } else if (type === "individual") {
     if (mechanic != null) rule.mechanic = mechanic;
-    if (mechanic === "spend") {
+    if (mechanic === "points") {
+      // POINTS accrual: send the basis + only the matching rate field, plus the
+      // cashback rate. No required_count/spend — points programs never complete.
+      if (payload.points_basis != null) rule.points_basis = payload.points_basis;
+      if (payload.points_basis === "spend") {
+        if (payload.points_per_som != null) rule.points_per_som = payload.points_per_som;
+      } else if (payload.points_per_visit != null) {
+        rule.points_per_visit = payload.points_per_visit;
+      }
+      if (payload.cashback_per_point != null) rule.cashback_per_point = payload.cashback_per_point;
+    } else if (mechanic === "spend") {
       if (payload.required_spend != null) rule.required_spend = payload.required_spend;
     } else if (payload.required_count != null) {
       rule.required_count = payload.required_count;
@@ -272,6 +285,13 @@ export function toCampaignWritePayload(payload: Partial<CampaignPayload>): Raw {
     reward.expiry_days_after_unlock = payload.expiry_days_after_unlock;
   }
   if (payload.max_rewards != null) reward.max_redemptions = payload.max_rewards;
+  // Item-reward selection (multi-form-loyalty slice 3): send the mode, and the
+  // preset catalog item only when fixed (cleared to null when customer-chosen).
+  if (payload.item_selection != null) {
+    reward.item_selection = payload.item_selection;
+    reward.catalog_item_id =
+      payload.item_selection === "fixed" ? (payload.catalog_item_id ?? null) : null;
+  }
   if (Object.keys(reward).length > 0) body.reward = reward;
 
   return body;

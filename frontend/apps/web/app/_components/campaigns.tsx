@@ -1,16 +1,22 @@
 "use client";
 
-import type {
-  Campaign,
-  CampaignStatus,
-  CampaignType,
-  CampaignVoucher,
-  CampaignVoucherStatus,
-  GroupSessionMember,
+import {
+  useCampaignCatalog,
+  useRedeemPoints,
+  useSelectVoucherItem,
+  type BusinessLoyaltyProgram,
+  type Campaign,
+  type CampaignCatalogItem,
+  type CampaignStatus,
+  type CampaignType,
+  type CampaignVoucher,
+  type CampaignVoucherStatus,
+  type GroupSessionMember,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Badge, cn } from "@jaqyn/ui";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import QRCode from "react-qr-code";
 
@@ -168,9 +174,11 @@ export function CampaignCard({ campaign }: { campaign: Campaign }) {
   const type = campaign.campaign_type;
   const p = campaign.my_progress;
   const target = p?.target_count ?? campaign.rule.required_count ?? 0;
-  // Only individual campaigns track per-customer visit/stamp/spend progress.
-  // Group "progress" is people-joining (shown inside the group flow, not here).
-  const hasProgress = type === "individual" && !!p?.joined && target > 0;
+  // Only individual visit/stamp/spend campaigns track a per-customer target
+  // progress bar. Group "progress" is people-joining (shown in the group flow);
+  // POINTS programs accrue a balance (no target bar).
+  const hasProgress =
+    type === "individual" && campaign.rule.mechanic !== "points" && !!p?.joined && target > 0;
   // CTA differs by type/state: group cards always "View" the offer; an
   // in-progress individual says "Continue"; otherwise "View"/"Join".
   const cta =
@@ -244,6 +252,7 @@ export function CampaignCard({ campaign }: { campaign: Campaign }) {
 export function CampaignCarouselCard({ campaign }: { campaign: Campaign }) {
   const t = useT();
   const p = campaign.my_progress;
+  const isPoints = campaign.rule.mechanic === "points";
   const target = p?.target_count ?? campaign.rule.required_count ?? 0;
   const current = p?.current_count ?? 0;
   const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
@@ -261,28 +270,444 @@ export function CampaignCarouselCard({ campaign }: { campaign: Campaign }) {
         </div>
       </div>
 
-      <div className="mt-3">
-        <div className="h-2 overflow-hidden rounded-pill bg-board">
-          <div
-            className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <div className="mt-2 flex items-center justify-between text-[12px] font-semibold text-subtle">
-          <span>
-            {t("cmp.card.progress")
-              .replace("{count}", String(current))
-              .replace("{total}", String(target))}
+      {isPoints ? (
+        // POINTS programs show a balance, not a visit progress bar.
+        <div className="mt-3 flex items-center justify-between">
+          <span className="rounded-pill bg-brand-muted px-2.5 py-1 text-[12.5px] font-bold text-brand">
+            {t("cmp.loyalty.points").replace("{count}", String(p?.points_balance ?? 0))}
           </span>
-          <span>{endsLabel(t, campaign)}</span>
+          <span className="text-[12px] font-semibold text-subtle">{endsLabel(t, campaign)}</span>
         </div>
-      </div>
+      ) : (
+        <div className="mt-3">
+          <div className="h-2 overflow-hidden rounded-pill bg-board">
+            <div
+              className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[12px] font-semibold text-subtle">
+            <span>
+              {t("cmp.card.progress")
+                .replace("{count}", String(current))
+                .replace("{total}", String(target))}
+            </span>
+            <span>{endsLabel(t, campaign)}</span>
+          </div>
+        </div>
+      )}
 
       <span className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-pill bg-brand-muted px-2.5 py-1 text-[12px] font-bold text-brand">
         <span aria-hidden>🎁</span>
         <span className="truncate">{campaign.reward.title}</span>
       </span>
     </Link>
+  );
+}
+
+/**
+ * One business loyalty program row for the business-page "Loyalty" section
+ * (multi-form-loyalty slice 2). POINTS programs show a balance + cashback hint;
+ * visit/stamp/spend programs show an X/Y progress bar + the reward line. The whole
+ * row links into the campaign detail (join / continue / redeem). Tokens-only.
+ */
+export function LoyaltyProgramRow({ program }: { program: BusinessLoyaltyProgram }) {
+  const t = useT();
+  const isPoints = program.mechanic === "points";
+  // Non-points programs render a progress bar against their target.
+  const target = program.target > 0 ? program.target : 0;
+  const pct =
+    target > 0 ? Math.min(100, Math.round((program.progress_count / target) * 100)) : 0;
+  // POINTS: show "Redeem cashback" only once there is a balance to spend.
+  const canRedeem = isPoints && program.points_balance > 0;
+  const cta = canRedeem
+    ? t("cmp.loyalty.redeem")
+    : program.joined
+      ? t("cmp.card.continue")
+      : t("cmp.card.join");
+
+  return (
+    <Link
+      href={`/campaigns/${program.campaign_id}`}
+      className="block rounded-2xl border border-line bg-card p-4 shadow-card transition active:scale-[.99]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-[15px] font-bold text-ink">{program.name}</p>
+          {program.reward_summary && (
+            <p className="mt-0.5 truncate text-[12.5px] font-semibold text-brand">
+              {program.reward_summary}
+            </p>
+          )}
+        </div>
+        {isPoints && (
+          <span className="flex-none rounded-pill bg-brand-muted px-2.5 py-1 text-[12.5px] font-bold text-brand">
+            {t("cmp.loyalty.points").replace("{count}", String(program.points_balance))}
+          </span>
+        )}
+      </div>
+
+      {isPoints ? (
+        <p className="mt-2 text-[12.5px] text-subtle">
+          {canRedeem && program.cashback_per_point
+            ? t("cmp.loyalty.cashbackHint").replace("{rate}", program.cashback_per_point)
+            : t("cmp.loyalty.pointsHint")}
+        </p>
+      ) : (
+        target > 0 && (
+          <div className="mt-3">
+            <div className="h-2 overflow-hidden rounded-pill bg-board">
+              <div
+                className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[12px] font-semibold text-subtle">
+              {t("cmp.card.progress")
+                .replace("{count}", String(program.progress_count))
+                .replace("{total}", String(target))}
+            </p>
+          </div>
+        )
+      )}
+
+      <div className="mt-3 flex items-center justify-end border-t border-line pt-2.5">
+        <span className="text-[13px] font-bold text-brand">{cta} ›</span>
+      </div>
+    </Link>
+  );
+}
+
+/**
+ * A single loyalty program flattened for the consolidated business card
+ * (multi-form-loyalty). One card aggregates every program a business runs; the
+ * card's switcher flips between these views. Mechanic may be null when the source
+ * is an arbitrary Campaign whose rule has no mechanic (group/social) — such a view
+ * falls back to the program name for its tab label and shows a progress body.
+ */
+export type LoyaltyProgramView = {
+  campaignId: string;
+  name: string;
+  mechanic: "points" | "stamp" | "visit" | "spend" | null;
+  rewardSummary: string;
+  joined: boolean;
+  progressCount: number;
+  target: number;
+  pointsBalance: number;
+  cashbackPerPoint: string | null;
+};
+
+/**
+ * Short per-program tab label for the loyalty switcher (multi-form-loyalty). Maps
+ * the mechanic to a stable namespaced i18n key (cmp.loyalty.tab.*); when the
+ * mechanic is null (non-points/visit/stamp/spend) it falls back to the program's
+ * own name so the tab is never blank.
+ */
+export function loyaltyTabLabel(
+  t: Translate,
+  mechanic: LoyaltyProgramView["mechanic"],
+  name: string,
+): string {
+  if (mechanic === null) return name;
+  return t(`cmp.loyalty.tab.${mechanic}` as Parameters<Translate>[0]);
+}
+
+/** Loyalty type → pill label key + tone classes (matches the design's chips). */
+const LOYALTY_PILL: Record<
+  NonNullable<LoyaltyProgramView["mechanic"]>,
+  { key: string; cls: string }
+> = {
+  stamp: { key: "cmp.loyalty.pill.stamp", cls: "bg-brand-muted text-brand" },
+  points: { key: "cmp.loyalty.pill.cashback", cls: "bg-amber/15 text-amber-deep" },
+  visit: { key: "cmp.loyalty.pill.visits", cls: "bg-sage-soft text-ok" },
+  spend: { key: "cmp.loyalty.pill.spend", cls: "bg-amber/15 text-amber-deep" },
+};
+
+/** A row of stamp/visit dots: `filled` solid, the rest dashed outlines. */
+function ProgressDots({ filled, total }: { filled: number; total: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2" aria-hidden>
+      {Array.from({ length: total }).map((_, i) => (
+        <span
+          key={i}
+          className={cn(
+            "h-6 w-6 rounded-full",
+            i < filled ? "bg-brand" : "border-2 border-dashed border-line",
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Body for the active program inside a BusinessLoyaltyCard. Type-specific:
+ * stamp/visit show a dot row + "X of Y" + "N to go"; points shows the cashback
+ * balance in som + a "Use" button; spend keeps a progress bar. */
+function LoyaltyProgramBody({ program }: { program: LoyaltyProgramView }) {
+  const t = useT();
+  const mech = program.mechanic;
+  const isPoints = mech === "points";
+  const isStamp = mech === "stamp";
+  const isVisit = mech === "visit";
+  const target = program.target > 0 ? program.target : 0;
+  const current = Math.max(0, Math.min(program.progressCount, target || program.progressCount));
+  const toGo = Math.max(0, target - current);
+  const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+  // Dots only read well for small targets; larger ones fall back to a bar.
+  const useDots = (isStamp || isVisit) && target > 0 && target <= 14;
+  // Cashback shown in som = balance × rate (display only; backend is authoritative).
+  const som = program.cashbackPerPoint
+    ? Math.round(Number(program.cashbackPerPoint) * program.pointsBalance)
+    : program.pointsBalance;
+  const pill = mech ? LOYALTY_PILL[mech] : null;
+
+  return (
+    <div>
+      {/* reward line + type pill */}
+      <div className="flex items-start justify-between gap-3">
+        {program.rewardSummary && (
+          <p className="min-w-0 flex-1 text-[13px] font-semibold text-subtle">
+            {program.rewardSummary}
+          </p>
+        )}
+        {pill && (
+          <span
+            className={cn(
+              "flex-none rounded-pill px-2.5 py-1 text-[11.5px] font-bold",
+              pill.cls,
+            )}
+          >
+            {t(pill.key as Parameters<Translate>[0])}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 border-t border-line pt-3">
+        {isPoints ? (
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-display text-ink">
+              <span className="text-[28px] font-extrabold text-ok">{som}</span>{" "}
+              <span className="text-[13px] font-bold text-subtle">
+                {t("cmp.loyalty.somCashback")}
+              </span>
+            </p>
+            {program.pointsBalance > 0 ? (
+              <Link
+                href={`/campaigns/${program.campaignId}`}
+                className="flex-none rounded-xl bg-sage px-5 py-2.5 text-[14px] font-bold text-white shadow-sage transition active:scale-[.98]"
+              >
+                {t("cmp.loyalty.use")}
+              </Link>
+            ) : (
+              <span className="flex-none text-[12px] font-semibold text-subtle">
+                {t("cmp.loyalty.pointsHint")}
+              </span>
+            )}
+          </div>
+        ) : useDots ? (
+          <>
+            <ProgressDots filled={current} total={target} />
+            <div className="mt-3 flex items-center justify-between text-[13px] font-semibold">
+              <span className="text-ink">
+                {t(isStamp ? "cmp.loyalty.stamps" : "cmp.loyalty.visitsCount")
+                  .replace("{count}", String(current))
+                  .replace("{total}", String(target))}
+              </span>
+              <Link href={`/campaigns/${program.campaignId}`} className="text-brand">
+                {!program.joined
+                  ? `${t("cmp.card.join")} ›`
+                  : t(isStamp ? "cmp.loyalty.toGo" : "cmp.loyalty.visitsToGo").replace(
+                      "{count}",
+                      String(toGo),
+                    )}
+              </Link>
+            </div>
+          </>
+        ) : (
+          // spend (money target) or large-target fallback: progress bar.
+          <>
+            <div className="h-2 overflow-hidden rounded-pill bg-board">
+              <div
+                className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[12.5px] font-semibold">
+              <span className="text-subtle">
+                {t("cmp.card.progress")
+                  .replace("{count}", String(current))
+                  .replace("{total}", String(target))}
+              </span>
+              <Link href={`/campaigns/${program.campaignId}`} className="text-brand">
+                {program.joined ? `${t("cmp.card.continue")} ›` : `${t("cmp.card.join")} ›`}
+              </Link>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The consolidated per-business loyalty card (multi-form-loyalty). Renders one
+ * card for a business with a header (logo + name) and, when the business runs more
+ * than one program, a keyboard-accessible segmented-tabs switcher (role=tablist /
+ * tab / tabpanel) to flip between programs; a single program renders without tabs.
+ * Each program body's primary affordance is a Link into the campaign detail.
+ * Shown on both the business page and the Rewards "In progress" row.
+ */
+export function BusinessLoyaltyCard({
+  business,
+  programs,
+}: {
+  business: { name: string; logo_url: string | null };
+  programs: LoyaltyProgramView[];
+}) {
+  const t = useT();
+  const [active, setActive] = useState(0);
+  // `current` is the active program; the fallback to programs[0] keeps the type
+  // non-optional (the early return below guards the empty case).
+  const current = programs[Math.min(active, programs.length - 1)] ?? programs[0];
+  const multi = programs.length > 1;
+  if (!current) return null;
+
+  return (
+    <div className="rounded-2xl border border-line bg-card p-4 shadow-card">
+      <div className="flex items-center gap-2.5">
+        <GlyphTile glyph="🏷️" size={42} image={business.logo_url} />
+        <p className="min-w-0 flex-1 truncate font-display text-[15px] font-bold text-ink">
+          {business.name}
+        </p>
+      </div>
+
+      {multi && (
+        <div
+          role="tablist"
+          aria-label={business.name}
+          className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {programs.map((p, i) => {
+            const selected = i === active;
+            return (
+              <button
+                key={p.campaignId}
+                type="button"
+                role="tab"
+                id={`loyalty-tab-${p.campaignId}`}
+                aria-selected={selected}
+                aria-controls={`loyalty-panel-${p.campaignId}`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setActive(i)}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowRight") {
+                    e.preventDefault();
+                    setActive((i + 1) % programs.length);
+                  } else if (e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    setActive((i - 1 + programs.length) % programs.length);
+                  }
+                }}
+                className={cn(
+                  "flex-none rounded-pill border px-3.5 py-1.5 text-[13px] font-semibold transition",
+                  selected
+                    ? "border-brand bg-brand text-brand-fg"
+                    : "border-line bg-card text-subtle active:scale-[.98]",
+                )}
+              >
+                {loyaltyTabLabel(t, p.mechanic, p.name)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div
+        role={multi ? "tabpanel" : undefined}
+        id={multi ? `loyalty-panel-${current.campaignId}` : undefined}
+        aria-labelledby={multi ? `loyalty-tab-${current.campaignId}` : undefined}
+        className="mt-3"
+      >
+        <LoyaltyProgramBody program={current} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Points balance + "Redeem cashback" surface for a POINTS campaign detail
+ * (multi-form-loyalty slice 3). The customer enters how many points to redeem
+ * (defaulting to the full balance) and sees the resulting cashback at the
+ * campaign's rate; redeeming mints a cashback voucher and routes to the wallet.
+ * Only meaningful for an individual `points` campaign — callers gate on that.
+ */
+export function PointsRedeemCard({ campaign }: { campaign: Campaign }) {
+  const t = useT();
+  const router = useRouter();
+  const redeem = useRedeemPoints();
+  const balance = campaign.my_progress?.points_balance ?? 0;
+  const rate = campaign.rule.cashback_per_point;
+  const [amount, setAmount] = useState(String(balance));
+
+  const requested = Number.parseInt(amount, 10);
+  const valid = Number.isFinite(requested) && requested > 0 && requested <= balance;
+  // Estimated cashback at the campaign's som-per-point rate (display only; the
+  // backend computes the authoritative amount).
+  const estimate =
+    valid && rate ? (requested * Number.parseFloat(rate)).toFixed(2).replace(/\.00$/, "") : null;
+
+  const onRedeem = () => {
+    if (!valid) return;
+    redeem.mutate(
+      { campaignId: campaign.id, points: requested },
+      {
+        onSuccess: (voucher) => router.push(`/campaign-wallet/${voucher.id}`),
+      },
+    );
+  };
+
+  return (
+    <div className="mt-4 rounded-[18px] border border-line bg-card p-4">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[13px] font-semibold text-subtle">{t("cmp.loyalty.balance")}</span>
+        <span className="font-display text-[20px] font-extrabold text-ink">
+          {t("cmp.loyalty.points").replace("{count}", String(balance))}
+        </span>
+      </div>
+      {balance > 0 ? (
+        <>
+          <label className="mt-3 block">
+            <span className="text-[12px] font-bold text-subtle">{t("cmp.loyalty.redeemAmount")}</span>
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              inputMode="numeric"
+              max={balance}
+              min={1}
+              className="mt-1.5 w-full rounded-xl border-[1.5px] border-line bg-card px-3.5 py-3 text-sm font-semibold text-ink outline-none focus:border-brand"
+            />
+          </label>
+          {estimate && (
+            <p className="mt-2 text-[12.5px] font-semibold text-sage">
+              {t("cmp.loyalty.cashbackEstimate").replace("{amount}", estimate)}
+            </p>
+          )}
+          {redeem.isError && (
+            <p className="mt-2 text-[12.5px] font-semibold text-danger">{t("cmp.loyalty.redeemError")}</p>
+          )}
+          <button
+            type="button"
+            onClick={onRedeem}
+            disabled={!valid || redeem.isPending}
+            className="mt-3 w-full rounded-xl bg-brand-gradient py-3.5 text-[14.5px] font-bold text-brand-fg shadow-glow transition active:scale-[.99] disabled:opacity-60"
+          >
+            {redeem.isPending ? t("cmp.loyalty.redeeming") : t("cmp.loyalty.redeem")}
+          </button>
+        </>
+      ) : (
+        <p className="mt-2 text-[12.5px] text-subtle">{t("cmp.loyalty.pointsHint")}</p>
+      )}
+    </div>
   );
 }
 
@@ -298,6 +723,15 @@ export function VoucherCard({ voucher }: { voucher: CampaignVoucher }) {
           <p className="mt-0.5 font-display text-lg font-extrabold leading-tight tracking-tight text-ink">
             {voucher.reward_title}
           </p>
+          {/* Cashback amount / chosen item line (multi-form-loyalty slice 3). */}
+          {voucher.cashback_amount && (
+            <p className="mt-0.5 text-[13px] font-bold text-sage">
+              {t("cmp.loyalty.cashbackAmount").replace("{amount}", voucher.cashback_amount)}
+            </p>
+          )}
+          {voucher.catalog_item && (
+            <p className="mt-0.5 text-[13px] font-semibold text-brand">{voucher.catalog_item.name}</p>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="text-[11.5px] text-subtle">{voucher.campaign.name}</span>
             {voucher.expiring_soon ? (
@@ -382,6 +816,80 @@ export function VoucherQrBlock({
       </div>
       <p className="mt-3.5 font-mono text-[15px] font-bold tracking-[0.12em] text-ink">{code}</p>
     </div>
+  );
+}
+
+/**
+ * "Choose your item" sheet for a customer-choice item voucher (multi-form-loyalty
+ * slice 3). Lists the campaign's eligible CatalogItems and, on tap, resolves the
+ * voucher via select-item. Shown only while the voucher has no catalog_item yet.
+ */
+export function VoucherItemSheet({
+  campaignId,
+  voucherId,
+  onSelected,
+}: {
+  campaignId: string;
+  voucherId: string;
+  onSelected?: (voucher: CampaignVoucher) => void;
+}) {
+  const t = useT();
+  const catalog = useCampaignCatalog(campaignId);
+  const select = useSelectVoucherItem();
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const onPick = (item: CampaignCatalogItem) => {
+    setPendingId(item.id);
+    select.mutate(
+      { voucherId, catalogItemId: item.id },
+      {
+        onSuccess: (voucher) => onSelected?.(voucher),
+        onSettled: () => setPendingId(null),
+      },
+    );
+  };
+
+  return (
+    <section aria-labelledby="choose-item-heading" className="mt-2">
+      <h2
+        id="choose-item-heading"
+        className="font-display text-base font-bold text-ink"
+      >
+        {t("cmp.voucher.chooseItem")}
+      </h2>
+      <p className="mt-1 text-[13px] text-subtle">{t("cmp.voucher.chooseItemHint")}</p>
+
+      {catalog.isLoading && (
+        <p className="mt-4 text-sm text-subtle">{t("common.loading")}</p>
+      )}
+      {catalog.isError && (
+        <p className="mt-4 text-sm text-danger">{t("cmp.voucher.chooseItemError")}</p>
+      )}
+      {catalog.data && catalog.data.length === 0 && (
+        <p className="mt-4 text-sm text-subtle">{t("cmp.voucher.chooseItemEmpty")}</p>
+      )}
+
+      <ul className="mt-4 flex flex-col gap-2.5">
+        {(catalog.data ?? []).map((item) => (
+          <li key={item.id}>
+            <button
+              type="button"
+              onClick={() => onPick(item)}
+              disabled={select.isPending}
+              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-line bg-card p-3.5 text-left shadow-card transition active:scale-[.99] disabled:opacity-60"
+            >
+              <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{item.name}</span>
+              {item.price && (
+                <span className="flex-none text-sm font-bold text-brand">{item.price}</span>
+              )}
+              <span className="flex-none text-[13px] font-bold text-brand">
+                {pendingId === item.id ? t("cmp.voucher.choosing") : t("cmp.voucher.choose")}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

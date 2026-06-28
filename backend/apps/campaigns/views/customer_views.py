@@ -12,6 +12,7 @@ from __future__ import annotations
 from django.conf import settings
 from rest_framework.views import APIView
 
+from apps.businesses.serializers import CatalogItemSerializer
 from apps.campaigns.serializers import (
     CampaignDetailSerializer,
     CampaignDiscoverQuerySerializer,
@@ -21,6 +22,9 @@ from apps.campaigns.serializers import (
     CampaignSerializer,
     GroupSerializer,
     GroupSessionStartSerializer,
+    LoyaltyProgramSerializer,
+    RedeemPointsSerializer,
+    SelectVoucherItemSerializer,
 )
 from core.exceptions import JaqynAPIException
 from apps.campaigns.services import (
@@ -125,6 +129,116 @@ class CampaignJoinView(APIView):
         participant = CampaignProgressService.join_campaign(campaign, request.user)
         return success_response(
             CampaignProgressSerializer(participant).data, status=201
+        )
+
+
+class CampaignRedeemPointsView(APIView):
+    """POST redeem a customer's points on a POINTS campaign for a cashback voucher.
+
+    Parses the ``{points}`` body, calls
+    :meth:`CampaignRewardService.redeem_points`, and returns the minted cashback
+    voucher (201). Throttled on the ``campaign_join`` scope like the other
+    customer write endpoints. Holds no business logic.
+    """
+
+    permission_classes = [IsCustomer]
+    serializer_class = RedeemPointsSerializer
+    throttle_scope = "campaign_join"
+
+    def get_throttles(self):
+        from rest_framework.throttling import ScopedRateThrottle
+
+        return [ScopedRateThrottle()]
+
+    def post(self, request, campaign_id):
+        params = RedeemPointsSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        campaign = CampaignService.get_discoverable(campaign_id)
+        voucher = CampaignRewardService.redeem_points(
+            campaign, request.user, params.validated_data["points"]
+        )
+        return success_response(
+            CampaignRewardVoucherSerializer(
+                voucher, context={"request": request}
+            ).data,
+            status=201,
+        )
+
+
+class CampaignVoucherSelectItemView(APIView):
+    """POST attach a customer-chosen CatalogItem to a customer-choice item voucher.
+
+    Parses ``{catalog_item_id}``, calls
+    :meth:`CampaignRewardService.select_voucher_item` (which enforces ownership,
+    the customer-choice gate, and the same-business item check), and returns the
+    updated voucher. Throttled on ``campaign_join``. Holds no business logic.
+    """
+
+    permission_classes = [IsCustomer]
+    serializer_class = SelectVoucherItemSerializer
+    throttle_scope = "campaign_join"
+
+    def get_throttles(self):
+        from rest_framework.throttling import ScopedRateThrottle
+
+        return [ScopedRateThrottle()]
+
+    def post(self, request, voucher_id):
+        params = SelectVoucherItemSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        voucher = CampaignRewardService.select_voucher_item(
+            voucher_id, request.user, params.validated_data["catalog_item_id"]
+        )
+        return success_response(
+            CampaignRewardVoucherSerializer(
+                voucher, context={"request": request}
+            ).data
+        )
+
+
+class BusinessLoyaltyView(APIView):
+    """GET a business's active loyalty programs + the customer's state on each.
+
+    Backs the business-page "Loyalty" section (multi-form-loyalty design §2). Loads
+    the business, calls :meth:`CampaignService.loyalty_programs_for_customer`, and
+    returns the list of :class:`LoyaltyProgramView` rows. Holds no business logic.
+    """
+
+    permission_classes = [IsCustomer]
+    serializer_class = LoyaltyProgramSerializer
+
+    def get(self, request, business_id):
+        from apps.businesses.models import Business
+
+        try:
+            business = Business.objects.get(id=business_id)
+        except Business.DoesNotExist:
+            raise JaqynAPIException("VALIDATION_ERROR", "Business not found", status_code=404)
+        programs = CampaignService.loyalty_programs_for_customer(business, request.user)
+        return success_response(
+            {"results": LoyaltyProgramSerializer(programs, many=True).data}
+        )
+
+
+class CampaignCatalogView(APIView):
+    """GET the eligible CatalogItems a customer may pick for a campaign's item reward.
+
+    Backs the customer item-selection sheet (multi-form-loyalty design §1). Loads
+    the campaign, returns its business's active catalog (paginated) via
+    :meth:`CampaignRewardService.eligible_catalog_items`. Holds no business logic.
+    """
+
+    permission_classes = [IsCustomer]
+    serializer_class = CatalogItemSerializer
+    pagination_class = StandardResultsSetPagination
+
+    def get(self, request, campaign_id):
+        campaign = CampaignService.get_discoverable(campaign_id)
+        items = CampaignRewardService.eligible_catalog_items(campaign)
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(items, request, view=self)
+        return paginator.get_paginated_response(
+            CatalogItemSerializer(page, many=True).data
         )
 
 
