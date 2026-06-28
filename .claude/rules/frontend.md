@@ -3,6 +3,18 @@
 Applies to `apps/web` and `packages/*`. pnpm workspaces + Turbo. Next.js 14 (App
 Router) + React 18 + TypeScript 5 (`strict: true`) + TanStack Query 5 + Tailwind 3.
 
+## Design system (read before any UI work)
+- **`@docs/design-system.md` is the source of truth for color, type, shape,
+  elevation and every UI primitive.** Read it before building or editing any
+  screen, component, or visual. Do not invent colors, radii, shadows, or type
+  scales — pull them from there.
+- Tokens map to the Tailwind preset in `@jaqyn/config`
+  (`frontend/packages/config/tailwind-preset.js`). Use the class, not the hex
+  (see the mapping table in the design-system doc). If a value isn't in the
+  preset, extend the preset — never inline a raw hex/px.
+- The design-system doc and `tailwind-preset.js` are kept in sync; change both in
+  the same PR.
+
 ## Tooling
 - Package manager: **pnpm** with workspaces. Internal deps use the `workspace:`
   protocol — never a version range, never a relative path across packages.

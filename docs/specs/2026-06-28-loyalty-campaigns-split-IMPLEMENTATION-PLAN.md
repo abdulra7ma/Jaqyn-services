@@ -1,4 +1,4 @@
-# Loyalty / Campaigns Split — Implementation Plan (for Sonnet)
+# Loyalty / Campaigns Split — Implementation Plan
 
 > **Read first:** the design rationale is in
 > `docs/specs/2026-06-28-loyalty-campaigns-split-plan.md`. THIS doc is the

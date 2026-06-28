@@ -5,6 +5,7 @@ Loyalty/rewards platform. Monorepo: Django backend + pnpm/turbo Next.js frontend
 Detailed code rules (always apply when touching that code):
 - Backend: @.claude/rules/backend.md
 - Frontend: @.claude/rules/frontend.md
+- Design system (read before any UI work): @docs/design-system.md
 
 ## Architecture
 - `backend/` — Django 5 + DRF + SimpleJWT + Celery + Redis + Postgres.
