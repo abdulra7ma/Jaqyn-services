@@ -174,9 +174,11 @@ export function CampaignCard({ campaign }: { campaign: Campaign }) {
   const type = campaign.campaign_type;
   const p = campaign.my_progress;
   const target = p?.target_count ?? campaign.rule.required_count ?? 0;
-  // Only individual campaigns track per-customer visit/stamp/spend progress.
-  // Group "progress" is people-joining (shown inside the group flow, not here).
-  const hasProgress = type === "individual" && !!p?.joined && target > 0;
+  // Only individual visit/stamp/spend campaigns track a per-customer target
+  // progress bar. Group "progress" is people-joining (shown in the group flow);
+  // POINTS programs accrue a balance (no target bar).
+  const hasProgress =
+    type === "individual" && campaign.rule.mechanic !== "points" && !!p?.joined && target > 0;
   // CTA differs by type/state: group cards always "View" the offer; an
   // in-progress individual says "Continue"; otherwise "View"/"Join".
   const cta =
@@ -250,6 +252,7 @@ export function CampaignCard({ campaign }: { campaign: Campaign }) {
 export function CampaignCarouselCard({ campaign }: { campaign: Campaign }) {
   const t = useT();
   const p = campaign.my_progress;
+  const isPoints = campaign.rule.mechanic === "points";
   const target = p?.target_count ?? campaign.rule.required_count ?? 0;
   const current = p?.current_count ?? 0;
   const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
@@ -267,22 +270,32 @@ export function CampaignCarouselCard({ campaign }: { campaign: Campaign }) {
         </div>
       </div>
 
-      <div className="mt-3">
-        <div className="h-2 overflow-hidden rounded-pill bg-board">
-          <div
-            className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <div className="mt-2 flex items-center justify-between text-[12px] font-semibold text-subtle">
-          <span>
-            {t("cmp.card.progress")
-              .replace("{count}", String(current))
-              .replace("{total}", String(target))}
+      {isPoints ? (
+        // POINTS programs show a balance, not a visit progress bar.
+        <div className="mt-3 flex items-center justify-between">
+          <span className="rounded-pill bg-brand-muted px-2.5 py-1 text-[12.5px] font-bold text-brand">
+            {t("cmp.loyalty.points").replace("{count}", String(p?.points_balance ?? 0))}
           </span>
-          <span>{endsLabel(t, campaign)}</span>
+          <span className="text-[12px] font-semibold text-subtle">{endsLabel(t, campaign)}</span>
         </div>
-      </div>
+      ) : (
+        <div className="mt-3">
+          <div className="h-2 overflow-hidden rounded-pill bg-board">
+            <div
+              className="h-full rounded-pill bg-brand transition-[width] duration-700 ease-out"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[12px] font-semibold text-subtle">
+            <span>
+              {t("cmp.card.progress")
+                .replace("{count}", String(current))
+                .replace("{total}", String(target))}
+            </span>
+            <span>{endsLabel(t, campaign)}</span>
+          </div>
+        </div>
+      )}
 
       <span className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-pill bg-brand-muted px-2.5 py-1 text-[12px] font-bold text-brand">
         <span aria-hidden>🎁</span>

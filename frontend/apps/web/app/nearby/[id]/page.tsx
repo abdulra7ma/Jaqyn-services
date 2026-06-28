@@ -162,19 +162,9 @@ export default function BusinessProfilePage() {
                 </Card>
               )}
 
-              {b.rewards && b.rewards.length > 0 && (
-                <Card>
-                  <p className="font-display text-sm font-bold text-ink">Loyalty rewards</p>
-                  <div className="mt-3 flex flex-col gap-2">
-                    {b.rewards.map((r) => (
-                      <div key={r.id} className="rounded-xl bg-[#FBF7F0] p-3">
-                        <div className="text-sm font-bold text-ink">{r.title}</div>
-                        <div className="mt-1 text-xs font-semibold text-brand">{r.reward_description}</div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              )}
+              {/* The business's loyalty programs render in the single
+                  BusinessLoyaltyCard above (multi-form-loyalty); the old static
+                  b.rewards list was a duplicate and was removed. */}
 
               {b.group_offers && b.group_offers.length > 0 && (
                 <Card>
