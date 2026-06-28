@@ -527,15 +527,23 @@ class CampaignService:
         # A one-time (ONCE) campaign the customer has already completed or
         # redeemed has paid out — drop it from discovery (it now lives in the
         # wallet). REPEATABLE campaigns stay visible so they can be earned again.
-        # exclude() builds a NOT-EXISTS subquery, so this is one bounded query and
-        # does not interfere with the joined_only filter join below.
-        qs = qs.exclude(
-            completion_limit_per_customer=Campaign.CompletionLimit.ONCE,
-            participants__customer=customer,
-            participants__status__in=[
+        #
+        # Use a subquery of campaign ids on ``pk__in`` rather than spanning the
+        # ``participants`` relation directly: when ``joined_only`` later filters on
+        # the SAME multi-valued relation, Django reuses one join and an exclude
+        # spanning that relation drops joined campaigns even when the customer has
+        # NO completed/redeemed participant (a real multi-join ORM trap). The
+        # id-subquery keeps this exclusion independent of the joined_only join.
+        paid_out_campaign_ids = CampaignParticipant.objects.filter(
+            customer=customer,
+            status__in=[
                 CampaignParticipant.Status.COMPLETED,
                 CampaignParticipant.Status.REDEEMED,
             ],
+        ).values("campaign_id")
+        qs = qs.exclude(
+            completion_limit_per_customer=Campaign.CompletionLimit.ONCE,
+            pk__in=paid_out_campaign_ids,
         )
         if campaign_type in Campaign.CampaignType.values:
             qs = qs.filter(campaign_type=campaign_type)
