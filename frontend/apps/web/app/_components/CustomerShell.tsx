@@ -9,6 +9,7 @@ import { useAuth } from "../_lib/auth";
 import { BottomNav, CUSTOMER_NAV } from "./BottomNav";
 import { ScanIcon } from "./icons";
 import { UserAvatar } from "./kit";
+import { QrSheetProvider } from "./QrSheet";
 
 /**
  * Page chrome for customer screens. Responsive, mirroring the business OwnerShell:
@@ -45,6 +46,7 @@ export function CustomerShell({
   const loginHref = `/login?return=${encodeURIComponent(pathname || "/")}`;
 
   return (
+    <QrSheetProvider>
     <div className="flex min-h-[100dvh] flex-col bg-cream font-sans text-ink lg:h-screen lg:flex-row">
       {/* sidebar — desktop, signed-in only */}
       {sidebar && <DesktopSidebar />}
@@ -119,6 +121,7 @@ export function CustomerShell({
       {/* bottom nav (scan is the raised center button) — mobile, signed-in only */}
       {mobileNav && <BottomNav />}
     </div>
+    </QrSheetProvider>
   );
 }
 

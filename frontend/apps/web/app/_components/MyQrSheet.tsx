@@ -2,13 +2,13 @@
 
 import { useMe, useMyQr } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
+import { Sheet } from "@jaqyn/ui";
 import { useEffect } from "react";
-import { InitialTile } from "./kit";
 import { ScanIcon } from "./icons";
-import { useSheetDrag } from "./useSheetDrag";
+import { InitialTile } from "./kit";
 
 /** +996700000001 → +996 700 *** 01 */
-function maskPhone(phone?: string) {
+function maskPhone(phone?: string): string {
   if (!phone) return "";
   const d = phone.replace(/\D/g, "");
   if (d.length < 6) return phone;
@@ -16,9 +16,13 @@ function maskPhone(phone?: string) {
 }
 
 /**
- * Floating draggable QR sheet. Renders as a card that floats above the current
- * page with no backdrop dim — the live page content is visible behind it.
- * Drag the handle downward to dismiss; releasing with < 100 px delta snaps back.
+ * Full-width bottom sheet showing the customer's personal QR code.
+ * Uses the `@jaqyn/ui` Sheet primitive (Vaul Drawer on mobile, Radix Dialog on
+ * desktop) — same grabber, radius, scrim, and surface as BusinessSheet. The
+ * sheet is always open while mounted; dismissal routes through `onClose`.
+ *
+ * Wake-lock keeps the screen on while the QR is visible, and is released on
+ * unmount. Download and Web Share APIs are preserved exactly.
  */
 export function MyQrSheet({
   onClose,
@@ -51,35 +55,16 @@ export function MyQrSheet({
     };
   }, []);
 
-  const { dragStyle, touchHandlers } = useSheetDrag(onClose);
-
   return (
-    <div
-      className="fixed inset-x-3 z-[80] rounded-[28px] bg-card shadow-[0_24px_60px_-12px_rgba(46,36,29,.4)]"
-      style={{
-        bottom: "env(safe-area-inset-bottom, 12px)",
-        animation: "jqRise .32s cubic-bezier(.22,1,.36,1)",
-        ...dragStyle,
+    <Sheet
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose();
       }}
-      {...touchHandlers}
+      variant="persistent"
+      surface="card"
+      ariaLabel={t("qr.myQrTitle")}
     >
-      {/* drag handle */}
-      <div className="flex justify-center pb-1 pt-3">
-        <div className="h-1 w-12 rounded-full bg-line" />
-      </div>
-
-      {/* close button */}
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute right-4 top-3.5 flex h-8 w-8 items-center justify-center rounded-full bg-board text-ink"
-        aria-label={t("common.back")}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" className="h-4 w-4" aria-hidden>
-          <path d="M18 6 6 18M6 6l12 12" />
-        </svg>
-      </button>
-
       <div className="px-5 pb-6 pt-1">
         {/* screen-brightened pill */}
         <div className="flex justify-end">
@@ -91,10 +76,12 @@ export function MyQrSheet({
 
         <div className="flex flex-col items-center">
           <InitialTile name={name} size={56} variant="gradient" />
-          <h2 className="mt-2.5 font-display text-xl font-bold text-ink">{me.data?.user.name || ""}</h2>
+          <h2 className="mt-2.5 font-display text-xl font-bold text-ink">
+            {me.data?.user.name ?? ""}
+          </h2>
           <p className="mt-0.5 text-sm text-subtle">{t("qr.showToEarn")}</p>
 
-          {/* QR */}
+          {/* QR image */}
           {qr.data ? (
             <div className="mt-4 rounded-[22px] bg-white p-4 shadow-[0_12px_32px_-8px_rgba(46,36,29,.28)]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -114,6 +101,7 @@ export function MyQrSheet({
           {qr.data && (
             <div className="mt-4 flex items-center gap-2.5">
               <button
+                type="button"
                 onClick={() => {
                   const a = document.createElement("a");
                   a.href = qr.data!.png;
@@ -122,12 +110,24 @@ export function MyQrSheet({
                 }}
                 className="inline-flex min-h-10 items-center gap-2 rounded-pill border border-line bg-card px-4 text-sm font-semibold text-ink"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                  <path d="M12 3v12" /><path d="m7 11 5 5 5-5" /><path d="M5 21h14" />
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4"
+                  aria-hidden
+                >
+                  <path d="M12 3v12" />
+                  <path d="m7 11 5 5 5-5" />
+                  <path d="M5 21h14" />
                 </svg>
                 {t("qr.download")}
               </button>
               <button
+                type="button"
                 onClick={async () => {
                   const nav = navigator as Navigator & {
                     canShare?: (d: ShareData) => boolean;
@@ -135,25 +135,48 @@ export function MyQrSheet({
                   };
                   try {
                     const blob = await (await fetch(qr.data!.png)).blob();
-                    const file = new File([blob], "jaqyn-qr.png", { type: blob.type || "image/png" });
+                    const file = new File([blob], "jaqyn-qr.png", {
+                      type: blob.type || "image/png",
+                    });
                     if (nav.canShare?.({ files: [file] }) && nav.share) {
-                      await nav.share({ files: [file], title: name, text: t("qr.showToEarn") });
+                      await nav.share({
+                        files: [file],
+                        title: name,
+                        text: t("qr.showToEarn"),
+                      });
                       return;
                     }
                     if (nav.share) {
-                      await nav.share({ title: name, text: t("qr.showToEarn"), url: qr.data!.url });
+                      await nav.share({
+                        title: name,
+                        text: t("qr.showToEarn"),
+                        url: qr.data!.url,
+                      });
                       return;
                     }
                     const a = document.createElement("a");
                     a.href = qr.data!.png;
                     a.download = "jaqyn-qr.png";
                     a.click();
-                  } catch { /* user cancelled */ }
+                  } catch {
+                    /* user cancelled */
+                  }
                 }}
                 className="inline-flex min-h-10 items-center gap-2 rounded-pill bg-brand-gradient px-4 text-sm font-bold text-brand-fg shadow-glow"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                  <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4"
+                  aria-hidden
+                >
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
                   <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
                 </svg>
                 {t("qr.share")}
@@ -167,6 +190,6 @@ export function MyQrSheet({
           </div>
         </div>
       </div>
-    </div>
+    </Sheet>
   );
 }

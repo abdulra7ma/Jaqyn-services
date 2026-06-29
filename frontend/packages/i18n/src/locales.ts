@@ -691,6 +691,15 @@ export const messages: Record<Locale, Record<string, string>> = {
     "biz.staff.invite.send": "Отправить приглашение",
     "biz.staff.invite.sending": "Отправляем…",
 
+    // Onboarding submit-for-verification confirm dialog.
+    "biz.onboard.submit.title": "Отправить на проверку?",
+    "biz.onboard.submit.description":
+      "Мы проверим ваш профиль и отправим письмо, когда он будет подтверждён. До тех пор вы можете продолжать редактировать.",
+    "biz.onboard.submit.confirm": "Отправить",
+    "biz.onboard.submit.confirming": "Отправляем…",
+    "biz.onboard.submit.cancel": "Продолжить редактирование",
+    "biz.onboard.submit.button": "Отправить на проверку",
+
     "staff.title": "Персонал",
     "staff.login": "Вход персонала",
     "staff.businessCode": "Код бизнеса",
@@ -1918,6 +1927,15 @@ export const messages: Record<Locale, Record<string, string>> = {
     "biz.staff.invite.role": "Role",
     "biz.staff.invite.send": "Send invite",
     "biz.staff.invite.sending": "Sending…",
+
+    // Onboarding submit-for-verification confirm dialog.
+    "biz.onboard.submit.title": "Submit for verification?",
+    "biz.onboard.submit.description":
+      "We'll review your profile and email you once it's verified. You can keep editing until then.",
+    "biz.onboard.submit.confirm": "Submit",
+    "biz.onboard.submit.confirming": "Submitting…",
+    "biz.onboard.submit.cancel": "Keep editing",
+    "biz.onboard.submit.button": "Submit for verification",
 
     "staff.title": "Staff",
     "staff.login": "Staff sign in",

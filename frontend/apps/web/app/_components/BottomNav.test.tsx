@@ -15,12 +15,13 @@ describe("BottomNav", () => {
     // Groups is gone.
     expect(screen.queryByText("nav.groups")).not.toBeInTheDocument();
 
-    // The raised center scan control links to the personal-QR scan route.
-    const scan = screen.getByRole("link", { name: "nav.scan" });
-    expect(scan).toHaveAttribute("href", "/qr");
+    // The raised center scan control is a button that opens the personal-QR
+    // sheet over the current page (no route change), so the page stays visible.
+    const scan = screen.getByRole("button", { name: "nav.scan" });
+    expect(scan).toBeInTheDocument();
 
-    // Five interactive slots total (4 nav links + the scan link).
+    // Four labelled nav destinations remain links; the scan control is a button.
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(5);
+    expect(links).toHaveLength(4);
   });
 });

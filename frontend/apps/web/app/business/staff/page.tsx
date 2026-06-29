@@ -19,7 +19,7 @@ import {
   type TeamRow,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
-import { Badge, cn } from "@jaqyn/ui";
+import { AlertDialog, Badge, cn } from "@jaqyn/ui";
 import { useState } from "react";
 import { OwnerShell } from "../_components/OwnerShell";
 import { InitialTile } from "../../_components/kit";
@@ -292,6 +292,7 @@ function MemberDetail({ member, onClose }: { member: TeamRow; onClose: () => voi
   const reset = useResetStaffPassword();
   const remove = useRemoveStaffMember();
   const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [removeOpen, setRemoveOpen] = useState(false);
 
   const stats: [string, number][] = [
     [t("biz.staff.stat.scans"), member.stats.scans],
@@ -308,13 +309,21 @@ function MemberDetail({ member, onClose }: { member: TeamRow; onClose: () => voi
   const anyError =
     updateRole.error ?? suspend.error ?? reactivate.error ?? reset.error ?? remove.error;
 
-  function onRemove() {
-    if (!window.confirm(t("biz.staff.removeConfirm"))) return;
-    remove.mutate(member.id, { onSuccess: onClose });
-  }
-
   return (
     <>
+      <AlertDialog
+        open={removeOpen}
+        onOpenChange={setRemoveOpen}
+        title={t("biz.staff.removeConfirm")}
+        confirmLabel={t("biz.staff.remove")}
+        cancelLabel={t("common.cancel")}
+        onConfirm={() => {
+          setRemoveOpen(false);
+          remove.mutate(member.id, { onSuccess: onClose });
+        }}
+        destructive
+        pending={remove.isPending}
+      />
       <MemberHeader member={member} />
       <ContactRows member={member} />
 
@@ -391,7 +400,7 @@ function MemberDetail({ member, onClose }: { member: TeamRow; onClose: () => voi
         </button>
         <button
           disabled={busy}
-          onClick={onRemove}
+          onClick={() => setRemoveOpen(true)}
           className="flex-none rounded-xl border-[1.5px] border-[#E4B8AC] bg-card px-4 py-3 text-[13px] font-semibold text-danger transition hover:bg-brand-muted disabled:opacity-60"
         >
           {t("biz.staff.remove")}
@@ -405,14 +414,23 @@ function InviteDetail({ member, onClose }: { member: TeamRow; onClose: () => voi
   const t = useT();
   const errMessage = useErrMessage();
   const cancel = useRemoveStaffInvite();
-
-  function onCancel() {
-    if (!window.confirm(t("biz.staff.cancelInviteConfirm"))) return;
-    cancel.mutate(member.id, { onSuccess: onClose });
-  }
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   return (
     <>
+      <AlertDialog
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        title={t("biz.staff.cancelInviteConfirm")}
+        confirmLabel={t("biz.staff.cancelInvite")}
+        cancelLabel={t("common.cancel")}
+        onConfirm={() => {
+          setCancelOpen(false);
+          cancel.mutate(member.id, { onSuccess: onClose });
+        }}
+        destructive
+        pending={cancel.isPending}
+      />
       <MemberHeader member={member} />
       <ContactRows member={member} />
       {cancel.isError && (
@@ -420,7 +438,7 @@ function InviteDetail({ member, onClose }: { member: TeamRow; onClose: () => voi
       )}
       <button
         disabled={cancel.isPending}
-        onClick={onCancel}
+        onClick={() => setCancelOpen(true)}
         className="mt-6 w-full rounded-xl border-[1.5px] border-[#E4B8AC] bg-card py-3 text-[13px] font-semibold text-danger transition hover:bg-brand-muted disabled:opacity-60"
       >
         {t("biz.staff.cancelInvite")}

@@ -25,6 +25,8 @@ module.exports = {
         amber: { DEFAULT: "#E7A23E", deep: "#B07A1E" },
         ok: "#3F7355",
         danger: "#B42318",
+        // sheet grab-handle tone (design-system §10 bottom-sheet grabber #E0D3BF)
+        handle: "#E0D3BF",
       },
       fontFamily: {
         display: ["var(--font-display)", "Bricolage Grotesque", "system-ui", "sans-serif"],
@@ -32,12 +34,18 @@ module.exports = {
       },
       borderRadius: {
         xl: "0.875rem", // 14px — cards
+        modal: "24px", // centered modal / dialog radius (design-system §3 / §10)
+        sheet: "24px 24px 0 0", // bottom-sheet top corners (design-system §10 / .dc.html)
         pill: "99px",
       },
       boxShadow: {
         glow: "0 12px 24px -8px rgba(160,73,42,.5)",
         sage: "0 16px 36px -10px rgba(94,139,106,.6)",
         card: "0 10px 28px -16px rgba(46,36,29,.25)",
+        // bottom-sheet TOP shadow — lift off the page above the sheet (.dc.html)
+        sheet: "0 -20px 40px -24px rgba(20,16,11,.5)",
+        // centered-modal drop shadow (design-system §10 / .dc.html)
+        modal: "0 30px 60px -24px rgba(20,16,11,.6)",
       },
       backgroundImage: {
         "brand-gradient": "linear-gradient(150deg, #C25E3C, #A2492A)",

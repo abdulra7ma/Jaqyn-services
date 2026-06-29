@@ -5,6 +5,7 @@ import { useT } from "@jaqyn/i18n";
 import Link from "next/link";
 import { CustomerShell } from "./_components/CustomerShell";
 import { GuestLanding } from "./_components/GuestLanding";
+import { MyQrButton } from "./_components/QrSheet";
 import { CampaignCard, VoucherCard } from "./_components/campaigns";
 import { GiftIcon } from "./_components/icons";
 import { useAuth } from "./_lib/auth";
@@ -58,12 +59,9 @@ function AuthedHome() {
           >
             {t("nav.nearby")}
           </Link>
-          <Link
-            href="/qr"
-            className="rounded-xl border border-line bg-card px-3 py-2 text-sm font-semibold text-ink"
-          >
+          <MyQrButton className="rounded-xl border border-line bg-card px-3 py-2 text-sm font-semibold text-ink">
             {t("home.myQr")}
-          </Link>
+          </MyQrButton>
         </div>
       </div>
 

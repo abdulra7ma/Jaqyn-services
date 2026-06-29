@@ -27,6 +27,8 @@ import {
   type CatalogItem,
   type GalleryImage,
 } from "@jaqyn/api";
+import { useT } from "@jaqyn/i18n";
+import { AlertDialog } from "@jaqyn/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LocationPicker } from "../../_components/LocationPicker";
 import { useRequireAuth } from "../../_lib/auth";
@@ -107,6 +109,7 @@ const EMPTY: Form = {
 };
 
 export function OnboardingFlow() {
+  const t = useT();
   const { isAuthenticated, ready } = useRequireAuth();
   const enabled = ready && isAuthenticated;
 
@@ -544,7 +547,7 @@ export function OnboardingFlow() {
                   canSubmit ? "bg-brand shadow-glow" : "cursor-not-allowed bg-[#E2D6C2]"
                 }`}
               >
-                {submit.isPending ? "Submitting…" : "Submit for verification"}
+                {submit.isPending ? t("biz.onboard.submit.confirming") : t("biz.onboard.submit.button")}
               </button>
             )}
           </footer>
@@ -557,62 +560,46 @@ export function OnboardingFlow() {
         </div>
       )}
 
-      {confirmOpen && (
-        <ConfirmModal
-          isPending={submit.isPending}
-          onClose={() => setConfirmOpen(false)}
-          onSubmit={doSubmit}
-        />
-      )}
+      <OnboardSubmitDialog
+        open={confirmOpen}
+        isPending={submit.isPending}
+        onClose={() => setConfirmOpen(false)}
+        onSubmit={doSubmit}
+      />
     </div>
   );
 }
 
 /* --------------------------------------------------------------- stage cards */
 
-function ConfirmModal({ isPending, onClose, onSubmit }: { isPending: boolean; onClose: () => void; onSubmit: () => void }) {
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    panelRef.current?.focus();
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
+/**
+ * Submit-for-verification confirm — replaces the hand-rolled modal with the
+ * design-system AlertDialog. Copy comes from biz.onboard.submit.* i18n keys
+ * added in this PR; the AlertDialog owns focus trap, ESC and roles.
+ */
+function OnboardSubmitDialog({
+  open,
+  isPending,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  isPending: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const t = useT();
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
-      onClick={onClose}
-      aria-hidden="true"
-    >
-      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirm-modal-title"
-        tabIndex={-1}
-        className="w-full max-w-[400px] rounded-[20px] bg-card p-6 shadow-card outline-none"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.key === "Escape" && onClose()}
-      >
-        <h3 id="confirm-modal-title" className="font-display text-xl font-bold text-ink">Submit for verification?</h3>
-        <p className="mt-2 text-sm leading-relaxed text-subtle">
-          We&apos;ll review your profile and email you once it&apos;s verified. You can keep editing until then.
-        </p>
-        <div className="mt-5 flex gap-3">
-          <button onClick={onClose} className="flex-1 rounded-xl border-[1.5px] border-line bg-card py-3 text-sm font-semibold text-ink">
-            Keep editing
-          </button>
-          <button onClick={onSubmit} disabled={isPending} className="flex-1 rounded-xl bg-brand py-3 text-sm font-bold text-brand-fg shadow-glow disabled:opacity-60">
-            {isPending ? "Submitting…" : "Submit"}
-          </button>
-        </div>
-      </div>
-    </div>
+    <AlertDialog
+      open={open}
+      onOpenChange={(v) => { if (!v) onClose(); }}
+      title={t("biz.onboard.submit.title")}
+      description={t("biz.onboard.submit.description")}
+      confirmLabel={t("biz.onboard.submit.confirm")}
+      cancelLabel={t("biz.onboard.submit.cancel")}
+      onConfirm={onSubmit}
+      pending={isPending}
+    />
   );
 }
 
