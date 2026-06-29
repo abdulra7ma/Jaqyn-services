@@ -1,12 +1,17 @@
 "use client";
 
-import { useSheetDrag } from "./useSheetDrag";
+import { Sheet } from "@jaqyn/ui";
+import { useT } from "@jaqyn/i18n";
 import { BusinessDetailsContent } from "./BusinessDetailsContent";
 
 /**
  * Full-width bottom sheet for business details.
  * Rendered inline on the nearby list (no navigation) so the map + list
  * stay live behind it. Also used by the standalone `/nearby/[id]` route.
+ * Delegates to `Sheet surface="board"` from `@jaqyn/ui` — Vaul Drawer on
+ * mobile, Radix Dialog on desktop. Drag, scroll lock and focus trap are
+ * handled by the underlying library. `padded={false}` — the content self-pads
+ * (`px-4`), matching the original hand-roll which had no surface padding.
  */
 export function BusinessSheet({
   businessId,
@@ -15,33 +20,19 @@ export function BusinessSheet({
   businessId: string;
   onClose: () => void;
 }) {
-  const { dragStyle, touchHandlers } = useSheetDrag(onClose);
-
+  const t = useT();
   return (
-    <div
-      className="fixed inset-0 z-[55] flex flex-col justify-end"
-      style={{ background: "rgba(8,6,3,.45)" }}
-      onClick={onClose}
+    <Sheet
+      open
+      onOpenChange={(o) => { if (!o) onClose(); }}
+      variant="modal"
+      surface="cream"
+      padded={false}
+      ariaLabel={t("nearby.title")}
     >
-      <div
-        className="relative max-h-[94dvh] overflow-y-auto rounded-t-[28px] bg-board"
-        style={{
-          animation: "jqRise .32s cubic-bezier(.22,1,.36,1)",
-          paddingBottom: "env(safe-area-inset-bottom, 16px)",
-          ...dragStyle,
-        }}
-        onClick={(e) => e.stopPropagation()}
-        {...touchHandlers}
-      >
-        {/* drag handle */}
-        <div className="flex justify-center pb-2 pt-3">
-          <div className="h-1 w-10 rounded-full bg-line" />
-        </div>
-
-        <div className="px-4 pb-4">
-          <BusinessDetailsContent businessId={businessId} />
-        </div>
+      <div className="px-4 pb-4">
+        <BusinessDetailsContent businessId={businessId} />
       </div>
-    </div>
+    </Sheet>
   );
 }

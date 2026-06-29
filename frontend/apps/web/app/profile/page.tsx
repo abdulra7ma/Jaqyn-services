@@ -3,10 +3,10 @@
 import { useMe, useUpdateProfile, useUploadAvatar, type Language } from "@jaqyn/api";
 import { useI18n, useT, type Locale } from "@jaqyn/i18n";
 import { Button, Card, Input } from "@jaqyn/ui";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CustomerShell } from "../_components/CustomerShell";
+import { MyQrButton } from "../_components/QrSheet";
 import { QueryBoundary } from "../_components/QueryBoundary";
 import { UserAvatar } from "../_components/kit";
 import { useErrMessage } from "../_lib/useErrMessage";
@@ -96,13 +96,10 @@ export default function ProfilePage() {
                 </div>
               </Card>
 
-              <Link
-                href="/qr"
-                className="flex items-center justify-between rounded-2xl border border-line bg-card px-4 py-3.5 shadow-card"
-              >
+              <MyQrButton className="flex w-full items-center justify-between rounded-2xl border border-line bg-card px-4 py-3.5 shadow-card">
                 <span className="text-sm font-semibold text-ink">{t("qr.myQrTitle")}</span>
                 <span className="text-subtle" aria-hidden>›</span>
-              </Link>
+              </MyQrButton>
 
               <form
                 onSubmit={(e) => {

@@ -4,10 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CampaignScanRow, ScanCustomerResult, ScanDispatchResult, UnifiedScanResult } from "@jaqyn/api";
 
 // matchMedia is not implemented in jsdom; the scan page reads it to redirect on
-// desktop. Stub it to a phone-width (non-matching) query so the scanner renders.
+// desktop (1024px breakpoint). Sheet.tsx reads the 768px breakpoint to pick
+// Vaul vs Radix Dialog — we must return false for 1024px (so the scan page stays
+// alive) and true for 768px (so Sheet renders via Radix Dialog, which jsdom can
+// handle deterministically; Vaul's pointer-event internals crash in jsdom).
 beforeEach(() => {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: false,
+    // Only the ≥1024px redirect query should read as false (phone-width);
+    // the ≥768px Sheet query should read as true (desktop Dialog path).
+    matches: !query.includes("1024"),
     media: query,
     onchange: null,
     addEventListener: vi.fn(),
@@ -148,7 +153,9 @@ describe("Staff scan — loyalty chooser (choose-one)", () => {
     render(<StaffScanPage />);
     await scan(user);
 
-    expect(screen.getByText("staff.chooser.title")).toBeInTheDocument();
+    // The Sheet primitive renders a sr-only title from ariaLabel and the visible
+    // section label — both contain the same key. Use getAllByText.
+    expect(screen.getAllByText("staff.chooser.title").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Points Card")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "staff.chooser.enterBill" })).toBeInTheDocument();
   });

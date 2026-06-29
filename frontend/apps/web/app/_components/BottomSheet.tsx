@@ -1,12 +1,18 @@
 "use client";
 
 import type React from "react";
-import { useEffect } from "react";
-import { useSheetDrag } from "./useSheetDrag";
+import { Sheet } from "@jaqyn/ui";
+import { useT } from "@jaqyn/i18n";
 
 /**
- * Dimmed full-width bottom-sheet. Slides up with `jqRise`, scrolls internally,
- * dismisses on backdrop tap or drag-down > 100 px.
+ * Dimmed full-width bottom-sheet. Delegates to `Sheet variant="modal"` from
+ * `@jaqyn/ui` — Vaul Drawer on mobile, Radix Dialog on desktop. Scroll lock,
+ * drag-to-dismiss, focus trap and ESC are all handled by the underlying library.
+ *
+ * `padded={false}` — the loyalty content self-pads (`px-5`), matching the
+ * original hand-roll which had no surface horizontal padding.
+ * `nested` — this sheet opens while `BusinessSheet` is already open on the
+ * nearby list, so its mobile Drawer must stack via Vaul `NestedRoot`.
  */
 export function BottomSheet({
   open,
@@ -17,40 +23,18 @@ export function BottomSheet({
   onClose: () => void;
   children: React.ReactNode;
 }) {
-  const { dragStyle, touchHandlers } = useSheetDrag(onClose);
-
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
-
-  if (!open) return null;
-
+  const t = useT();
   return (
-    <div
-      className="fixed inset-0 z-[70] flex flex-col justify-end"
-      style={{ background: "rgba(8,6,3,.55)" }}
-      onClick={onClose}
+    <Sheet
+      open={open}
+      onOpenChange={(o) => { if (!o) onClose(); }}
+      variant="modal"
+      surface="card"
+      padded={false}
+      nested
+      ariaLabel={t("cmp.loyalty.title")}
     >
-      <div
-        className="relative max-h-[92dvh] overflow-y-auto rounded-t-[28px] bg-card"
-        style={{
-          animation: "jqRise .32s cubic-bezier(.22,1,.36,1)",
-          paddingBottom: "env(safe-area-inset-bottom, 16px)",
-          ...dragStyle,
-        }}
-        onClick={(e) => e.stopPropagation()}
-        {...touchHandlers}
-      >
-        <div className="flex justify-center pb-1 pt-3">
-          <div className="h-1 w-10 rounded-full bg-line" />
-        </div>
-        {children}
-      </div>
-    </div>
+      {children}
+    </Sheet>
   );
 }

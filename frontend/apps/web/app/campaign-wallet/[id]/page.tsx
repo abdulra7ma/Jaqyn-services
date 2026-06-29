@@ -2,7 +2,7 @@
 
 import { useCampaignVoucher, usePresentVoucher, type CampaignVoucher } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
-import { Badge } from "@jaqyn/ui";
+import { Badge, Sheet } from "@jaqyn/ui";
 import { useParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { CustomerShell } from "../../_components/CustomerShell";
@@ -21,11 +21,26 @@ const STATUS_TONE = {
 function ActiveVoucher({ voucher }: { voucher: CampaignVoucher }) {
   const t = useT();
   // Customer-choice item vouchers must resolve their item before they can be
-  // presented for redemption (multi-form-loyalty slice 3). Show the picker until
-  // the customer has chosen; the polling query then re-renders with the QR.
+  // presented for redemption (multi-form-loyalty slice 3). Show the picker in a
+  // Sheet (bottom drawer on mobile, centered dialog on desktop) until the customer
+  // chooses; the polling query then re-renders this component with the QR once the
+  // catalog_item is set. The Sheet stays open (no onOpenChange dismiss) while the
+  // item is unselected — selecting an item is the only way out.
   const needsItem = voucher.item_selection === "customer" && voucher.catalog_item == null;
   if (needsItem) {
-    return <VoucherItemSheet campaignId={voucher.campaign.id} voucherId={voucher.id} />;
+    return (
+      <Sheet
+        open
+        onOpenChange={() => {
+          /* intentionally non-dismissable: the customer must pick an item */
+        }}
+        ariaLabel={t("cmp.voucher.chooseItem")}
+        variant="modal"
+        showGrabber={false}
+      >
+        <VoucherItemSheet campaignId={voucher.campaign.id} voucherId={voucher.id} />
+      </Sheet>
+    );
   }
   return (
     <>

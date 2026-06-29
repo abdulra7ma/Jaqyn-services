@@ -8,6 +8,10 @@
     "lint": "echo skip",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.6",
+    "vaul": "^1.1.2"
+  },
   "peerDependencies": {
     "react": "^18"
   },

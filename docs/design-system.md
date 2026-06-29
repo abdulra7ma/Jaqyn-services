@@ -30,8 +30,13 @@ class, not the hex. Mapping from the tokens below:
 | `--sage` | `#5E8B6A` | `sage-deep`; `sage` = `#3F7355` (success fg), `sage-soft` = `#E4F0E7` |
 | radius `pill` | `99px` | `rounded-pill` |
 | radius `card` | `14px` | `rounded-xl` |
+| radius `modal` | `24px` | `rounded-modal` (centered modal / dialog) |
+| radius `sheet` | `24px 24px 0 0` | `rounded-sheet` (bottom-sheet top corners) |
+| `--handle` (grabber) | `#E0D3BF` | `bg-handle` (sheet grab-handle, §10) |
 | shadow Accent | — | `shadow-glow` |
 | shadow Soft/Float | — | `shadow-card` |
+| shadow Sheet (top) | `0 -20px 40px -24px rgba(20,16,11,.5)` | `shadow-sheet` |
+| shadow Modal | `0 30px 60px -24px rgba(20,16,11,.6)` | `shadow-modal` |
 | brand gradient | — | `bg-brand-gradient` |
 
 **Known gaps** (extend the preset, don't hardcode, when you hit these):

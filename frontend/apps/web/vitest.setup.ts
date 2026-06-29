@@ -1,6 +1,25 @@
 import "@testing-library/jest-dom/vitest";
 import { vi } from "vitest";
 
+// jsdom has no real matchMedia. Provide a global stub that returns `matches:true`
+// (desktop) so Sheet renders via Radix Dialog — a deterministic DOM path that
+// jsdom handles correctly. Tests that need the mobile Vaul path override this in
+// their own beforeEach (see overlay-primitives.test.tsx).
+Object.defineProperty(window, "matchMedia", {
+  writable: true,
+  value: (query: string): MediaQueryList =>
+    ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }) as unknown as MediaQueryList,
+});
+
 // next/navigation is not available outside the Next runtime — stub the hooks the
 // screens use so they render under jsdom.
 vi.mock("next/navigation", () => ({

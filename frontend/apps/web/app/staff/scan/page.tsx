@@ -25,7 +25,7 @@ import { QrScanner, parseScanned } from "../../_components/QrScanner";
 import { useErrMessage } from "../../_lib/useErrMessage";
 import { useStaffAuth } from "../_lib/staffAuth";
 import { StaffNav } from "../_components/StaffNav";
-import { SheetBackdrop, SHEET_STYLE } from "./_components/SheetBackdrop";
+import { Sheet } from "@jaqyn/ui";
 
 // ─── overlay state ──────────────────────────────────────────────────────────────
 
@@ -130,56 +130,61 @@ function LoyaltyChooserSheet({
   const rows = [...result.rows].sort((a, b) => Number(b.eligible) - Number(a.eligible));
 
   return (
-    <SheetBackdrop onDismiss={onDismiss}>
-      <div style={{ ...SHEET_STYLE, paddingTop: 24, paddingRight: 22, paddingLeft: 22, paddingBottom: "calc(26px + env(safe-area-inset-bottom, 0px))" }} onClick={(e) => e.stopPropagation()}>
-        {/* Customer header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-          <div style={{
-            width: 42, height: 42, borderRadius: "50%", background: "#F4ECDF",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            font: "800 16px 'Bricolage Grotesque',sans-serif", color: "var(--accent, #C25E3C)",
-          }}>{initial}</div>
-          <div>
-            <div style={{ font: "700 16px 'Bricolage Grotesque',sans-serif" }}>{result.customer.name}</div>
-            <div style={{ fontSize: 12, color: "var(--soft, #8C7A6A)" }}>+996 {maskPhone(result.customer.phone)}</div>
-          </div>
+    <Sheet
+      open
+      onOpenChange={(o) => { if (!o) onDismiss(); }}
+      variant="modal"
+      surface="card"
+      showGrabber={false}
+      ariaLabel={t("staff.chooser.title")}
+    >
+      {/* Customer header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+        <div style={{
+          width: 42, height: 42, borderRadius: "50%", background: "#F4ECDF",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          font: "800 16px 'Bricolage Grotesque',sans-serif", color: "var(--accent, #C25E3C)",
+        }}>{initial}</div>
+        <div>
+          <div style={{ font: "700 16px 'Bricolage Grotesque',sans-serif" }}>{result.customer.name}</div>
+          <div style={{ fontSize: 12, color: "var(--soft, #8C7A6A)" }}>+996 {maskPhone(result.customer.phone)}</div>
         </div>
-
-        <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)", marginTop: 18 }}>
-          {t("staff.chooser.title")}
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 11 }}>
-          {rows.map((row) => (
-            <ChooserRow
-              key={row.campaign_id}
-              row={row}
-              pending={pendingCampaignId === row.campaign_id}
-              onPick={onPickRow}
-              onConfirm={onConfirmRow}
-              onConfirmSocial={onConfirmSocial}
-            />
-          ))}
-
-          {result.none_eligible && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#F6F0E6", borderRadius: 13, padding: "12px 14px" }}>
-              <span style={{ fontSize: 16 }}>🚫</span>
-              <div style={{ fontSize: 12.5, color: "var(--soft, #8C7A6A)", lineHeight: 1.4 }}>
-                {t("staff.campaign.noneEligible")}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <button
-          type="button"
-          onClick={onDismiss}
-          style={{ width: "100%", marginTop: 14, padding: 12, border: "none", borderRadius: 14, background: "none", color: "var(--soft, #8C7A6A)", font: "600 14px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
-        >
-          {t("common.cancel")}
-        </button>
       </div>
-    </SheetBackdrop>
+
+      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)", marginTop: 18 }}>
+        {t("staff.chooser.title")}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 11 }}>
+        {rows.map((row) => (
+          <ChooserRow
+            key={row.campaign_id}
+            row={row}
+            pending={pendingCampaignId === row.campaign_id}
+            onPick={onPickRow}
+            onConfirm={onConfirmRow}
+            onConfirmSocial={onConfirmSocial}
+          />
+        ))}
+
+        {result.none_eligible && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#F6F0E6", borderRadius: 13, padding: "12px 14px" }}>
+            <span style={{ fontSize: 16 }}>🚫</span>
+            <div style={{ fontSize: 12.5, color: "var(--soft, #8C7A6A)", lineHeight: 1.4 }}>
+              {t("staff.campaign.noneEligible")}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={onDismiss}
+        style={{ width: "100%", marginTop: 14, padding: 12, border: "none", borderRadius: 14, background: "none", color: "var(--soft, #8C7A6A)", font: "600 14px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+      >
+        {t("common.cancel")}
+      </button>
+    </Sheet>
   );
 }
 
@@ -326,76 +331,81 @@ function AmountSheet({
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"];
 
   return (
-    <SheetBackdrop onDismiss={onBack}>
-      <div style={{ ...SHEET_STYLE, paddingTop: 22, paddingRight: 22, paddingLeft: 22, paddingBottom: "calc(26px + env(safe-area-inset-bottom, 0px))" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            type="button"
-            onClick={onBack}
-            aria-label={t("common.back")}
-            style={{ border: "none", background: "none", cursor: "pointer", color: "var(--soft, #8C7A6A)", font: "700 18px 'Hanken Grotesk',sans-serif", padding: "2px 6px" }}
-          >
-            ‹
-          </button>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>{row.name}</div>
-        </div>
-
-        <div style={{ fontSize: 12, color: "var(--soft, #8C7A6A)", marginTop: 12 }}>
-          {t("staff.amount.enterBill")}
-        </div>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 6, marginTop: 4 }}>
-          <span style={{ font: "800 44px 'Bricolage Grotesque',sans-serif", letterSpacing: "-.02em" }}>{amount}</span>
-          <span style={{ fontSize: 16, color: "var(--soft, #8C7A6A)", fontWeight: 700 }}>{t("staff.amount.som")}</span>
-        </div>
-
-        {isPoints && (
-          <div style={{ textAlign: "center", marginTop: 8, fontSize: 13, color: "#3F7355", fontWeight: 600, minHeight: 18 }}>
-            {amountNum > 0
-              ? t("staff.amount.pointsPreview")
-                  .replace("{pts}", String(awardedPts))
-                  .replace("{som}", String(somBack))
-              : ""}
-          </div>
-        )}
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 9, marginTop: 16 }}>
-          {keys.map((k, i) =>
-            k === "" ? (
-              <div key={`spacer-${i}`} />
-            ) : (
-              <button
-                key={k}
-                type="button"
-                onClick={() => (k === "⌫" ? backspace() : press(k))}
-                aria-label={k === "⌫" ? t("staff.amount.backspace") : k}
-                style={{
-                  padding: "16px 0", border: "none", borderRadius: 14, background: "#F4ECDF",
-                  font: "700 22px 'Bricolage Grotesque',sans-serif", color: "var(--ink, #2E241D)", cursor: "pointer",
-                }}
-              >
-                {k}
-              </button>
-            ),
-          )}
-        </div>
-
+    <Sheet
+      open
+      onOpenChange={(o) => { if (!o) onBack(); }}
+      variant="modal"
+      surface="card"
+      showGrabber={false}
+      ariaLabel={t("staff.amount.enterBill")}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <button
           type="button"
-          onClick={() => onConfirm(amount)}
-          disabled={!valid}
-          style={{
-            width: "100%", marginTop: 16, padding: 16, border: "none", borderRadius: 16,
-            background: valid ? "var(--accent, #C25E3C)" : "#EFE3D1",
-            color: valid ? "#fff" : "var(--soft, #8C7A6A)",
-            font: "700 16px 'Hanken Grotesk',sans-serif",
-            cursor: valid ? "pointer" : "not-allowed",
-            boxShadow: valid ? "0 12px 26px -8px rgba(160,73,42,.55)" : "none",
-          }}
+          onClick={onBack}
+          aria-label={t("common.back")}
+          style={{ border: "none", background: "none", cursor: "pointer", color: "var(--soft, #8C7A6A)", font: "700 18px 'Hanken Grotesk',sans-serif", padding: "2px 6px" }}
         >
-          {isPending ? "…" : confirmLabel}
+          ‹
         </button>
+        <div style={{ fontSize: 14, fontWeight: 700 }}>{row.name}</div>
       </div>
-    </SheetBackdrop>
+
+      <div style={{ fontSize: 12, color: "var(--soft, #8C7A6A)", marginTop: 12 }}>
+        {t("staff.amount.enterBill")}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 6, marginTop: 4 }}>
+        <span style={{ font: "800 44px 'Bricolage Grotesque',sans-serif", letterSpacing: "-.02em" }}>{amount}</span>
+        <span style={{ fontSize: 16, color: "var(--soft, #8C7A6A)", fontWeight: 700 }}>{t("staff.amount.som")}</span>
+      </div>
+
+      {isPoints && (
+        <div style={{ textAlign: "center", marginTop: 8, fontSize: 13, color: "#3F7355", fontWeight: 600, minHeight: 18 }}>
+          {amountNum > 0
+            ? t("staff.amount.pointsPreview")
+                .replace("{pts}", String(awardedPts))
+                .replace("{som}", String(somBack))
+            : ""}
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 9, marginTop: 16 }}>
+        {keys.map((k, i) =>
+          k === "" ? (
+            <div key={`spacer-${i}`} />
+          ) : (
+            <button
+              key={k}
+              type="button"
+              onClick={() => (k === "⌫" ? backspace() : press(k))}
+              aria-label={k === "⌫" ? t("staff.amount.backspace") : k}
+              style={{
+                padding: "16px 0", border: "none", borderRadius: 14, background: "#F4ECDF",
+                font: "700 22px 'Bricolage Grotesque',sans-serif", color: "var(--ink, #2E241D)", cursor: "pointer",
+              }}
+            >
+              {k}
+            </button>
+          ),
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onConfirm(amount)}
+        disabled={!valid}
+        style={{
+          width: "100%", marginTop: 16, padding: 16, border: "none", borderRadius: 16,
+          background: valid ? "var(--accent, #C25E3C)" : "#EFE3D1",
+          color: valid ? "#fff" : "var(--soft, #8C7A6A)",
+          font: "700 16px 'Hanken Grotesk',sans-serif",
+          cursor: valid ? "pointer" : "not-allowed",
+          boxShadow: valid ? "0 12px 26px -8px rgba(160,73,42,.55)" : "none",
+        }}
+      >
+        {isPending ? "…" : confirmLabel}
+      </button>
+    </Sheet>
   );
 }
 
@@ -438,54 +448,59 @@ function SingleResultSheet({
   }
 
   return (
-    <SheetBackdrop dim="rgba(8,6,3,.5)" onDismiss={onDismiss}>
+    <Sheet
+      open
+      onOpenChange={(o) => { if (!o) onDismiss(); }}
+      variant="modal"
+      surface="card"
+      showGrabber={false}
+      ariaLabel={t("cmp.staff.campaignTitle")}
+    >
       <Flash color={flashColor} />
-      <div style={{ ...SHEET_STYLE, paddingTop: 30, paddingRight: 26, paddingLeft: 26, paddingBottom: "calc(30px + env(safe-area-inset-bottom, 0px))" }} onClick={(e) => e.stopPropagation()}>
-        <CountdownBar duration={duration} onDone={onDismiss} />
+      <CountdownBar duration={duration} onDone={onDismiss} />
 
-        <div style={{ textAlign: "center" }}>
-          <div style={{
-            width: 70, height: 70, borderRadius: "50%", background: "var(--sage, #3F7355)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#fff", fontSize: 36, margin: "0 auto", animation: "jqPop .5s ease",
-            boxShadow: "0 14px 30px -8px rgba(94,139,106,.6)",
-          }}>✓</div>
-          <div style={{ fontSize: 13.5, color: "var(--soft, #8C7A6A)", fontWeight: 600, marginTop: 14 }}>
-            {customerName} · {t("cmp.staff.bothCounted")}
-          </div>
+      <div style={{ textAlign: "center" }}>
+        <div style={{
+          width: 70, height: 70, borderRadius: "50%", background: "var(--sage, #3F7355)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: "#fff", fontSize: 36, margin: "0 auto", animation: "jqPop .5s ease",
+          boxShadow: "0 14px 30px -8px rgba(94,139,106,.6)",
+        }}>✓</div>
+        <div style={{ fontSize: 13.5, color: "var(--soft, #8C7A6A)", fontWeight: 600, marginTop: 14 }}>
+          {customerName} · {t("cmp.staff.bothCounted")}
         </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 11, background: "#F8F4EC", borderRadius: 14, padding: "13px 15px" }}>
-            <span style={{ fontSize: 18 }}>🎯</span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)" }}>{t("cmp.staff.campaignTitle")}</span>
-              <span style={{ display: "block", font: "700 15px 'Bricolage Grotesque',sans-serif", marginTop: 2 }}>{leg.campaign_name}</span>
-            </span>
-            <span style={{ font: "700 15px 'Bricolage Grotesque',sans-serif", whiteSpace: "nowrap", color: "var(--accent, #C25E3C)" }}>
-              {stateLine}
-            </span>
-          </div>
-
-          {completed && (
-            <div style={{ background: "#FBEFD9", borderRadius: 14, padding: "14px 16px", textAlign: "center" }}>
-              <div style={{ fontSize: 30, animation: "jqPop .5s ease" }}>🎉</div>
-              <div style={{ display: "inline-block", background: "#fff", color: "#B07A1E", borderRadius: 11, padding: "7px 14px", marginTop: 8, font: "700 14px 'Bricolage Grotesque',sans-serif" }}>
-                🎁 {t("cmp.staff.campaignComplete").replace("{reward}", leg.reward_title ?? "")}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <button
-          type="button"
-          onClick={onDismiss}
-          style={{ width: "100%", marginTop: 16, padding: 13, border: "none", borderRadius: 14, background: "#F4ECDF", color: "var(--ink, #2E241D)", font: "700 15px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
-        >
-          {t("staff.result.done")}
-        </button>
       </div>
-    </SheetBackdrop>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 11, background: "#F8F4EC", borderRadius: 14, padding: "13px 15px" }}>
+          <span style={{ fontSize: 18 }}>🎯</span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)" }}>{t("cmp.staff.campaignTitle")}</span>
+            <span style={{ display: "block", font: "700 15px 'Bricolage Grotesque',sans-serif", marginTop: 2 }}>{leg.campaign_name}</span>
+          </span>
+          <span style={{ font: "700 15px 'Bricolage Grotesque',sans-serif", whiteSpace: "nowrap", color: "var(--accent, #C25E3C)" }}>
+            {stateLine}
+          </span>
+        </div>
+
+        {completed && (
+          <div style={{ background: "#FBEFD9", borderRadius: 14, padding: "14px 16px", textAlign: "center" }}>
+            <div style={{ fontSize: 30, animation: "jqPop .5s ease" }}>🎉</div>
+            <div style={{ display: "inline-block", background: "#fff", color: "#B07A1E", borderRadius: 11, padding: "7px 14px", marginTop: 8, font: "700 14px 'Bricolage Grotesque',sans-serif" }}>
+              🎁 {t("cmp.staff.campaignComplete").replace("{reward}", leg.reward_title ?? "")}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={onDismiss}
+        style={{ width: "100%", marginTop: 16, padding: 13, border: "none", borderRadius: 14, background: "#F4ECDF", color: "var(--ink, #2E241D)", font: "700 15px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+      >
+        {t("staff.result.done")}
+      </button>
+    </Sheet>
   );
 }
 
@@ -504,42 +519,47 @@ function GroupEligibleSheet({
 }) {
   const t = useT();
   return (
-    <SheetBackdrop onDismiss={onDismiss}>
-      <div style={{ ...SHEET_STYLE, paddingTop: 24, paddingRight: 22, paddingLeft: 22, paddingBottom: "calc(26px + env(safe-area-inset-bottom, 0px))" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div style={{ font: "700 17px 'Bricolage Grotesque',sans-serif", lineHeight: 1.2 }}>{group.campaign_name}</div>
-            <div style={{ fontSize: 12.5, color: "var(--soft, #8C7A6A)", marginTop: 3 }}>{group.business_name}</div>
-          </div>
-          <span style={{ font: "700 11px 'Hanken Grotesk',sans-serif", padding: "4px 11px", borderRadius: 99, background: "#E4F0E7", color: "#3F7355" }}>
-            {t("staff.campaign.eligible")}
-          </span>
+    <Sheet
+      open
+      onOpenChange={(o) => { if (!o) onDismiss(); }}
+      variant="modal"
+      surface="card"
+      showGrabber={false}
+      ariaLabel={group.campaign_name}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div style={{ font: "700 17px 'Bricolage Grotesque',sans-serif", lineHeight: 1.2 }}>{group.campaign_name}</div>
+          <div style={{ fontSize: 12.5, color: "var(--soft, #8C7A6A)", marginTop: 3 }}>{group.business_name}</div>
         </div>
-        <div style={{ background: "#FBF3E6", borderRadius: 12, padding: "11px 14px", marginTop: 16, fontSize: 12.5, color: "#8A6A3A" }}>
-          {t("staff.campaign.membersCheckedIn").replace("{count}", group.checked_in_label)}
-        </div>
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={isPending}
-          style={{
-            width: "100%", marginTop: 18, padding: 18, border: "none", borderRadius: 16,
-            background: "var(--sage, #3F7355)", color: "#fff",
-            font: "700 17px 'Hanken Grotesk',sans-serif", cursor: "pointer",
-            boxShadow: "0 12px 26px -8px rgba(94,139,106,.55)", opacity: isPending ? 0.6 : 1,
-          }}
-        >
-          {isPending ? "…" : t("staff.campaign.confirmGroup")}
-        </button>
-        <button
-          type="button"
-          onClick={onDismiss}
-          style={{ width: "100%", marginTop: 9, padding: 12, border: "none", borderRadius: 14, background: "none", color: "var(--soft, #8C7A6A)", font: "600 14px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
-        >
-          {t("common.cancel")}
-        </button>
+        <span style={{ font: "700 11px 'Hanken Grotesk',sans-serif", padding: "4px 11px", borderRadius: 99, background: "#E4F0E7", color: "#3F7355" }}>
+          {t("staff.campaign.eligible")}
+        </span>
       </div>
-    </SheetBackdrop>
+      <div style={{ background: "#FBF3E6", borderRadius: 12, padding: "11px 14px", marginTop: 16, fontSize: 12.5, color: "#8A6A3A" }}>
+        {t("staff.campaign.membersCheckedIn").replace("{count}", group.checked_in_label)}
+      </div>
+      <button
+        type="button"
+        onClick={onConfirm}
+        disabled={isPending}
+        style={{
+          width: "100%", marginTop: 18, padding: 18, border: "none", borderRadius: 16,
+          background: "var(--sage, #3F7355)", color: "#fff",
+          font: "700 17px 'Hanken Grotesk',sans-serif", cursor: "pointer",
+          boxShadow: "0 12px 26px -8px rgba(94,139,106,.55)", opacity: isPending ? 0.6 : 1,
+        }}
+      >
+        {isPending ? "…" : t("staff.campaign.confirmGroup")}
+      </button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        style={{ width: "100%", marginTop: 9, padding: 12, border: "none", borderRadius: 14, background: "none", color: "var(--soft, #8C7A6A)", font: "600 14px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+      >
+        {t("common.cancel")}
+      </button>
+    </Sheet>
   );
 }
 
@@ -564,44 +584,49 @@ function RewardValidSheet({
     { label: t("staff.campaign.code"), value: result.code ?? "" },
   ];
   return (
-    <SheetBackdrop dim="rgba(8,6,3,.62)" onDismiss={onDismiss}>
-      <div style={{ ...SHEET_STYLE, paddingTop: 26, paddingRight: 24, paddingLeft: 24, paddingBottom: "calc(26px + env(safe-area-inset-bottom, 0px))" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#E4F0E7", color: "#3F7355", fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 99 }}>
-          ✓ {t("staff.campaign.rewardValid")}
-        </div>
-        <div style={{ font: "800 25px 'Bricolage Grotesque',sans-serif", marginTop: 14, letterSpacing: "-.01em" }}>
-          {result.reward_title}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 1, background: "var(--line, #EFE3D1)", border: "1px solid var(--line, #EFE3D1)", borderRadius: 14, overflow: "hidden", marginTop: 16 }}>
-          {rows.map((r) => (
-            <div key={r.label} style={{ display: "flex", justifyContent: "space-between", padding: "12px 15px", background: "#fff", fontSize: 13.5 }}>
-              <span style={{ color: "var(--soft, #8C7A6A)" }}>{r.label}</span>
-              <span style={{ fontWeight: r.label === t("staff.campaign.code") ? 700 : 600, letterSpacing: r.label === t("staff.campaign.code") ? ".06em" : undefined }}>{r.value}</span>
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={onRedeem}
-          disabled={isPending}
-          style={{
-            width: "100%", marginTop: 20, padding: 20, border: "none", borderRadius: 18,
-            background: "var(--sage, #3F7355)", color: "#fff",
-            font: "700 18px 'Hanken Grotesk',sans-serif", cursor: "pointer",
-            boxShadow: "0 16px 32px -10px rgba(94,139,106,.6)", opacity: isPending ? 0.6 : 1,
-          }}
-        >
-          {isPending ? "…" : t("staff.campaign.redeemReward")}
-        </button>
-        <button
-          type="button"
-          onClick={onDismiss}
-          style={{ width: "100%", marginTop: 9, padding: 12, border: "none", borderRadius: 14, background: "none", color: "var(--soft, #8C7A6A)", font: "600 14px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
-        >
-          {t("staff.scan.notNow")}
-        </button>
+    <Sheet
+      open
+      onOpenChange={(o) => { if (!o) onDismiss(); }}
+      variant="modal"
+      surface="card"
+      showGrabber={false}
+      ariaLabel={t("staff.campaign.rewardValid")}
+    >
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#E4F0E7", color: "#3F7355", fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 99 }}>
+        ✓ {t("staff.campaign.rewardValid")}
       </div>
-    </SheetBackdrop>
+      <div style={{ font: "800 25px 'Bricolage Grotesque',sans-serif", marginTop: 14, letterSpacing: "-.01em" }}>
+        {result.reward_title}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 1, background: "var(--line, #EFE3D1)", border: "1px solid var(--line, #EFE3D1)", borderRadius: 14, overflow: "hidden", marginTop: 16 }}>
+        {rows.map((r) => (
+          <div key={r.label} style={{ display: "flex", justifyContent: "space-between", padding: "12px 15px", background: "#fff", fontSize: 13.5 }}>
+            <span style={{ color: "var(--soft, #8C7A6A)" }}>{r.label}</span>
+            <span style={{ fontWeight: r.label === t("staff.campaign.code") ? 700 : 600, letterSpacing: r.label === t("staff.campaign.code") ? ".06em" : undefined }}>{r.value}</span>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={onRedeem}
+        disabled={isPending}
+        style={{
+          width: "100%", marginTop: 20, padding: 20, border: "none", borderRadius: 18,
+          background: "var(--sage, #3F7355)", color: "#fff",
+          font: "700 18px 'Hanken Grotesk',sans-serif", cursor: "pointer",
+          boxShadow: "0 16px 32px -10px rgba(94,139,106,.6)", opacity: isPending ? 0.6 : 1,
+        }}
+      >
+        {isPending ? "…" : t("staff.campaign.redeemReward")}
+      </button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        style={{ width: "100%", marginTop: 9, padding: 12, border: "none", borderRadius: 14, background: "none", color: "var(--soft, #8C7A6A)", font: "600 14px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+      >
+        {t("staff.scan.notNow")}
+      </button>
+    </Sheet>
   );
 }
 
@@ -609,10 +634,17 @@ function RewardValidSheet({
 
 function RedeemedSheet({ title, subtitle, onDismiss }: { title: string; subtitle: string; onDismiss: () => void }) {
   return (
-    <SheetBackdrop dim="rgba(8,6,3,.5)" onDismiss={onDismiss}>
+    <Sheet
+      open
+      onOpenChange={(o) => { if (!o) onDismiss(); }}
+      variant="modal"
+      surface="card"
+      showGrabber={false}
+      ariaLabel={title}
+    >
       <Flash color="var(--sage, #3F7355)" />
-      <div style={{ ...SHEET_STYLE, paddingTop: 34, paddingRight: 26, paddingLeft: 26, paddingBottom: "calc(34px + env(safe-area-inset-bottom, 0px))", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
-        <CountdownBar duration={2800} onDone={onDismiss} />
+      <CountdownBar duration={2800} onDone={onDismiss} />
+      <div style={{ textAlign: "center" }}>
         <div style={{
           width: 78, height: 78, borderRadius: "50%", background: "var(--sage, #3F7355)",
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -622,7 +654,7 @@ function RedeemedSheet({ title, subtitle, onDismiss }: { title: string; subtitle
         <div style={{ font: "800 27px 'Bricolage Grotesque',sans-serif", marginTop: 18 }}>{title}</div>
         <div style={{ fontSize: 14, color: "var(--soft, #8C7A6A)", marginTop: 6 }}>{subtitle}</div>
       </div>
-    </SheetBackdrop>
+    </Sheet>
   );
 }
 
@@ -631,8 +663,15 @@ function RedeemedSheet({ title, subtitle, onDismiss }: { title: string; subtitle
 function InvalidSheet({ title, reason, onDismiss }: { title: string; reason: string; onDismiss: () => void }) {
   const t = useT();
   return (
-    <SheetBackdrop dim="rgba(8,6,3,.5)" onDismiss={onDismiss}>
-      <div style={{ ...SHEET_STYLE, paddingTop: 26, paddingRight: 26, paddingLeft: 26, paddingBottom: "calc(32px + env(safe-area-inset-bottom, 0px))", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+    <Sheet
+      open
+      onOpenChange={(o) => { if (!o) onDismiss(); }}
+      variant="modal"
+      surface="card"
+      showGrabber={false}
+      ariaLabel={title}
+    >
+      <div style={{ textAlign: "center" }}>
         <div style={{
           width: 66, height: 66, borderRadius: "50%", background: "#F7E4DF",
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -648,7 +687,7 @@ function InvalidSheet({ title, reason, onDismiss }: { title: string; reason: str
           {t("staff.scan.dismiss")}
         </button>
       </div>
-    </SheetBackdrop>
+    </Sheet>
   );
 }
 

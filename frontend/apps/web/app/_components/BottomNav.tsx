@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
 import { FlagIcon, GiftIcon, HomeIcon, PinIcon, ScanIcon, UserIcon } from "./icons";
+import { useQrSheet } from "./QrSheet";
 
 export type NavItem = {
   href: string;
@@ -61,6 +62,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 export function BottomNav() {
   const pathname = usePathname();
   const t = useT();
+  const { openQr } = useQrSheet();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 items-end border-t border-line bg-cream/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
       {LEFT_ITEMS.map((item) => (
@@ -68,14 +70,15 @@ export function BottomNav() {
       ))}
       {/* raised center scan button */}
       <div className="relative flex min-h-[58px] justify-center">
-        <Link
-          href="/qr"
+        <button
+          type="button"
+          onClick={openQr}
           aria-label={t("nav.scan")}
           className="absolute -top-8 left-1/2 z-10 flex h-[60px] w-[60px] -translate-x-1/2 items-center justify-center rounded-full bg-brand-gradient text-brand-fg shadow-[0_12px_28px_-7px_rgba(194,94,60,.75),0_0_24px_rgba(231,162,62,.28)] ring-[6px] ring-cream/95 transition hover:-translate-y-0.5 active:scale-95"
         >
           <span className="absolute inset-1 rounded-full border border-white/20" aria-hidden="true" />
           <ScanIcon className="relative h-7 w-7" />
-        </Link>
+        </button>
         <span className="mt-auto pb-2 text-[11px] font-medium text-brand">{t("nav.scan")}</span>
       </div>
       {RIGHT_ITEMS.map((item) => (
