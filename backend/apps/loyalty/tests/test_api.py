@@ -5,7 +5,12 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.businesses.models import Business
-from apps.loyalty.models import LoyaltyMembership, LoyaltyProgram
+from apps.loyalty.models import (
+    LoyaltyMembership,
+    LoyaltyProgram,
+    LoyaltyTransaction,
+    LoyaltyVoucher,
+)
 from apps.qr.services import get_or_create_customer_profile_token
 from apps.staff.models import StaffMember
 
@@ -59,6 +64,64 @@ def test_owner_create_and_customer_cards(api_actors):
     assert cards.status_code == 200
     assert cards.data["data"]["results"][0]["points_balance"] == 25
     assert str(cards.data["data"]["results"][0]["business_id"]) == str(business.id)
+
+
+@pytest.mark.django_db
+def test_business_program_detail_returns_members_vouchers_analytics(api_actors):
+    owner, customer, staff, business = api_actors
+    program = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Stamp card",
+        required_count=6,
+        reward_type=LoyaltyProgram.RewardType.FREE_ITEM,
+        reward_title="1 free coffee",
+    )
+    membership = LoyaltyMembership.objects.create(
+        program=program, customer=customer, stamps_count=3
+    )
+    # Two earns from the same customer → counts as a repeat member.
+    for _ in range(2):
+        LoyaltyTransaction.objects.create(
+            membership=membership,
+            program=program,
+            customer=customer,
+            business=business,
+            kind=LoyaltyTransaction.Kind.EARN,
+            stamps_delta=1,
+            staff=staff,
+        )
+    LoyaltyVoucher.objects.create(
+        membership=membership,
+        program=program,
+        customer=customer,
+        business=business,
+        voucher_code="JQ-1001",
+        status=LoyaltyVoucher.Status.ACTIVE,
+        reward_type=LoyaltyProgram.RewardType.FREE_ITEM,
+        reward_title="1 free coffee",
+    )
+
+    client = APIClient()
+    client.force_authenticate(owner)
+    res = client.get(f"/api/business/loyalty/programs/{program.id}/")
+    assert res.status_code == 200
+    data = res.data["data"]
+
+    # Transactions are labelled with the customer they affected.
+    assert data["transactions"][0]["customer_name"] == "Customer"
+    # Reward Usage tab is fed by the voucher list.
+    assert data["vouchers"][0]["voucher_code"] == "JQ-1001"
+    assert data["vouchers"][0]["customer_name"] == "Customer"
+    # Named analytics replace the old stat_a/b/c placeholders.
+    a = data["analytics"]
+    assert a["members"] == 1
+    assert a["outstanding"] == 1  # one active voucher
+    assert a["new_members_30d"] == 1
+    assert a["repeat_rate"] == 1.0  # the single member earned more than once
+    # Analytics tab extras: avg basket + a 7-point redemption trend.
+    assert "avg_basket" in a
+    assert len(a["redemptions_7d"]) == 7
 
 
 @pytest.mark.django_db

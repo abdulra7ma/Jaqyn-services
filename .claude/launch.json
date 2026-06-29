@@ -17,7 +17,7 @@
       "runtimeArgs": ["pnpm", "--filter", "web", "exec", "next", "dev", "-p", "3100"],
       "port": 3100,
       "autoPort": false,
-      "env": {}
+      "env": { "API_PROXY_TARGET": "http://127.0.0.1:8000" }
     },
     {
       "name": "web-campaigns-preview",

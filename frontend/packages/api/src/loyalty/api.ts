@@ -16,6 +16,7 @@ export const loyaltyApi = {
   selectVoucherItem: (voucherId: string, catalogItemId: string) => api.post<Raw>(`/api/customer/loyalty/vouchers/${voucherId}/select-item/`, { catalog_item_id: catalogItemId }).then(adaptLoyaltyVoucher),
   businessPrograms: (): Promise<LoyaltyProgramConfig[]> => api.get<Page<Raw>>("/api/business/loyalty/programs/").then((data) => data.results.map(adaptLoyaltyProgram)),
   createProgram: (input: LoyaltyProgramInput) => api.post<Raw>("/api/business/loyalty/programs/", input).then(adaptLoyaltyProgram),
+  updateProgram: (id: string, input: Partial<LoyaltyProgramInput>) => api.patch<Raw>(`/api/business/loyalty/programs/${id}/`, input).then(adaptLoyaltyProgram),
   businessProgramDetail: (id: string) => api.get<BusinessLoyaltyProgramDetail>(`/api/business/loyalty/programs/${id}/`),
   action: (id: string, action: "pause" | "activate" | "archive") => api.post<Raw>(`/api/business/loyalty/programs/${id}/${action}/`).then(adaptLoyaltyProgram),
   award: (body: { token: string; program_id: string; amount?: string }) => api.post<Raw>("/api/staff/loyalty/award/", body),

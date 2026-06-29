@@ -86,6 +86,20 @@
   to { transform: scaleX(0); }
 }
 
+/* Loyalty-meter / analytics reveals. The ring sweeps from empty (--c, its full
+ * circumference) to its resting stroke-dashoffset; bars grow from their baseline. */
+@keyframes jqRingFill {
+  from { stroke-dashoffset: var(--c); }
+}
+@keyframes jqGrowY {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes jqGrowX {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
 /* Full-bleed QR scanner (staff): make html5-qrcode's injected <video> cover the
  * container and remove the library's default border/box so the host page's own
  * corner-frame overlay is the only visible target. */

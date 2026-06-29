@@ -58,9 +58,13 @@ function program(over: Partial<LoyaltyCardView>): LoyaltyCardView {
     business_id: "b-1",
     business_name: "Manas Coffee",
     business_logo_url: null,
+    business_category: "",
+    business_area: "",
+    business_hours: {},
     type: "visit",
     name: "Program",
     reward_summary: "",
+    reward_expiry_days: 30,
     joined: false,
     stamps_count: 0,
     visits_count: 0,
@@ -89,15 +93,13 @@ vi.mock("@jaqyn/api", () => ({
 
 import BusinessProfilePage from "./page";
 
-/** Open the loyalty bottom-sheet by clicking its trigger row. */
+/** Open the loyalty detail sheet by clicking its wallet-card trigger. */
 function openLoyaltySheet() {
-  // The trigger <p> reads "cmp.loyalty.title · N common.programs" — use substring match.
-  const trigger = screen.getByText("cmp.loyalty.title", { exact: false }).closest("button")!;
-  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole("button", { name: "Manas Coffee" }));
 }
 
-describe("Business page — consolidated loyalty card (multi-form-loyalty)", () => {
-  it("renders ONE card with a tab per program and switches bodies on tab click", () => {
+describe("Business page — loyalty wallet card opens the detail sheet", () => {
+  it("trigger is a wallet card; the sheet lists every program for a multi-type business", () => {
     loyalty.value = [
       program({
         program_id: "pts",
@@ -120,32 +122,20 @@ describe("Business page — consolidated loyalty card (multi-form-loyalty)", () 
     ];
     render(<BusinessProfilePage />);
 
-    // Trigger row is visible; open the loyalty sheet to see the card content.
-    expect(screen.getAllByText("cmp.loyalty.title", { exact: false }).length).toBeGreaterThanOrEqual(1);
+    // The trigger renders as a wallet card (a button labelled with the shop name).
+    const trigger = screen.getByRole("button", { name: "Manas Coffee" });
+    expect(trigger).toBeInTheDocument();
     openLoyaltySheet();
 
-    // Sheet header shows business name alongside trigger row — at least 2 occurrences.
-    expect(screen.getAllByText("Manas Coffee").length).toBeGreaterThanOrEqual(2);
-
-    // Two programs → a tablist with one tab per program (labels from the mechanic).
-    const tabs = screen.getAllByRole("tab");
-    expect(tabs).toHaveLength(2);
-    expect(screen.getByText("cmp.loyalty.tab.points")).toBeInTheDocument();
-    expect(screen.getByText("cmp.loyalty.tab.visit")).toBeInTheDocument();
-
-    // First tab is active → points body (reward summary + cashback "Use", balance>0).
-    expect(screen.getByText("1 сом per point")).toBeInTheDocument();
-    expect(screen.getByText("cmp.loyalty.use")).toBeInTheDocument();
-    expect(screen.queryByText("Free latte")).not.toBeInTheDocument();
-
-    // Switch to the visit tab → its body (reward summary + dot counts) now shows.
-    fireEvent.click(screen.getByText("cmp.loyalty.tab.visit"));
-    expect(screen.getByText("Free latte")).toBeInTheDocument();
-    expect(screen.getByText("cmp.loyalty.visitsCount")).toBeInTheDocument();
-    expect(screen.queryByText("1 сом per point")).not.toBeInTheDocument();
+    // The wallet detail sheet lists both programs + the count + the QR action.
+    // (Reward summaries also appear on the trigger card, hence getAllByText.)
+    expect(screen.getAllByText("1 сом per point").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Free latte").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/cmp\.wallet\.programs/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("cmp.wallet.showMyQr")).toBeInTheDocument();
   });
 
-  it("renders no switcher when the business runs a single program", () => {
+  it("opens the sheet for a single-program business", () => {
     loyalty.value = [
       program({
         program_id: "vis",
@@ -157,13 +147,13 @@ describe("Business page — consolidated loyalty card (multi-form-loyalty)", () 
     ];
     render(<BusinessProfilePage />);
     openLoyaltySheet();
-    expect(screen.getByText("Free latte")).toBeInTheDocument();
-    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.getAllByText("Free latte").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/cmp\.wallet\.detail\.oneProgram/)).toBeInTheDocument();
   });
 
   it("omits the loyalty section entirely when the business runs no programs", () => {
     loyalty.value = [];
     render(<BusinessProfilePage />);
-    expect(screen.queryByText("cmp.loyalty.title")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manas Coffee" })).not.toBeInTheDocument();
   });
 });

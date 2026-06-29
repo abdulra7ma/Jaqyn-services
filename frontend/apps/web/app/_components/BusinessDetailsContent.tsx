@@ -1,17 +1,17 @@
 "use client";
 
-import { useBusiness, useBusinessLoyalty, useJoinLoyalty } from "@jaqyn/api";
+import { useBusiness, useBusinessLoyalty } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Badge, Card } from "@jaqyn/ui";
 import Link from "next/link";
 import { useState } from "react";
 import { useRequireAuth } from "../_lib/auth";
 import { isOpenNow } from "../_lib/hours";
-import { BottomSheet } from "./BottomSheet";
-import { BusinessLoyaltyCard, GlyphTile, type LoyaltyProgramView } from "./campaigns";
 import { ListGroup, ListRow } from "./kit";
-import { MyQrSheet } from "./MyQrSheet";
 import { QueryBoundary } from "./QueryBoundary";
+import { WalletCard } from "../loyalty/_components/WalletCard";
+import { WalletDetailSheet } from "../loyalty/_components/WalletDetailSheet";
+import { buildWallet } from "../loyalty/_lib/wallet";
 
 function BusinessLogo({
   logoUrl,
@@ -118,24 +118,6 @@ function renderHours(
   );
 }
 
-function hoursDisplay(
-  hours:
-    | Record<string, [string, string]>
-    | Record<string, string>
-    | null
-    | undefined,
-): string {
-  if (!hours) return "—";
-  const display = (hours as Record<string, string>).display;
-  if (display) return display;
-  const entries = Object.entries(hours).filter(([, v]) =>
-    Array.isArray(v),
-  ) as [string, [string, string]][];
-  if (entries.length === 0) return "—";
-  const [, [from, to]] = entries[0]!;
-  return `${from}–${to}`;
-}
-
 function directionsHref(b: {
   latitude?: string | null;
   longitude?: string | null;
@@ -172,10 +154,8 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
   const t = useT();
   const business = useBusiness(businessId);
   const loyalty = useBusinessLoyalty(businessId);
-  const joinLoyalty = useJoinLoyalty();
-  const { isAuthenticated } = useRequireAuth();
+  useRequireAuth();
   const [loyaltyOpen, setLoyaltyOpen] = useState(false);
-  const [qrOpen, setQrOpen] = useState(false);
 
   return (
     <QueryBoundary query={business}>
@@ -278,187 +258,25 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
 
             {(loyalty.data?.length ?? 0) > 0 &&
               (() => {
-                const programs = (loyalty.data ?? []).map(
-                  (p): LoyaltyProgramView => ({
-                    campaignId: p.program_id,
-                    name: p.name,
-                    mechanic: p.type,
-                    rewardSummary: p.reward_summary,
-                    joined: p.joined,
-                    progressCount: p.type === "stamp" ? p.stamps_count : p.visits_count,
-                    target: p.required_count ?? 0,
-                    pointsBalance: p.points_balance,
-                    cashbackPerPoint: p.cashback_per_point,
-                  }),
-                );
+                const shop = buildWallet(loyalty.data ?? [])[0];
+                if (!shop) return null;
                 return (
                   <>
+                    {/* Wallet-card-styled trigger; opens the shared loyalty
+                        wallet detail sheet for this shop. */}
                     <button
                       type="button"
                       onClick={() => setLoyaltyOpen(true)}
-                      className="flex w-full items-center gap-3 rounded-2xl border border-line bg-card p-4 shadow-card transition active:scale-[.99]"
+                      aria-label={shop.businessName}
+                      className="block h-[200px] w-full transition active:scale-[.99]"
                     >
-                      <GlyphTile
-                        glyph="🏷️"
-                        size={42}
-                        image={b.logo_url ?? null}
-                      />
-                      <div className="min-w-0 flex-1 text-left">
-                        <p className="font-display text-[15px] font-bold text-ink">
-                          {b.name}
-                        </p>
-                        <p className="text-[13px] text-subtle">
-                          {t("cmp.loyalty.title")} · {programs.length}{" "}
-                          {t("common.programs")}
-                        </p>
-                      </div>
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="h-4 w-4 flex-none text-subtle"
-                        aria-hidden
-                      >
-                        <path d="m9 18 6-6-6-6" />
-                      </svg>
+                      <WalletCard card={shop} />
                     </button>
 
-                    <BottomSheet
-                      open={loyaltyOpen}
+                    <WalletDetailSheet
+                      card={loyaltyOpen ? shop : null}
                       onClose={() => setLoyaltyOpen(false)}
-                    >
-                      <div className="flex items-center justify-between px-5 pb-2 pt-1">
-                        <div className="flex items-center gap-2.5">
-                          <GlyphTile
-                            glyph="🏷️"
-                            size={38}
-                            image={b.logo_url ?? null}
-                          />
-                          <div>
-                            <p className="font-display text-[15px] font-bold text-ink">
-                              {b.name}
-                            </p>
-                            <p className="text-[12px] text-subtle">
-                              {t("cmp.loyalty.title")} · {programs.length}{" "}
-                              {t("common.programs")}
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setLoyaltyOpen(false)}
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-board text-ink"
-                          aria-label="Close"
-                        >
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={2.5}
-                            strokeLinecap="round"
-                            className="h-4 w-4"
-                            aria-hidden
-                          >
-                            <path d="M18 6 6 18M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-
-                      <div className="px-5 pb-2">
-                        <BusinessLoyaltyCard
-                          business={{
-                            name: b.name,
-                            logo_url: b.logo_url ?? null,
-                          }}
-                          programs={programs}
-                        />
-                        {programs.filter((program) => !program.joined).map((program) => (
-                          <button
-                            key={program.campaignId}
-                            type="button"
-                            disabled={joinLoyalty.isPending}
-                            onClick={() => joinLoyalty.mutate(program.campaignId)}
-                            className="mt-2 w-full rounded-xl bg-brand py-3 text-sm font-bold text-white disabled:opacity-50"
-                          >
-                            {t("loyalty.join")} · {program.name}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="mx-5 mt-1 rounded-2xl border border-line">
-                        <ListGroup>
-                          <ListRow
-                            label={t("common.expires")}
-                            value={t("common.noExpiry")}
-                          />
-                          <ListRow
-                            label={t("common.location")}
-                            value={b.address || b.area || "—"}
-                          />
-                          {b.working_hours && (
-                            <ListRow
-                              label={t("business.hours")}
-                              value={hoursDisplay(b.working_hours)}
-                            />
-                          )}
-                        </ListGroup>
-                      </div>
-
-                      <div className="mt-4 flex items-center gap-2.5 px-5 pb-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLoyaltyOpen(false);
-                            setQrOpen(true);
-                          }}
-                          className="flex flex-1 items-center justify-center gap-2 rounded-pill bg-brand-gradient py-3.5 text-[15px] font-bold text-brand-fg shadow-glow transition active:scale-[.99]"
-                        >
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="h-5 w-5"
-                            aria-hidden
-                          >
-                            <rect x="3" y="3" width="7" height="7" rx="1" />
-                            <rect x="14" y="3" width="7" height="7" rx="1" />
-                            <rect x="3" y="14" width="7" height="7" rx="1" />
-                            <path d="M14 14h.01M18 14h.01M14 18h.01M18 18h.01M14 14v4M18 14v4M14 18h4" />
-                          </svg>
-                          {t("qr.myQrTitle")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLoyaltyOpen(false)}
-                          className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-ink text-card"
-                        >
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={2.5}
-                            strokeLinecap="round"
-                            className="h-5 w-5"
-                            aria-hidden
-                          >
-                            <path d="M18 6 6 18M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    </BottomSheet>
-
-                    {qrOpen && (
-                      <MyQrSheet
-                        isAuthenticated={isAuthenticated}
-                        onClose={() => setQrOpen(false)}
-                      />
-                    )}
+                    />
                   </>
                 );
               })()}

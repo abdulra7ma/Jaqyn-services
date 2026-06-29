@@ -1,6 +1,7 @@
 "use client";
 
 import { useT } from "@jaqyn/i18n";
+import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
@@ -40,50 +41,68 @@ export const CUSTOMER_NAV: NavItem[] = [
 const LEFT_ITEMS: NavItem[] = [CUSTOMER_NAV[0]!, CUSTOMER_NAV[1]!];
 const RIGHT_ITEMS: NavItem[] = [CUSTOMER_NAV[2]!, CUSTOMER_NAV[4]!];
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({ item, active, reduce }: { item: NavItem; active: boolean; reduce: boolean }) {
   const t = useT();
+  // Icon-only: the label is the accessible name via aria-label (no visible text).
   return (
     <Link
       href={item.href}
+      aria-label={t(item.key)}
       aria-current={active ? "page" : undefined}
-      className={`flex flex-col items-center gap-1 py-2 text-[11px] font-medium ${
+      className={`group relative flex items-center justify-center py-3 ${
         active ? "text-brand" : "text-subtle"
       }`}
     >
-      <item.Icon className="h-[22px] w-[22px]" />
-      {t(item.key)}
+      <span className="relative flex h-[38px] w-[38px] items-center justify-center">
+        {/* Animated active indicator — a soft pill that glides between slots via
+            a shared layoutId. `prefers-reduced-motion` makes it jump instantly. */}
+        {active && (
+          <motion.span
+            layoutId="nav-active-pill"
+            transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 520, damping: 40 }}
+            className="absolute inset-0 rounded-full bg-brand/12"
+            aria-hidden
+          />
+        )}
+        <motion.span whileTap={{ scale: 0.86 }} className="relative">
+          <item.Icon className="h-[23px] w-[23px]" />
+        </motion.span>
+      </span>
     </Link>
   );
 }
 
-// Mobile bottom bar: Home · Loyalty · [Scan center] · Campaigns · Profile. The
-// scan control is a raised center button in the bar itself (campaigns-restructure
-// design §6) rather than a separate floating FAB.
+// Mobile bottom bar: a floating pill — Home · Loyalty · [Scan center] ·
+// Campaigns · Profile — with a raised center Scan button (campaigns-restructure
+// design §6) and an animated active indicator that glides between slots.
 export function BottomNav() {
   const pathname = usePathname();
   const t = useT();
   const { openQr } = useQrSheet();
+  const reduce = useReducedMotion() ?? false;
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 items-end border-t border-line bg-cream/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-      {LEFT_ITEMS.map((item) => (
-        <NavLink key={item.href} item={item} active={item.match(pathname)} />
-      ))}
-      {/* raised center scan button */}
-      <div className="relative flex min-h-[58px] justify-center">
-        <button
-          type="button"
-          onClick={openQr}
-          aria-label={t("nav.scan")}
-          className="absolute -top-8 left-1/2 z-10 flex h-[60px] w-[60px] -translate-x-1/2 items-center justify-center rounded-full bg-brand-gradient text-brand-fg shadow-[0_12px_28px_-7px_rgba(194,94,60,.75),0_0_24px_rgba(231,162,62,.28)] ring-[6px] ring-cream/95 transition hover:-translate-y-0.5 active:scale-95"
-        >
-          <span className="absolute inset-1 rounded-full border border-white/20" aria-hidden="true" />
-          <ScanIcon className="relative h-7 w-7" />
-        </button>
-        <span className="mt-auto pb-2 text-[11px] font-medium text-brand">{t("nav.scan")}</span>
+    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-[max(env(safe-area-inset-bottom),12px)] lg:hidden">
+      <div className="pointer-events-auto grid w-full max-w-sm grid-cols-5 items-end rounded-pill border border-line bg-card/95 px-2 shadow-card backdrop-blur">
+        {LEFT_ITEMS.map((item) => (
+          <NavLink key={item.href} item={item} active={item.match(pathname)} reduce={reduce} />
+        ))}
+        {/* raised center scan button (icon only) */}
+        <div className="relative flex min-h-[58px] justify-center">
+          <motion.button
+            type="button"
+            onClick={openQr}
+            aria-label={t("nav.scan")}
+            whileTap={{ scale: 0.92 }}
+            className="absolute -top-5 left-1/2 z-10 flex h-[60px] w-[60px] -translate-x-1/2 items-center justify-center rounded-full bg-brand-gradient text-brand-fg shadow-[0_12px_28px_-7px_rgba(194,94,60,.75),0_0_24px_rgba(231,162,62,.28)] ring-[6px] ring-card/95 transition hover:-translate-y-0.5"
+          >
+            <span className="absolute inset-1 rounded-full border border-white/20" aria-hidden="true" />
+            <ScanIcon className="relative h-7 w-7" />
+          </motion.button>
+        </div>
+        {RIGHT_ITEMS.map((item) => (
+          <NavLink key={item.href} item={item} active={item.match(pathname)} reduce={reduce} />
+        ))}
       </div>
-      {RIGHT_ITEMS.map((item) => (
-        <NavLink key={item.href} item={item} active={item.match(pathname)} />
-      ))}
     </nav>
   );
 }

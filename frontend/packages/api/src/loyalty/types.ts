@@ -6,9 +6,14 @@ export type LoyaltyCardView = {
   business_id: string;
   business_name: string;
   business_logo_url: string | null;
+  business_category: string;
+  business_area: string;
+  /** Day-of-week → [open, close] (e.g. {"mon":["07:00","21:00"]}); may be empty. */
+  business_hours: Record<string, [string, string]>;
   type: LoyaltyType;
   name: string;
   reward_summary: string;
+  reward_expiry_days: number;
   joined: boolean;
   stamps_count: number;
   visits_count: number;
@@ -26,6 +31,7 @@ export type LoyaltyTransaction = {
   stamps_delta: number | null;
   bill_amount: string | null;
   staff_name: string | null;
+  customer_name: string | null;
   created_at: string;
 };
 
@@ -102,11 +108,27 @@ export type LoyaltyProgramConfig = {
 
 export type LoyaltyProgramInput = Omit<LoyaltyProgramConfig, "id" | "status" | "reward_summary" | "members" | "outstanding" | "redeemed">;
 
+export type LoyaltyProgramVoucherRow = {
+  voucher_code: string;
+  customer_name: string;
+  status: "active" | "redeemed" | "expired" | "cancelled";
+  reward_title: string;
+  issued_at: string;
+};
+
 export type BusinessLoyaltyProgramDetail = LoyaltyProgramConfig & {
-  overview: Record<string, number>;
   members: Array<{ customer_name: string; state: Record<string, number>; joined_at: string }>;
   transactions: LoyaltyTransaction[];
-  analytics: { stat_a: number; stat_b: number; stat_c: number };
+  vouchers: LoyaltyProgramVoucherRow[];
+  analytics: {
+    members: number;
+    outstanding: number;
+    redeemed: number;
+    new_members_30d: number;
+    repeat_rate: number;
+    avg_basket: number;
+    redemptions_7d: number[];
+  };
   settings: LoyaltyProgramConfig;
 };
 

@@ -104,3 +104,19 @@ export function MoreIcon(p: Props) {
     </svg>
   );
 }
+
+export function ChevronLeftIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className}>
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
+
+export function ChevronRightIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className}>
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}

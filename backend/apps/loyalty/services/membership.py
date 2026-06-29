@@ -17,9 +17,18 @@ class LoyaltyCardView:
     business_id: str
     business_name: str
     business_logo_url: str | None
+    business_category: str
+    business_area: str
+    # Day-of-week -> [open, close] map (Business.working_hours); the wallet detail
+    # sheet picks a representative range to display.
+    business_hours: dict[str, object]
     type: str
     name: str
     reward_summary: str
+    # Days an earned reward stays valid (Business config). Shown on the detail
+    # sheet's "Expires" row; cashback balances don't expire, so the UI renders
+    # "No expiry" for points cards regardless of this value.
+    reward_expiry_days: int
     joined: bool
     stamps_count: int
     visits_count: int
@@ -68,10 +77,14 @@ class LoyaltyMembershipService:
             business_id=str(program.business_id),
             business_name=program.business.name,
             business_logo_url=logo_url,
+            business_category=program.business.category or "",
+            business_area=program.business.area or "",
+            business_hours=program.business.working_hours or {},
             type=program.type,
             name=program.name,
             reward_summary=program.reward_title
             or ("Cashback" if program.type == LoyaltyProgram.Type.POINTS else "Reward"),
+            reward_expiry_days=program.reward_expiry_days,
             joined=membership is not None,
             stamps_count=membership.stamps_count if membership else 0,
             visits_count=membership.visits_count if membership else 0,

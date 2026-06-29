@@ -21,6 +21,7 @@ export function CustomerShell({
   back,
   showNav = true,
   hideChromeTitle = false,
+  bleed = false,
   children,
 }: {
   title: string;
@@ -28,6 +29,12 @@ export function CustomerShell({
   showNav?: boolean;
   /** When the page renders its own hero title, suppress the chrome title to avoid duplication. */
   hideChromeTitle?: boolean;
+  /**
+   * Full-bleed content: drop the main padding, max-width and scroll, and hide
+   * the mobile header so the child (e.g. the Nearby map) fills the viewport and
+   * supplies its own floating chrome. Sidebar + bottom nav are kept.
+   */
+  bleed?: boolean;
   children: ReactNode;
 }) {
   const t = useT();
@@ -55,8 +62,8 @@ export function CustomerShell({
         {/* header — mobile (and any non-authed page). For guests it's the top nav bar. */}
         <header
           className={`sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-3 ${
-            sidebar ? "bg-cream lg:hidden" : "border-b border-line bg-cream/95 backdrop-blur"
-          }`}
+            bleed && sidebar ? "hidden" : ""
+          } ${sidebar ? "bg-cream lg:hidden" : "border-b border-line bg-cream/95 backdrop-blur"}`}
         >
           <div className="flex min-w-0 items-center gap-2">
             {back && (
@@ -109,13 +116,17 @@ export function CustomerShell({
           </header>
         )}
 
-        <main
-          className={`flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-10 lg:py-8 ${
-            mobileNav ? "pb-24 lg:pb-8" : ""
-          }`}
-        >
-          <div className="mx-auto w-full max-w-2xl">{children}</div>
-        </main>
+        {bleed ? (
+          <main className="relative flex-1 overflow-hidden">{children}</main>
+        ) : (
+          <main
+            className={`flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-10 lg:py-8 ${
+              mobileNav ? "pb-24 lg:pb-8" : ""
+            }`}
+          >
+            <div className="mx-auto w-full max-w-2xl">{children}</div>
+          </main>
+        )}
       </div>
 
       {/* bottom nav (scan is the raised center button) — mobile, signed-in only */}

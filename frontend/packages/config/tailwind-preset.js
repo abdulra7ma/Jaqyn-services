@@ -49,6 +49,16 @@ module.exports = {
       },
       backgroundImage: {
         "brand-gradient": "linear-gradient(150deg, #C25E3C, #A2492A)",
+        // Wallet card-face accents (loyalty wallet, design-system §8 "Featured
+        // card"). Each value pulls from the §1 core palette + voucher cues; a
+        // card's accent is chosen deterministically by business id, so these are
+        // fixed named gradients, not per-card inline hex. Keep in sync with the
+        // CARD_ACCENTS list in app/loyalty/_lib/wallet.ts.
+        "wallet-terracotta": "linear-gradient(150deg, #C25E3C, #A2492A)", // §1 --accent / --accent-deep
+        "wallet-amber": "linear-gradient(150deg, #E7A23E, #B07A1E)", // §1 --amber / amber-deep
+        "wallet-sage": "linear-gradient(150deg, #5E8B6A, #3F7355)", // §1 --sage / sage success fg
+        "wallet-plum": "linear-gradient(150deg, #9D4E7C, #743A5C)", // §1 voucher birthday fg, deepened
+        "wallet-indigo": "linear-gradient(150deg, #4E6B9D, #394F75)", // §1 voucher welcome fg, deepened
       },
     },
   },

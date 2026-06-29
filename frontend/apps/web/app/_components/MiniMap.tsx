@@ -119,6 +119,8 @@ export function MiniMap({
   onOpen,
   userLocation,
   onUseLocation,
+  onMapClick,
+  bare = false,
 }: {
   pins: MapPin[];
   selectedId?: string | null;
@@ -127,6 +129,15 @@ export function MiniMap({
   onOpen?: (id: string) => void;
   userLocation?: UserLocation;
   onUseLocation?: () => void;
+  /** Fired when the map background (not a pin) is tapped. */
+  onMapClick?: () => void;
+  /**
+   * Full-bleed mode: fill the parent edge-to-edge with no border/corners and
+   * suppress the in-map chrome (zoom / full toggle / selected-card / list) so
+   * only the map + pins show. The host screen supplies its own controls. Used
+   * by the customer Nearby map; the embedded list/picker maps leave it `false`.
+   */
+  bare?: boolean;
 }) {
   const t = useT();
   const [zoom, setZoom] = useState(1);
@@ -146,7 +157,7 @@ export function MiniMap({
   }
 
   const fallbackBody = (
-    <div className="relative h-full overflow-hidden rounded-[22px] border border-line bg-[#EEE6D6]">
+    <div className={cn("relative h-full overflow-hidden bg-[#EEE6D6]", !bare && "rounded-[22px] border border-line")}>
       <div
         className="absolute inset-0 origin-center transition-transform duration-200"
         style={{
@@ -196,62 +207,20 @@ export function MiniMap({
         })}
       </div>
 
-      <div className="absolute left-3 top-3 z-20 flex gap-1.5">
-        <MapButton label="+" onClick={() => changeZoom(0.2)} />
-        <MapButton label="-" onClick={() => changeZoom(-0.2)} />
-        <MapButton label="Fit" onClick={() => setZoom(1)} />
-      </div>
-      <div className="absolute right-3 top-3 z-20 flex gap-1.5">
-        {onUseLocation && <MapButton label={t("nearby.you")} onClick={onUseLocation} />}
-        <MapButton label={full ? "Close" : "Full"} onClick={() => setFull((v) => !v)} />
-      </div>
-
-      {selected && (
-        <button
-          type="button"
-          onClick={() => (onOpen ? onOpen(selected.id) : onSelect?.(selected.id))}
-          className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-3 rounded-[14px] border border-line bg-card/95 p-3 text-left shadow-card backdrop-blur transition active:scale-[.99]"
-        >
-          <PinLogo logoUrl={selected.logoUrl} initial={selected.initial} size={40} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="truncate text-sm font-bold text-ink">{selected.name}</span>
-              {selected.open != null && (
-                <Badge tone={selected.open ? "ok" : "neutral"}>
-                  {selected.open ? t("nearby.open") : t("nearby.closed")}
-                </Badge>
-              )}
-              {selected.closest && <Badge tone="brand">{t("nearby.nearest")}</Badge>}
-            </div>
-            <div className="mt-0.5 truncate text-xs font-semibold text-subtle">
-              {selected.category || t("nearby.title")}
-              {selected.dist ? ` · ${selected.dist}` : ""}
-            </div>
-            {selected.reward && (
-              <div className="mt-0.5 truncate text-xs font-semibold text-brand">{selected.reward}</div>
-            )}
-          </div>
-          <span className="flex-none text-subtle" aria-hidden>›</span>
-        </button>
-      )}
-
-      {full && points.length > 0 && (
-        <div className="absolute bottom-20 left-3 right-3 z-20 flex gap-2 overflow-x-auto pb-1 lg:left-auto lg:top-16 lg:w-64 lg:flex-col lg:overflow-y-auto">
-          {points.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => (onOpen ? onOpen(p.id) : onSelect?.(p.id))}
-              className={cn(
-                "min-w-[180px] rounded-[13px] border px-3 py-2 text-left shadow-card lg:min-w-0",
-                p.id === selectedId ? "border-brand bg-brand-muted" : "border-line bg-card",
-              )}
-            >
-              <div className="truncate text-sm font-bold text-ink">{p.name}</div>
-              <div className="text-xs text-subtle">{p.dist || p.initial}</div>
-            </button>
-          ))}
-        </div>
-      )}
+      <MapChrome
+        bare={bare}
+        list={points}
+        selected={selected}
+        selectedId={selectedId}
+        full={full}
+        onSelect={onSelect}
+        onOpen={onOpen}
+        onUseLocation={onUseLocation}
+        onZoomIn={() => changeZoom(0.2)}
+        onZoomOut={() => changeZoom(-0.2)}
+        onFit={() => setZoom(1)}
+        onToggleFull={() => setFull((v) => !v)}
+      />
     </div>
   );
   const body = useGoogle ? (
@@ -262,8 +231,10 @@ export function MiniMap({
       onOpen={onOpen}
       userLocation={userLocation}
       onUseLocation={onUseLocation}
+      onMapClick={onMapClick}
       full={full}
       setFull={setFull}
+      bare={bare}
       onError={() => setGoogleFailed(true)}
     />
   ) : useDgis ? (
@@ -274,8 +245,10 @@ export function MiniMap({
       onOpen={onOpen}
       userLocation={userLocation}
       onUseLocation={onUseLocation}
+      onMapClick={onMapClick}
       full={full}
       setFull={setFull}
+      bare={bare}
       onError={() => setDgisFailed(true)}
     />
   ) : (
@@ -290,7 +263,7 @@ export function MiniMap({
     );
   }
 
-  return <div className="relative mt-1 h-[260px]">{body}</div>;
+  return <div className={bare ? "relative h-full" : "relative mt-1 h-[260px]"}>{body}</div>;
 }
 
 // Provider map markers (2GIS/Google) take a flat image URL and render it as a
@@ -368,8 +341,10 @@ function DgisMapBody({
   onOpen,
   userLocation,
   onUseLocation,
+  onMapClick,
   full,
   setFull,
+  bare,
   onError,
 }: {
   pins: MapPin[];
@@ -378,8 +353,10 @@ function DgisMapBody({
   onOpen?: (id: string) => void;
   userLocation?: UserLocation;
   onUseLocation?: () => void;
+  onMapClick?: () => void;
   full: boolean;
   setFull: (next: boolean | ((current: boolean) => boolean)) => void;
+  bare: boolean;
   onError: () => void;
 }) {
   const t = useT();
@@ -392,6 +369,8 @@ function DgisMapBody({
   onSelectRef.current = onSelect;
   const onOpenRef = useRef(onOpen);
   onOpenRef.current = onOpen;
+  const onMapClickRef = useRef(onMapClick);
+  onMapClickRef.current = onMapClick;
   const selected = pins.find((p) => p.id === selectedId) ?? pins[0] ?? null;
   const circleIcons = useCircularPinIcons(pins, 40);
 
@@ -410,6 +389,8 @@ function DgisMapBody({
           // We render our own controls, so hide MapGL's built-in ones.
           zoomControl: false,
         });
+        // Tapping the map background (not a marker) unfolds the browse list.
+        map.current.on("click", () => onMapClickRef.current?.());
       })
       .catch(onError);
     return () => {
@@ -479,65 +460,23 @@ function DgisMapBody({
   }
 
   return (
-    <div className="relative h-full overflow-hidden rounded-[22px] border border-line bg-[#EEE6D6]">
+    <div className={cn("relative h-full overflow-hidden bg-[#EEE6D6]", !bare && "rounded-[22px] border border-line")}>
       <div ref={mapEl} className="absolute inset-0" />
 
-      <div className="absolute left-3 top-3 z-20 flex gap-1.5">
-        <MapButton label="+" onClick={() => zoomBy(1)} />
-        <MapButton label="-" onClick={() => zoomBy(-1)} />
-        <MapButton label="Fit" onClick={fit} />
-      </div>
-      <div className="absolute right-3 top-3 z-20 flex gap-1.5">
-        {onUseLocation && <MapButton label={t("nearby.you")} onClick={() => onUseLocation()} />}
-        <MapButton label={full ? "Close" : "Full"} onClick={() => setFull((v) => !v)} />
-      </div>
-
-      {selected && (
-        <button
-          type="button"
-          onClick={() => (onOpen ? onOpen(selected.id) : onSelect?.(selected.id))}
-          className="absolute bottom-3 left-3 right-3 z-20 flex items-center gap-3 rounded-[14px] border border-line bg-card/95 p-3 text-left shadow-card backdrop-blur transition active:scale-[.99]"
-        >
-          <PinLogo logoUrl={selected.logoUrl} initial={selected.initial} size={40} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="truncate text-sm font-bold text-ink">{selected.name}</span>
-              {selected.open != null && (
-                <Badge tone={selected.open ? "ok" : "neutral"}>
-                  {selected.open ? t("nearby.open") : t("nearby.closed")}
-                </Badge>
-              )}
-              {selected.closest && <Badge tone="brand">{t("nearby.nearest")}</Badge>}
-            </div>
-            <div className="mt-0.5 truncate text-xs font-semibold text-subtle">
-              {selected.category || t("nearby.title")}
-              {selected.dist ? ` · ${selected.dist}` : ""}
-            </div>
-            {selected.reward && (
-              <div className="mt-0.5 truncate text-xs font-semibold text-brand">{selected.reward}</div>
-            )}
-          </div>
-          <span className="flex-none text-subtle" aria-hidden>›</span>
-        </button>
-      )}
-
-      {full && pins.length > 0 && (
-        <div className="absolute bottom-20 left-3 right-3 z-20 flex gap-2 overflow-x-auto pb-1 lg:left-auto lg:top-16 lg:w-64 lg:flex-col lg:overflow-y-auto">
-          {pins.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => (onOpen ? onOpen(p.id) : onSelect?.(p.id))}
-              className={cn(
-                "min-w-[180px] rounded-[13px] border px-3 py-2 text-left shadow-card lg:min-w-0",
-                p.id === selectedId ? "border-brand bg-brand-muted" : "border-line bg-card",
-              )}
-            >
-              <div className="truncate text-sm font-bold text-ink">{p.name}</div>
-              <div className="text-xs text-subtle">{p.dist || p.initial}</div>
-            </button>
-          ))}
-        </div>
-      )}
+      <MapChrome
+        bare={bare}
+        list={pins}
+        selected={selected}
+        selectedId={selectedId}
+        full={full}
+        onSelect={onSelect}
+        onOpen={onOpen}
+        onUseLocation={onUseLocation}
+        onZoomIn={() => zoomBy(1)}
+        onZoomOut={() => zoomBy(-1)}
+        onFit={fit}
+        onToggleFull={() => setFull((v) => !v)}
+      />
     </div>
   );
 }
@@ -549,8 +488,10 @@ function GoogleMapBody({
   onOpen,
   userLocation,
   onUseLocation,
+  onMapClick,
   full,
   setFull,
+  bare,
   onError,
 }: {
   pins: MapPin[];
@@ -559,8 +500,10 @@ function GoogleMapBody({
   onOpen?: (id: string) => void;
   userLocation?: UserLocation;
   onUseLocation?: () => void;
+  onMapClick?: () => void;
   full: boolean;
   setFull: (next: boolean | ((current: boolean) => boolean)) => void;
+  bare: boolean;
   onError: () => void;
 }) {
   const t = useT();
@@ -572,6 +515,9 @@ function GoogleMapBody({
   const clusterer = useRef<any>(null);
   const selected = pins.find((p) => p.id === selectedId) ?? pins[0] ?? null;
   const circleIcons = useCircularPinIcons(pins, 40);
+  // Keep the latest handler without re-creating the map on every render.
+  const onMapClickRef = useRef(onMapClick);
+  onMapClickRef.current = onMapClick;
 
   useEffect(() => {
     let cancelled = false;
@@ -593,6 +539,8 @@ function GoogleMapBody({
           gestureHandling: "greedy",
           styles: WARM_MAP_STYLE,
         });
+        // Tapping the map background (not a marker) unfolds the browse list.
+        map.current.addListener("click", () => onMapClickRef.current?.());
       })
       .catch(onError);
     return () => {
@@ -715,17 +663,99 @@ function GoogleMapBody({
   }
 
   return (
-    <div className="relative h-full overflow-hidden rounded-[22px] border border-line bg-[#EEE6D6]">
+    <div className={cn("relative h-full overflow-hidden bg-[#EEE6D6]", !bare && "rounded-[22px] border border-line")}>
       <div ref={mapEl} className="absolute inset-0" />
 
+      <MapChrome
+        bare={bare}
+        list={pins}
+        selected={selected}
+        selectedId={selectedId}
+        full={full}
+        onSelect={onSelect}
+        onOpen={onOpen}
+        onUseLocation={onUseLocation}
+        onZoomIn={() => zoomBy(1)}
+        onZoomOut={() => zoomBy(-1)}
+        onFit={fit}
+        onToggleFull={() => setFull((v) => !v)}
+      />
+    </div>
+  );
+}
+
+function MapButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="rounded-[10px] border border-line bg-card px-3 py-2 text-xs font-bold text-ink shadow-card transition active:scale-[.98]"
+    >
+      {label}
+    </button>
+  );
+}
+
+/**
+ * In-map overlay chrome shared by all three map bodies (fallback / 2GIS /
+ * Google): zoom + fit + recenter + full-screen toggle, the selected-business
+ * card and the full-screen list. Extracted so the three bodies don't each carry
+ * an identical copy. In `bare` mode (full-bleed Nearby map) the host screen owns
+ * the controls, so only a single recenter button is kept.
+ */
+function MapChrome({
+  bare,
+  list,
+  selected,
+  selectedId,
+  full,
+  onSelect,
+  onOpen,
+  onUseLocation,
+  onZoomIn,
+  onZoomOut,
+  onFit,
+  onToggleFull,
+}: {
+  bare: boolean;
+  list: MapPin[];
+  selected: MapPin | null;
+  selectedId?: string | null;
+  full: boolean;
+  onSelect?: (id: string) => void;
+  onOpen?: (id: string) => void;
+  onUseLocation?: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onFit: () => void;
+  onToggleFull: () => void;
+}) {
+  const t = useT();
+
+  if (bare) {
+    // Only a recenter affordance — losing the way back to "you" after panning is
+    // a real regression. Pinch-zoom and drag stay native on the real-map bodies.
+    return onUseLocation ? (
+      <button
+        type="button"
+        onClick={onUseLocation}
+        aria-label={t("nearby.you")}
+        className="absolute bottom-3 right-3 z-20 grid h-11 w-11 place-items-center rounded-full bg-card text-lg shadow-card transition active:scale-95"
+      >
+        ◎
+      </button>
+    ) : null;
+  }
+
+  return (
+    <>
       <div className="absolute left-3 top-3 z-20 flex gap-1.5">
-        <MapButton label="+" onClick={() => zoomBy(1)} />
-        <MapButton label="-" onClick={() => zoomBy(-1)} />
-        <MapButton label="Fit" onClick={fit} />
+        <MapButton label="+" onClick={onZoomIn} />
+        <MapButton label="-" onClick={onZoomOut} />
+        <MapButton label="Fit" onClick={onFit} />
       </div>
       <div className="absolute right-3 top-3 z-20 flex gap-1.5">
-        {onUseLocation && <MapButton label={t("nearby.you")} onClick={() => onUseLocation()} />}
-        <MapButton label={full ? "Close" : "Full"} onClick={() => setFull((v) => !v)} />
+        {onUseLocation && <MapButton label={t("nearby.you")} onClick={onUseLocation} />}
+        <MapButton label={full ? "Close" : "Full"} onClick={onToggleFull} />
       </div>
 
       {selected && (
@@ -757,9 +787,9 @@ function GoogleMapBody({
         </button>
       )}
 
-      {full && pins.length > 0 && (
+      {full && list.length > 0 && (
         <div className="absolute bottom-20 left-3 right-3 z-20 flex gap-2 overflow-x-auto pb-1 lg:left-auto lg:top-16 lg:w-64 lg:flex-col lg:overflow-y-auto">
-          {pins.map((p) => (
+          {list.map((p) => (
             <button
               key={p.id}
               onClick={() => (onOpen ? onOpen(p.id) : onSelect?.(p.id))}
@@ -774,18 +804,7 @@ function GoogleMapBody({
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function MapButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="rounded-[10px] border border-line bg-card px-3 py-2 text-xs font-bold text-ink shadow-card transition active:scale-[.98]"
-    >
-      {label}
-    </button>
+    </>
   );
 }
 

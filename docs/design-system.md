@@ -195,6 +195,7 @@ The workhorse pattern: a **46–52px rounded icon tile** + title/sub stack + tra
 - **List row** — `background:#fff; border:1px solid var(--line); radius:18px; padding:14–15px; gap:13–14px`. Subtle shadow.
 - **Avatar** — rounded square (`radius:14px`) or circle; initials in `Bricolage 700`, `color:var(--accent)` on `--tile`. Stacked avatars overlap `-12px` with `2.5px` white ring.
 - **Featured card** — `linear-gradient(150deg, var(--accent), var(--accent-deep))`, white text, `radius:24px`, accent glow, decorative translucent circle bleed. In code: `bg-brand-gradient`.
+- **Wallet card accents** — the loyalty wallet gives each shop a fixed accent gradient chosen deterministically by business id. Five named gradients in the preset, all drawn from §1: `bg-wallet-terracotta` (`--accent`), `bg-wallet-amber` (`--amber`), `bg-wallet-sage` (`--sage`), `bg-wallet-plum` (voucher birthday), `bg-wallet-indigo` (voucher welcome). Use the class — never inline per-card hex.
 
 ---
 

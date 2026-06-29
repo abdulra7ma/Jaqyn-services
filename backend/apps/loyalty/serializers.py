@@ -89,9 +89,13 @@ class LoyaltyCardSerializer(serializers.Serializer):
     business_id = serializers.UUIDField()
     business_name = serializers.CharField()
     business_logo_url = serializers.CharField(allow_null=True)
+    business_category = serializers.CharField(allow_blank=True)
+    business_area = serializers.CharField(allow_blank=True)
+    business_hours = serializers.JSONField()
     type = serializers.CharField()
     name = serializers.CharField()
     reward_summary = serializers.CharField()
+    reward_expiry_days = serializers.IntegerField()
     joined = serializers.BooleanField()
     stamps_count = serializers.IntegerField()
     visits_count = serializers.IntegerField()
@@ -112,6 +116,10 @@ class LoyaltyTransactionSerializer(serializers.ModelSerializer):
     staff_name = serializers.CharField(
         source="staff.name", read_only=True, allow_null=True
     )
+    # The owner-facing ledger labels each row by the customer it affected.
+    customer_name = serializers.CharField(
+        source="customer.name", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = LoyaltyTransaction
@@ -123,6 +131,7 @@ class LoyaltyTransactionSerializer(serializers.ModelSerializer):
             "stamps_delta",
             "bill_amount",
             "staff_name",
+            "customer_name",
             "metadata",
             "created_at",
         )

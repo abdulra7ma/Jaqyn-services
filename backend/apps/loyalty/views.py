@@ -119,8 +119,15 @@ class BusinessProgramDetailView(APIView):
         )
         transactions = (
             LoyaltyTransaction.objects.filter(program=program)
-            .select_related("staff")
+            .select_related("staff", "customer")
             .order_by("-created_at")[:100]
+        )
+        # Recent voucher activity powers the Reward Usage tab; capped like the
+        # transaction ledger so one program can't return an unbounded list.
+        vouchers = (
+            LoyaltyVoucher.objects.filter(program=program)
+            .select_related("customer")
+            .order_by("-issued_at")[:100]
         )
         analytics = LoyaltyAnalyticsService.for_program(program)
         config = LoyaltyProgramSerializer(program, context={"request": request}).data
@@ -139,15 +146,30 @@ class BusinessProgramDetailView(APIView):
         return success_response(
             {
                 **config,
-                "overview": analytics.__dict__,
                 "members": members,
                 "transactions": LoyaltyTransactionSerializer(
                     transactions, many=True
                 ).data,
+                "vouchers": [
+                    {
+                        "voucher_code": v.voucher_code,
+                        "customer_name": v.customer.name
+                        or v.customer.phone
+                        or "Customer",
+                        "status": v.status,
+                        "reward_title": v.reward_title,
+                        "issued_at": v.issued_at,
+                    }
+                    for v in vouchers
+                ],
                 "analytics": {
-                    "stat_a": analytics.members,
-                    "stat_b": analytics.outstanding,
-                    "stat_c": analytics.redeemed,
+                    "members": analytics.members,
+                    "outstanding": analytics.outstanding,
+                    "redeemed": analytics.redeemed,
+                    "new_members_30d": analytics.new_members_30d,
+                    "repeat_rate": analytics.repeat_rate,
+                    "avg_basket": analytics.avg_basket,
+                    "redemptions_7d": analytics.redemptions_7d,
                 },
                 "settings": config,
             }

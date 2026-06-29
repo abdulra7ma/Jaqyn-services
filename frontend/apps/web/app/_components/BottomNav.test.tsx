@@ -8,12 +8,13 @@ describe("BottomNav", () => {
   it("renders the four nav links plus a center scan button (5 slots, no Groups)", () => {
     render(<BottomNav />);
 
-    // The four labelled nav destinations (i18n mock returns the key).
+    // Icon-only nav: each destination's accessible name comes from aria-label
+    // (i18n mock returns the key).
     for (const key of ["nav.home", "nav.loyalty", "nav.campaigns", "nav.profile"]) {
-      expect(screen.getByText(key)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: key })).toBeInTheDocument();
     }
     // Groups is gone.
-    expect(screen.queryByText("nav.groups")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "nav.groups" })).not.toBeInTheDocument();
 
     // The raised center scan control is a button that opens the personal-QR
     // sheet over the current page (no route change), so the page stays visible.
