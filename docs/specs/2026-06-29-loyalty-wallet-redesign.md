@@ -1,3 +1,10 @@
+---
+title: Loyalty Wallet Redesign — Physical Card Wallet + Nav Modernization
+service: frontend
+type: spec
+status: active
+last_reviewed: 2026-06-30
+---
 # Loyalty Wallet Redesign — Physical Card Wallet + Nav Modernization
 
 > Spec · 2026-06-29 · branch `feat/loyalty-business-design`

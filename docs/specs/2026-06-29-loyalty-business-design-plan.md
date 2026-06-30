@@ -1,3 +1,10 @@
+---
+title: Loyalty (Business) redesign — design-match plan
+service: frontend
+type: spec
+status: active
+last_reviewed: 2026-06-30
+---
 # Loyalty (Business) redesign — design-match plan
 
 Branch: `feat/loyalty-business-design`. Reference: `Jaqyn Loyalty (standalone).html`

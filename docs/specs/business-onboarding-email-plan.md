@@ -1,3 +1,10 @@
+---
+title: "Spec: Landing → Backend → Admin Approve → Email → Onboarding"
+service: shared
+type: spec
+status: active
+last_reviewed: 2026-06-30
+---
 # Spec: Landing → Backend → Admin Approve → Email → Onboarding
 
 Status: approved (decisions locked 2026-06-25). Owner: this session.

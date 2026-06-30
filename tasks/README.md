@@ -10,15 +10,14 @@ agent-executable task files plus a single live progress file.
 tasks/
   README.md            ← you are here
   CHECKPOINT.md        ← LIVE progress. Agent updates after EVERY task.
-  _shared/
-    SCHEMAS.md         ← all DB models (fields, choices, constraints)
-    API.md             ← all endpoints, request/response, permissions
-    CONVENTIONS.md     ← response envelope, error codes, auth, fraud rules
-    STRUCTURE.md       ← full repo folder layout + scalability conventions
-    DOCKER.md          ← every service/image, what to build vs pull, dev/prod
+  _local/              ← local-only notes (test accounts, etc.)
   backend/             ← B00..B11 task files (Django + DRF)
   frontend/            ← F00..F04 task files (Next.js: customer/business/staff)
 ```
+
+> Shared reference docs (schemas, API, conventions, structure, docker) moved out
+> of `tasks/_shared/` into the real docs tree — see `docs/INDEX.md`. `tasks/` is
+> a tracker system only.
 
 ## How an agent uses this
 
@@ -26,8 +25,9 @@ tasks/
    `Depends on` tasks are all `DONE`.
 2. Open that task file (e.g. `backend/B01-auth.md`). Read **Goal**, **Models**,
    **Endpoints**, **Logic**, **Acceptance**, **Definition of Done**.
-3. Cross-reference `_shared/SCHEMAS.md`, `_shared/API.md`,
-   `_shared/CONVENTIONS.md` for exact field names, payloads, error codes.
+3. Cross-reference `backend/docs/data-model.md` (canonical models),
+   `backend/docs/api.md` / `docs/contracts/API.md`, and
+   `docs/conventions/CONVENTIONS.md` for exact field names, payloads, error codes.
 4. Implement. Run the task's acceptance checks.
 5. Update `CHECKPOINT.md`: flip status to `DONE`, fill the date + notes, tick the
    checkboxes. Commit.

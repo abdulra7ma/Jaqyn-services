@@ -1,4 +1,4 @@
-// Backend response envelope (see tasks/_shared/CONVENTIONS.md).
+// Backend response envelope (see docs/conventions/CONVENTIONS.md).
 export type ApiSuccess<T> = {
   success: true;
   data: T;

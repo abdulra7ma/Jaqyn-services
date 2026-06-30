@@ -21,7 +21,20 @@ These are binding, not advisory. Follow them exactly.
 - `frontend/` — pnpm + turbo monorepo. Apps in `apps/`, shared packages in
   `packages/` (`@jaqyn/ui`, `@jaqyn/config`, `@jaqyn/api`, `@jaqyn/i18n`).
 - `landing/` — marketing site.
-- Prod: Railway (backend/Celery/PG/Redis) + Vercel (frontend) + R2 media. See `DEPLOY.md`.
+- Prod: **Railway runs every service** — backend, Celery, Postgres, Redis,
+  frontend, and landing — plus R2 media. No Vercel. See `DEPLOY.md`.
+
+## Documentation — where things live
+- **Read `docs/INDEX.md` first** — generated map of every doc, grouped by service.
+- `docs/` holds ONLY cross-cutting content: `conventions/`, `schemas/`,
+  `contracts/`, `guides/`, `architecture/`, `qa/`, `specs/` (active plans),
+  `design-system.md`, and `_archive/` (shipped plans, `status: deprecated`).
+- **Per-service docs are canonical** for each deployable: `backend/docs/`,
+  `frontend/docs/`, `landing/docs/` (each has `README` + `overview` +
+  `architecture`, plus service-specific files).
+- `tasks/` is **trackers only** (`B*`/`F*`/`CHECKPOINT.md`), not documentation.
+- Every doc carries YAML frontmatter (`title`, `service`, `type`, `status`,
+  `last_reviewed`); `docs/INDEX.md` is generated from it — don't hand-edit it.
 
 ## UI work — non-negotiable
 - **`docs/design-system.md` is the source of truth** for color, type, shape,

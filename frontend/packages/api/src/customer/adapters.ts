@@ -1,4 +1,4 @@
-// Maps raw backend payloads (tasks/_shared/SCHEMAS.md serializers) into the UI
+// Maps raw backend payloads (backend/docs/data-model.md serializers) into the UI
 // domain types the screens consume. Isolates two backend realities the UI must
 // not care about:
 //   • `business` arrives as a bare UUID in rewards/offers/groups (no name) —

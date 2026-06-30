@@ -1,3 +1,10 @@
+---
+title: "Customer map redesign — map-first `nearby`"
+service: frontend
+type: spec
+status: active
+last_reviewed: 2026-06-30
+---
 # Customer map redesign — map-first `nearby`
 
 > 2026-06-29 · customer web app · design spec

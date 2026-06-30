@@ -1,3 +1,10 @@
+---
+title: Campaigns Liveness Sweep — QA Report
+service: shared
+type: qa
+status: active
+last_reviewed: 2026-06-30
+---
 # Campaigns Liveness Sweep — QA Report
 
 Verified against real code under `/Users/abdulrahmandawoud/handy/personal/Jaqyn-services`. All line numbers below were re-confirmed by reading the cited files (raw-auditor line numbers were corrected where they drifted).

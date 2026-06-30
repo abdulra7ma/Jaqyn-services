@@ -1,11 +1,18 @@
+---
+title: Business Reports Revamp — Plan
+service: backend
+type: spec
+status: active
+last_reviewed: 2026-06-30
+---
 # Business Reports Revamp — Plan
 
 Replace the placeholder business Reports page (a flat grid of the `business_metrics`
-map) with the designed Reports experience from `Jaqyn.dc.html`: a tabbed,
+map) with the designed Reports experience from `docs/_archive/design-deck/Jaqyn.dc.html`: a tabbed,
 period-filterable analytics view (Overview / Retention / Staff performance) backed
 by a real reporting service. Wired end-to-end to live APIs.
 
-Design source: `Jaqyn.dc.html` → `// ---- REPORTS ----` block (`biz.report`,
+Design source: `docs/_archive/design-deck/Jaqyn.dc.html` → `// ---- REPORTS ----` block (`biz.report`,
 `repKpis`, `series`, `hourBars`, `nrBars`, `cohorts`, `staffPerf`, `repInsights`).
 
 Scope decisions (confirmed with owner):

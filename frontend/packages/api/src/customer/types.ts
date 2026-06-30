@@ -1,4 +1,4 @@
-// Customer-facing domain types. Mirror tasks/_shared/SCHEMAS.md (only the fields
+// Customer-facing domain types. Mirror backend/docs/data-model.md (only the fields
 // the customer screens render). Kept in the API layer so screens stay decoupled
 // from transport + backend shape.
 

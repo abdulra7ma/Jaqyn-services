@@ -1,9 +1,16 @@
+---
+title: Jaqyn Design System
+service: frontend
+type: reference
+status: active
+last_reviewed: 2026-06-30
+---
 # Jaqyn Design System
 
 > Bishkek Local Rewards · v1.0 · developer reference
 > Source of truth for color, type, shape and the UI primitives used across the
 > customer, staff and business apps. An interactive version lives next to this
-> file at `docs/design-system.dc.html`.
+> file at `docs/_archive/design-system.dc.html`.
 
 **Agents writing UI must read this file first.** Do not invent colors, radii,
 shadows, or type scales — pull them from here, and prefer the Tailwind tokens in

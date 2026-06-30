@@ -1,3 +1,10 @@
+---
+title: Onboarding / Activation / Landing — Production Readiness Audit
+service: shared
+type: qa
+status: active
+last_reviewed: 2026-06-30
+---
 # Onboarding / Activation / Landing — Production Readiness Audit
 
 Scope: business owner onboarding wizard, invite activation page, and the public

@@ -1,3 +1,10 @@
+---
+title: "Spec: Product images, business gallery, and KG location picker"
+service: shared
+type: spec
+status: active
+last_reviewed: 2026-06-30
+---
 # Spec: Product images, business gallery, and KG location picker
 
 Status: approved (decisions locked 2026-06-25). All images compressed server-side via

@@ -1,3 +1,10 @@
+---
+title: Landing Page Refresh — Work Plan
+service: landing
+type: spec
+status: active
+last_reviewed: 2026-06-30
+---
 # Landing Page Refresh — Work Plan
 
 Goal: update `landing/` so copy matches the platform's real features, drop stale/inaccurate

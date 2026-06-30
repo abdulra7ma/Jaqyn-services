@@ -1,3 +1,10 @@
+---
+title: Campaign Rewards — Implementation Plan
+service: shared
+type: spec
+status: draft
+last_reviewed: 2026-06-30
+---
 # Campaign Rewards — Implementation Plan
 
 Status: **Draft for approval — do not implement yet.**
