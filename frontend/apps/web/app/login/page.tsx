@@ -1,7 +1,7 @@
 "use client";
 
 import type { AuthResult } from "@jaqyn/api";
-import { postAuthRoute, usePasswordLogin, useRequestOtp, useVerifyOtp } from "@jaqyn/api";
+import { postAuthRoute, useLoginResolve, usePasswordLogin, useRequestOtp, useVerifyOtp } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Button, Input } from "@jaqyn/ui";
 import Link from "next/link";
@@ -17,19 +17,23 @@ function LoginFlow() {
   const params = useSearchParams();
   const returnTo = params.get("return") || "/";
 
-  const [mode, setMode] = useState<"phone" | "email">("phone");
-  const [phone, setPhone] = useState("");
+  const [step, setStep] = useState<"identifier" | "code" | "password">("identifier");
+  const [identifier, setIdentifier] = useState("");
   const [code, setCode] = useState("");
-  const [step, setStep] = useState<"phone" | "code">("phone");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const resolve = useLoginResolve();
   const requestOtp = useRequestOtp();
   const verifyOtp = useVerifyOtp();
   const passwordLogin = usePasswordLogin();
 
   const go = (r: AuthResult) => router.replace(postAuthRoute(r, returnTo));
-  const swap = mode === "email" ? "animate-[jqSwapR_.3s_ease]" : "animate-[jqSwapL_.3s_ease]";
+
+  function onContinue() {
+    resolve.mutate(identifier, {
+      onSuccess: (r) => setStep(r.method === "password" ? "password" : "code"),
+    });
+  }
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-cream px-4 py-10 font-sans text-ink sm:px-6">
@@ -67,98 +71,78 @@ function LoginFlow() {
         </div>
 
         <div className="mt-6 rounded-[22px] border border-line bg-card/80 p-5 shadow-card backdrop-blur-sm sm:p-6">
-          {/* sliding tab toggle */}
-          <div className="relative flex rounded-xl bg-board/60 p-1">
-            <div
-              className="absolute bottom-1 left-1 top-1 w-[calc(50%-4px)] rounded-[10px] bg-card shadow-card transition-transform duration-300 ease-out"
-              style={{ transform: mode === "email" ? "translateX(100%)" : "translateX(0)" }}
-            />
-            {(["phone", "email"] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`relative z-10 flex-1 rounded-[10px] py-2 text-center text-sm font-semibold transition-colors ${
-                  mode === m ? "text-ink" : "text-subtle"
-                }`}
-              >
-                {t(`auth.tab.${m}`)}
-              </button>
-            ))}
-          </div>
-
-          {/* animated form swap */}
-          <div key={`${mode}-${step}`} className={`mt-5 ${swap}`}>
-            {mode === "phone" ? (
-              step === "phone" ? (
-                <form
-                  className="flex flex-col gap-4"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    requestOtp.mutate(phone, { onSuccess: () => setStep("code") });
-                  }}
-                >
-                  <Input
-                    label={t("auth.phone")}
-                    type="tel"
-                    inputMode="tel"
-                    placeholder={t("auth.phonePlaceholder")}
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    required
-                  />
-                  {requestOtp.isError && <p className="text-sm text-danger">{errMessage(requestOtp.error)}</p>}
-                  <Button type="submit" disabled={requestOtp.isPending || phone.length < 9}>
-                    {requestOtp.isPending ? t("common.loading") : t("auth.sendCode")}
-                  </Button>
-                </form>
-              ) : (
-                <form
-                  className="flex flex-col gap-4"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    verifyOtp.mutate({ phone, code }, { onSuccess: (r) => go(r) });
-                  }}
-                >
-                  <p className="text-sm text-subtle">
-                    {t("auth.codeSentTo")} <b className="text-ink">{phone}</b>
-                  </p>
-                  <Input
-                    label={t("auth.enterCode")}
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="0000"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    required
-                  />
-                  {verifyOtp.isError && <p className="text-sm text-danger">{errMessage(verifyOtp.error)}</p>}
-                  <Button type="submit" disabled={verifyOtp.isPending || code.length < 4}>
-                    {verifyOtp.isPending ? t("common.loading") : t("auth.verify")}
-                  </Button>
-                  <button type="button" className="text-sm font-semibold text-brand" onClick={() => setStep("phone")}>
-                    ‹ {t("auth.resend")}
-                  </button>
-                </form>
-              )
-            ) : (
+          <div key={step} className="animate-[jqIn_.3s_ease]">
+            {step === "identifier" && (
               <form
                 className="flex flex-col gap-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  passwordLogin.mutate({ email, password }, { onSuccess: (r) => go(r) });
+                  onContinue();
                 }}
               >
                 <Input
-                  label={t("auth.email")}
-                  type="email"
+                  label={t("auth.identifier")}
+                  type="text"
                   inputMode="email"
-                  autoComplete="email"
-                  placeholder={t("auth.emailPlaceholder")}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="username"
+                  placeholder={t("auth.identifierPlaceholder")}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   required
                 />
+                {resolve.isError && <p className="text-sm text-danger">{errMessage(resolve.error)}</p>}
+                <Button type="submit" disabled={resolve.isPending || identifier.length < 4}>
+                  {resolve.isPending ? t("common.loading") : t("auth.continue")}
+                </Button>
+              </form>
+            )}
+
+            {step === "code" && (
+              <form
+                className="flex flex-col gap-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  verifyOtp.mutate({ phone: identifier, code }, { onSuccess: (r) => go(r) });
+                }}
+              >
+                <p className="text-sm text-subtle">
+                  {t("auth.codeSentTo")} <b className="text-ink">{identifier}</b>
+                </p>
+                <Input
+                  label={t("auth.enterCode")}
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="0000"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  required
+                />
+                {verifyOtp.isError && <p className="text-sm text-danger">{errMessage(verifyOtp.error)}</p>}
+                <Button type="submit" disabled={verifyOtp.isPending || code.length < 4}>
+                  {verifyOtp.isPending ? t("common.loading") : t("auth.verify")}
+                </Button>
+                <button
+                  type="button"
+                  className="text-sm font-semibold text-brand"
+                  onClick={() => requestOtp.mutate(identifier)}
+                >
+                  {t("auth.resend")}
+                </button>
+                <button type="button" className="text-sm text-subtle" onClick={() => setStep("identifier")}>
+                  ‹ {t("common.back")}
+                </button>
+              </form>
+            )}
+
+            {step === "password" && (
+              <form
+                className="flex flex-col gap-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  passwordLogin.mutate({ identifier, password }, { onSuccess: (r) => go(r) });
+                }}
+              >
                 <Input
                   label={t("auth.password")}
                   type="password"
@@ -173,9 +157,12 @@ function LoginFlow() {
                   </Link>
                 </div>
                 {passwordLogin.isError && <p className="text-sm text-danger">{errMessage(passwordLogin.error)}</p>}
-                <Button type="submit" disabled={passwordLogin.isPending || !email || !password}>
+                <Button type="submit" disabled={passwordLogin.isPending || !password}>
                   {passwordLogin.isPending ? t("common.loading") : t("auth.signIn")}
                 </Button>
+                <button type="button" className="text-sm text-subtle" onClick={() => setStep("identifier")}>
+                  ‹ {t("common.back")}
+                </button>
               </form>
             )}
           </div>
