@@ -73,3 +73,7 @@ class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
     code = serializers.CharField(min_length=6, max_length=6)
     new_password = serializers.CharField(min_length=8, max_length=128)
+
+
+class LoginResolveSerializer(serializers.Serializer):
+    identifier = serializers.CharField(max_length=255)

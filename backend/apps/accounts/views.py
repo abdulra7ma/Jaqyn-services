@@ -5,6 +5,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.serializers import (
     CustomerProfileSerializer,
+    LoginResolveSerializer,
     PasswordLoginSerializer,
     ProfileUpdateSerializer,
     RequestEmailOTPSerializer,
@@ -22,6 +23,8 @@ from apps.accounts.services import (
     issue_password_reset_otp,
     reset_password,
     resolve_area,
+    resolve_areas,
+    resolve_login_method,
     verify_email_otp,
     verify_otp,
 )
@@ -44,6 +47,7 @@ def _auth_payload(user, access, refresh, **extra):
         "refresh": refresh,
         "user": UserSerializer(user).data,
         "area": resolve_area(user),
+        "areas": resolve_areas(user),
         "onboarding_completed": _onboarding_done(user),
         "profile_completed": _profile_done(user),
         **extra,
@@ -148,6 +152,16 @@ class ResetPasswordView(APIView):
         return success_response(_auth_payload(user, access, refresh))
 
 
+class LoginResolveView(APIView):
+    permission_classes = [AllowAny]  # Public — determines auth method before credentials are sent
+
+    def post(self, request):
+        serializer = LoginResolveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = resolve_login_method(serializer.validated_data["identifier"], request_ip(request))
+        return success_response(result)
+
+
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -166,6 +180,7 @@ class MeView(APIView):
         data = {
             "user": UserSerializer(request.user).data,
             "area": resolve_area(request.user),
+            "areas": resolve_areas(request.user),
             "limits": {"max_active_groups": SystemConfiguration.load().max_active_groups_per_user},
         }
         if hasattr(request.user, "customer_profile"):

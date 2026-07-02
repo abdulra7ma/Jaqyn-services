@@ -255,6 +255,24 @@ def reset_password(email: str, code: str, new_password: str) -> tuple[User, str,
     return user, str(refresh.access_token), str(refresh)
 
 
+def resolve_login_method(identifier: str, ip_address: str | None) -> dict[str, str]:
+    """Decide how ``identifier`` signs in: OTP or password.
+
+    Email (contains ``@``) → password. Phone → password when the matched user
+    has a usable password (staff/owner); otherwise OTP: the code is sent now and
+    the ``request_id`` returned (unknown phones fall through to the OTP signup
+    path, matching ``verify_otp``). Note this reveals whether an identifier is
+    password-backed — an accepted, throttled enumeration tradeoff.
+    """
+    if "@" in identifier:
+        return {"method": "password"}
+    user = User.objects.filter(phone=identifier, is_active=True).first()
+    if user is not None and user.has_usable_password():
+        return {"method": "password"}
+    request_id = issue_otp(identifier, ip_address)
+    return {"method": "otp", "request_id": request_id}
+
+
 def resolve_area(user):
     """The app area a user lands in after login. Priority: owner > staff > customer."""
     from apps.businesses.models import Business
@@ -264,6 +282,28 @@ def resolve_area(user):
     if user.staff_memberships.filter(is_active=True).exists():
         return "staff"
     return "customer"
+
+
+def resolve_areas(user) -> list[str]:
+    """Every app area the user may enter (a user can hold more than one).
+
+    ``resolve_area`` picks the single landing area; this lists all areas the UI
+    should let them switch into. An owner who also has an active StaffMember row
+    (see ``ensure_owner_staff``) gets both "business" and "staff", which is what
+    drives the owner→staff switch and its conditional nav item. Order mirrors the
+    landing priority (business > staff > customer) so the first entry equals
+    ``resolve_area``.
+    """
+    from apps.businesses.models import Business
+
+    areas = []
+    if Business.objects.filter(owner=user).exists():
+        areas.append("business")
+    if user.staff_memberships.filter(is_active=True).exists():
+        areas.append("staff")
+    if not areas:
+        areas.append("customer")
+    return areas
 
 
 def authenticate_password(email, password):

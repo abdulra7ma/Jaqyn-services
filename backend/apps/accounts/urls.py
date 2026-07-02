@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.accounts.views import (
     AvatarUploadView,
+    LoginResolveView,
     LogoutView,
     MeView,
     PasswordLoginView,
@@ -15,6 +16,7 @@ from apps.accounts.views import (
 )
 
 urlpatterns = [
+    path("login/resolve/", LoginResolveView.as_view(), name="login-resolve"),
     path("request-otp/", RequestOTPView.as_view(), name="request-otp"),
     path("verify-otp/", VerifyOTPView.as_view(), name="verify-otp"),
     path("request-email-otp/", RequestEmailOTPView.as_view(), name="request-email-otp"),
