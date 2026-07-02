@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<div class="mb-4 flex items-center gap-3">
+  <h1 class="text-lg font-semibold">Leads</h1>
+  <button id="add-row" class="px-3 py-1.5 rounded-lg text-white" style="background:#C25E3C">+ Row</button>
+  <button id="add-column" class="px-3 py-1.5 rounded-lg border">+ Column</button>
+  <label class="px-3 py-1.5 rounded-lg border cursor-pointer">
+    Upload JSON<input id="upload" type="file" accept="application/json" class="hidden">
+  </label>
+  <input id="search" placeholder="Search…" class="px-3 py-1.5 rounded-lg border ml-auto">
+</div>
+<div id="leads-table"></div>
+
+{% csrf_token %}
+<link rel="stylesheet" href="{% static 'leads/tabulator.min.css' %}">
+<script src="{% static 'leads/tabulator.min.js' %}"></script>
+<script>
+  window.LEADS_URLS = {
+    table: "{% url 'leads_api_table' %}",
+    upload: "{% url 'leads_api_upload' %}",
+    rows: "{% url 'leads_api_rows' %}",
+    row: (id) => `{% url 'leads_api_row' 0 %}`.replace('0', id),
+    columns: "{% url 'leads_api_columns' %}",
+  };
+</script>
+<script src="{% static 'leads/grid.js' %}"></script>
+{% endblock %}

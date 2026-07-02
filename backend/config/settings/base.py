@@ -150,6 +150,14 @@ UNFOLD = {
                     {"title": _("System config"), "icon": "settings", "link": reverse_lazy("admin:system_systemconfiguration_changelist")},
                 ],
             },
+            {
+                "title": _("Sales leads"),
+                "items": [
+                    {"title": _("Leads table"), "icon": "table_view", "link": reverse_lazy("leads_page")},
+                    {"title": _("Lead columns"), "icon": "view_column", "link": reverse_lazy("admin:leads_leadcolumn_changelist")},
+                    {"title": _("Lead statuses"), "icon": "flag", "link": reverse_lazy("admin:leads_leadstatus_changelist")},
+                ],
+            },
         ],
     },
 }
