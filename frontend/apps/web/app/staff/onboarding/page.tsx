@@ -87,8 +87,11 @@ export default function StaffOnboardingPage() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-ink">{t("staff.onboarding.avatar")}</span>
+            <label htmlFor="staff-avatar" className="text-sm font-medium text-ink">
+              {t("staff.onboarding.avatar")}
+            </label>
             <input
+              id="staff-avatar"
               ref={avatarInput}
               type="file"
               accept="image/*"
