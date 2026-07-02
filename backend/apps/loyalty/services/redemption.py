@@ -143,16 +143,37 @@ class LoyaltyRedemptionService:
 
     @staticmethod
     @transaction.atomic
-    def redeem_voucher(code: str, staff: StaffMember) -> LoyaltyVoucher:
-        """Redeem an active, unexpired voucher belonging to the staff business."""
-        try:
-            voucher = (
-                LoyaltyVoucher.objects.select_for_update()
-                .select_related("business")
-                .get(voucher_code=code)
-            )
-        except LoyaltyVoucher.DoesNotExist as exc:
-            raise JaqynAPIException("VOUCHER_NOT_FOUND", status_code=404) from exc
+    def redeem_voucher(
+        staff: StaffMember,
+        code: str | None = None,
+        voucher_id: object | None = None,
+    ) -> LoyaltyVoucher:
+        """Redeem an active, unexpired voucher belonging to the staff business.
+
+        Accepts either a voucher code (typed-in or from QR scan) or the UUID
+        from the scan-customer ``active_vouchers`` list so the staff can redeem
+        straight from the scan sheet. Exactly one must be provided. The
+        business-ownership check runs under the lock so an id from another
+        business's scan is rejected with ``WRONG_BUSINESS``.
+        """
+        if voucher_id is not None:
+            try:
+                voucher = (
+                    LoyaltyVoucher.objects.select_for_update()
+                    .select_related("business", "program")
+                    .get(id=voucher_id)
+                )
+            except LoyaltyVoucher.DoesNotExist as exc:
+                raise JaqynAPIException("VOUCHER_NOT_FOUND", status_code=404) from exc
+        else:
+            try:
+                voucher = (
+                    LoyaltyVoucher.objects.select_for_update()
+                    .select_related("business", "program")
+                    .get(voucher_code=code)
+                )
+            except LoyaltyVoucher.DoesNotExist as exc:
+                raise JaqynAPIException("VOUCHER_NOT_FOUND", status_code=404) from exc
         if voucher.business_id != staff.business_id:
             raise JaqynAPIException("WRONG_BUSINESS")
         if voucher.status != LoyaltyVoucher.Status.ACTIVE:

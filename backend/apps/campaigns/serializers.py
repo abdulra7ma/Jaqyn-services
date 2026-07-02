@@ -816,14 +816,20 @@ class UnifiedConfirmVisitSerializer(serializers.Serializer):
 
 
 class ScanVoucherSerializer(serializers.Serializer):
-    """Staff scan/redeem-voucher input — a redeem QR token or a typed-in code."""
+    """Staff scan/redeem-voucher input — a redeem QR token, typed-in code, or voucher id.
+
+    ``voucher_id`` is the UUID surfaced in the scan-customer ``active_vouchers``
+    list; accepting it here lets the staff redeem straight from the scan sheet
+    without a second QR scan. Exactly one of token/code/voucher_id is required.
+    """
 
     token = serializers.CharField(required=False, max_length=128)
     code = serializers.CharField(required=False, max_length=64)
+    voucher_id = serializers.UUIDField(required=False)
 
     def validate(self, attrs: dict) -> dict:
-        if not attrs.get("token") and not attrs.get("code"):
-            raise serializers.ValidationError("token or code is required")
+        if not attrs.get("token") and not attrs.get("code") and not attrs.get("voucher_id"):
+            raise serializers.ValidationError("token, code, or voucher_id is required")
         return attrs
 
 

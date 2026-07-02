@@ -3,7 +3,7 @@ title: Documentation Index
 service: shared
 type: reference
 status: active
-last_reviewed: 2026-06-30
+last_reviewed: 2026-07-02
 ---
 
 # Documentation Index
@@ -78,6 +78,7 @@ Cross-cutting docs live in `docs/`; each deployable has canonical docs under `ba
 | [Spec Template](specs/SPEC-TEMPLATE.md) | spec | draft |
 | [Spec: Landing → Backend → Admin Approve → Email → Onboarding](specs/business-onboarding-email-plan.md) | spec | active |
 | [Spec: Product images, business gallery, and KG location picker](specs/images-gallery-location-plan.md) | spec | active |
+| [Staff App Handoff — Implementation Plan](specs/staff-app-handoff-plan.md) | spec | active |
 
 ## Archived (deprecated)
 

@@ -113,6 +113,7 @@ vi.mock("@jaqyn/api", () => ({
   }),
   useConfirmSocial: () => ({ isPending: false, mutate: vi.fn(), reset: vi.fn() }),
   useRedeemCampaignVoucher: () => ({ isPending: false, mutate: vi.fn(), reset: vi.fn() }),
+  useRedeemVoucherById: () => ({ isPending: false, mutate: vi.fn(), reset: vi.fn() }),
   useConfirmGroup: () => ({ isPending: false, mutate: vi.fn(), reset: vi.fn() }),
 }));
 
@@ -123,8 +124,9 @@ function customerDispatch(rows: CampaignScanRow[]): ScanDispatchResult {
     customer: { id: "u-1", name: "Bek", phone: "700123567" },
     rows,
     none_eligible: rows.length === 0 || rows.every((r) => !r.eligible),
+    active_vouchers: [],
   };
-  return { kind: "customer", customer, voucher: null, reason: null };
+  return { kind: "customer", customer, voucher: null, group: null, reason: null };
 }
 
 // Enable the camera, then fire a scan via the mocked QrScanner button.
@@ -155,9 +157,12 @@ describe("Staff scan — loyalty chooser (choose-one)", () => {
 
     // The Sheet primitive renders a sr-only title from ariaLabel and the visible
     // section label — both contain the same key. Use getAllByText.
+    // The chooser title appears as the dialog aria-label (sr-only) and as a visible heading.
     expect(screen.getAllByText("staff.chooser.title").length).toBeGreaterThanOrEqual(1);
+    // The program name appears as the tile's secondary line.
     expect(screen.getByText("Points Card")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "staff.chooser.enterBill" })).toBeInTheDocument();
+    // ProgramTile button's accessible name = emoji + action word + program name — use partial match.
+    expect(screen.getByRole("button", { name: /staff\.chooser\.enterBill/ })).toBeInTheDocument();
   });
 
   it("entering a bill amount calls confirmVisitUnified with that amount", async () => {
@@ -175,7 +180,7 @@ describe("Staff scan — loyalty chooser (choose-one)", () => {
     render(<StaffScanPage />);
     await scan(user);
 
-    await user.click(screen.getByRole("button", { name: "staff.chooser.enterBill" }));
+    await user.click(screen.getByRole("button", { name: /staff\.chooser\.enterBill/ }));
     // Key "120" on the numpad.
     await user.click(screen.getByRole("button", { name: "1" }));
     await user.click(screen.getByRole("button", { name: "2" }));
@@ -193,7 +198,8 @@ describe("Staff scan — loyalty chooser (choose-one)", () => {
     render(<StaffScanPage />);
     await scan(user);
 
-    await user.click(screen.getByRole("button", { name: "staff.chooser.addStamp" }));
+    // ProgramTile accessible name = emoji + action word + program name.
+    await user.click(screen.getByRole("button", { name: /staff\.scan\.progStamp/ }));
 
     expect(confirmCall.body).toEqual({ token: "TOKEN-123", campaignId: "stamp-1" });
   });

@@ -11,11 +11,21 @@ surface the staff till still calls.
 from rest_framework.views import APIView
 
 from apps.campaigns.models import Campaign, CampaignRewardVoucher
-from apps.qr.models import QRCodeToken, ScanLog
+from apps.qr.models import QRCodeToken
 from apps.qr.services import resolve_qr_token
-from apps.staff.serializers import StaffScanSerializer
-from apps.staff.services import get_staff_for_user
+from apps.staff.serializers import (
+    ActivityEventSerializer,
+    ActivityQuerySerializer,
+    StaffScanSerializer,
+    StaffTodayStatsSerializer,
+)
+from apps.staff.services import (
+    get_staff_for_user,
+    get_staff_today_stats,
+    list_activity_events,
+)
 from core.exceptions import JaqynAPIException
+from core.pagination import StandardResultsSetPagination
 from core.permissions import IsStaff
 from core.response import success_response
 
@@ -106,39 +116,44 @@ class StaffProgramsView(APIView):
         })
 
 
-class StaffRecentActivityView(APIView):
-    """Recent scans + voucher redemptions at the staff member's business."""
+class StaffStatsView(APIView):
+    """Today's scan + redemption counters for the staff member's business.
+
+    Feeds the two stat tiles on the staff Profile/Activity screens (handoff
+    plan §B1). Zero logic here — the service owns the "today" semantics.
+    """
 
     permission_classes = [IsStaff]
+    serializer_class = StaffTodayStatsSerializer
 
     def get(self, request):
         staff = get_staff_for_user(request.user)
-        scans = ScanLog.objects.filter(business=staff.business).order_by("-created_at")[:20]
-        redemptions = (
-            CampaignRewardVoucher.objects.filter(
-                business=staff.business,
-                status=CampaignRewardVoucher.Status.REDEEMED,
-            )
-            .order_by("-redeemed_at")[:20]
+        stats = get_staff_today_stats(staff.business)
+        return success_response(StaffTodayStatsSerializer(stats).data)
+
+
+class StaffRecentActivityView(APIView):
+    """Unified, paginated activity feed at the staff member's business.
+
+    One ``events`` list (redeem / stamp / visit / points / social — see
+    ``apps.staff.services.activity`` for the source mapping), optionally
+    filtered by ``?kind=`` and paginated with the project-standard page-number
+    pagination (default 25, hard max 100 via ``page_size``).
+    """
+
+    permission_classes = [IsStaff]
+    serializer_class = ActivityEventSerializer
+    pagination_class = StandardResultsSetPagination
+
+    def get(self, request):
+        query = ActivityQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        staff = get_staff_for_user(request.user)
+        events = list_activity_events(
+            staff.business, kind=query.validated_data.get("kind")
         )
-        return success_response({
-            "scans": [
-                {
-                    "id": str(scan.id),
-                    "action": scan.action,
-                    "status": scan.status,
-                    "failure_reason": scan.failure_reason,
-                    "created_at": scan.created_at,
-                }
-                for scan in scans
-            ],
-            "redemptions": [
-                {
-                    "id": str(voucher.id),
-                    "code": voucher.voucher_code,
-                    "status": voucher.status,
-                    "created_at": voucher.redeemed_at or voucher.created_at,
-                }
-                for voucher in redemptions
-            ],
-        })
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(events, request, view=self)
+        return paginator.get_paginated_response(
+            ActivityEventSerializer(page, many=True).data
+        )

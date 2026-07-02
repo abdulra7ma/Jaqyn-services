@@ -160,3 +160,246 @@ def test_loyalty_endpoints_enforce_roles(api_actors):
     assert client.get("/api/business/loyalty/programs/").status_code == 403
     client.force_authenticate(owner)
     assert client.get("/api/customer/loyalty/cards/").status_code == 403
+
+
+# --- B2: unified scan active_vouchers + group token tests ------------------
+
+
+def _make_loyalty_voucher(program, customer, business, voucher_code, reward_title="Free coffee"):
+    """Helper: create a LoyaltyMembership + ACTIVE LoyaltyVoucher."""
+    membership, _ = LoyaltyMembership.objects.get_or_create(
+        program=program, customer=customer
+    )
+    return LoyaltyVoucher.objects.create(
+        membership=membership,
+        program=program,
+        customer=customer,
+        business=business,
+        voucher_code=voucher_code,
+        status=LoyaltyVoucher.Status.ACTIVE,
+        reward_type=LoyaltyProgram.RewardType.FREE_ITEM,
+        reward_title=reward_title,
+    )
+
+
+@pytest.mark.django_db
+def test_unified_scan_customer_returns_active_vouchers(api_actors):
+    """Scanning a customer QR surfaces their ACTIVE loyalty voucher for this business."""
+    _, customer, staff, business = api_actors
+
+    program = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Stamp card",
+        required_count=5,
+        reward_title="Free coffee",
+    )
+    voucher = _make_loyalty_voucher(program, customer, business, "TESTVOUCHER1")
+    token = get_or_create_customer_profile_token(customer)
+    client = APIClient()
+    client.force_authenticate(staff.user)
+
+    response = client.post("/api/staff/scan/", {"token": token.token}, format="json")
+
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert data["kind"] == "customer"
+    assert len(data["active_vouchers"]) == 1
+    v = data["active_vouchers"][0]
+    assert v["id"] == str(voucher.id)
+    assert v["source"] == "loyalty"
+    assert v["label"] == "Free coffee"
+
+
+@pytest.mark.django_db
+def test_unified_scan_customer_active_vouchers_empty_when_none(api_actors):
+    """active_vouchers is an empty list when the customer holds no vouchers."""
+    _, customer, staff, business = api_actors
+    token = get_or_create_customer_profile_token(customer)
+    client = APIClient()
+    client.force_authenticate(staff.user)
+
+    response = client.post("/api/staff/scan/", {"token": token.token}, format="json")
+
+    assert response.status_code == 200
+    assert response.data["data"]["active_vouchers"] == []
+
+
+@pytest.mark.django_db
+def test_unified_scan_customer_excludes_other_business_vouchers(api_actors):
+    """active_vouchers must not include vouchers from a different business."""
+    _, customer, staff, business = api_actors
+
+    other_owner = User.objects.create_user(phone="+996700099001", role=User.Role.BUSINESS_OWNER)
+    other_biz = Business.objects.create(
+        owner=other_owner, name="Other Cafe", status=Business.Status.APPROVED
+    )
+    other_program = LoyaltyProgram.objects.create(
+        business=other_biz,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Other stamps",
+        required_count=5,
+        reward_title="Other reward",
+    )
+    _make_loyalty_voucher(other_program, customer, other_biz, "OTHERVOUCHER", "Other reward")
+    token = get_or_create_customer_profile_token(customer)
+    client = APIClient()
+    client.force_authenticate(staff.user)
+
+    response = client.post("/api/staff/scan/", {"token": token.token}, format="json")
+
+    assert response.status_code == 200
+    assert response.data["data"]["active_vouchers"] == []
+
+
+@pytest.mark.django_db
+def test_redeem_loyalty_voucher_by_id_happy_path(api_actors):
+    """Loyalty redeem endpoint accepts voucher_id from scan-customer active_vouchers."""
+    _, customer, staff, business = api_actors
+
+    program = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Stamp card",
+        required_count=5,
+        reward_title="Free coffee",
+    )
+    voucher = _make_loyalty_voucher(program, customer, business, "REDEEM001")
+    client = APIClient()
+    client.force_authenticate(staff.user)
+
+    response = client.post(
+        "/api/staff/loyalty/redeem-voucher/",
+        {"voucher_id": str(voucher.id)},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.data["data"]["status"] == LoyaltyVoucher.Status.REDEEMED
+
+
+@pytest.mark.django_db
+def test_redeem_loyalty_voucher_by_id_wrong_business_rejected(api_actors):
+    """Redeeming a loyalty voucher_id from another business returns WRONG_BUSINESS."""
+    _, customer, staff, business = api_actors
+
+    other_owner = User.objects.create_user(phone="+996700099002", role=User.Role.BUSINESS_OWNER)
+    other_biz = Business.objects.create(
+        owner=other_owner, name="Wrong Cafe", status=Business.Status.APPROVED
+    )
+    other_program = LoyaltyProgram.objects.create(
+        business=other_biz,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Other stamps",
+        required_count=5,
+        reward_title="Other reward",
+    )
+    voucher = _make_loyalty_voucher(other_program, customer, other_biz, "WRONGBIZ001", "Other reward")
+    client = APIClient()
+    client.force_authenticate(staff.user)
+
+    response = client.post(
+        "/api/staff/loyalty/redeem-voucher/",
+        {"voucher_id": str(voucher.id)},
+        format="json",
+    )
+    assert response.status_code in (400, 403)
+    assert response.data["error"]["code"] == "WRONG_BUSINESS"
+
+
+@pytest.mark.django_db
+def test_redeem_loyalty_voucher_requires_code_or_id(api_actors):
+    """Redeem endpoint returns 400 when neither code nor voucher_id is sent."""
+    _, _, staff, _ = api_actors
+    client = APIClient()
+    client.force_authenticate(staff.user)
+
+    response = client.post("/api/staff/loyalty/redeem-voucher/", {}, format="json")
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_unified_scan_group_token_returns_group_info():
+    """Scanning a GROUP_INVITE token returns kind=group with member + leader info."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.campaigns.models import Campaign, Group, GroupMember
+    from apps.campaigns.tests.helpers import make_business, make_campaign, make_customer, make_staff
+    from apps.qr.models import QRCodeToken
+    from apps.qr.services import create_token
+
+    business = make_business("g01")
+    leader = make_customer("g01")
+    member = make_customer("g02")
+    staff_user = make_staff(business, suffix="g01")
+    campaign = make_campaign(
+        business,
+        campaign_type=Campaign.CampaignType.GROUP,
+        required_group_size=2,
+    )
+
+    # Mint a GROUP_INVITE token (mirrors what CampaignGroupService.create_group does).
+    qr_token = create_token(
+        QRCodeToken.Type.GROUP_INVITE,
+        business=business,
+        customer=leader,
+        campaign=campaign.id,
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
+    group = Group.objects.create(
+        campaign=campaign,
+        group_leader=leader,
+        status=Group.Status.FORMING,
+        required_size=2,
+        invite_token=qr_token.token,
+    )
+    GroupMember.objects.create(
+        group=group, customer=leader, status=GroupMember.Status.CHECKED_IN
+    )
+    GroupMember.objects.create(
+        group=group, customer=member, status=GroupMember.Status.JOINED
+    )
+
+    client = APIClient()
+    client.force_authenticate(staff_user.user)
+
+    response = client.post("/api/staff/scan/", {"token": qr_token.token}, format="json")
+
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert data["kind"] == "group"
+    assert data["group_session_id"] == str(group.id)
+    assert data["required_size"] == 2
+    assert data["leader_name"] == leader.name
+    assert len(data["members"]) == 2
+    leader_member = next(m for m in data["members"] if m["is_leader"])
+    assert leader_member["status"] == GroupMember.Status.CHECKED_IN
+
+
+@pytest.mark.django_db
+def test_unified_scan_excludes_group_campaigns_from_customer_rows():
+    """When scanning a customer QR, GROUP campaigns must not appear in campaigns list."""
+    from apps.campaigns.models import Campaign
+    from apps.campaigns.tests.helpers import make_business, make_campaign, make_customer, make_staff
+    from apps.qr.services import get_or_create_customer_profile_token
+
+    business = make_business("ue01")
+    staff_user = make_staff(business, suffix="ue01")
+    customer = make_customer("ue01")
+    make_campaign(business, required_count=3)  # INDIVIDUAL
+    group_campaign = make_campaign(
+        business,
+        campaign_type=Campaign.CampaignType.GROUP,
+        required_group_size=4,
+    )
+    token = get_or_create_customer_profile_token(customer)
+
+    client = APIClient()
+    client.force_authenticate(staff_user.user)
+    response = client.post("/api/staff/scan/", {"token": token.token}, format="json")
+
+    assert response.status_code == 200
+    data = response.data["data"]
+    campaign_ids = [row["campaign_id"] for row in data["campaigns"]]
+    assert str(group_campaign.id) not in campaign_ids

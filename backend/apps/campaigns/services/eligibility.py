@@ -275,18 +275,28 @@ class CampaignEligibilityService:
     def eligible_campaigns_for_customer(
         cls, business, customer_id, now: datetime | None = None
     ) -> list[EligibilityResult]:
-        """Return one :class:`EligibilityResult` per active campaign at a business.
+        """Return one :class:`EligibilityResult` per active INDIVIDUAL/SOCIAL campaign at a business.
 
         Used by the staff-scan surface to surface every campaign the customer
         could progress (and the reason for any that are blocked). Prefetches the
         rule, the reward, and the customer's participant rows to keep the
         per-campaign checks and the staff-chooser row fields free of N+1 queries.
+
+        GROUP campaigns are excluded: they complete only via the confirm-group
+        flow (staff scans the group's invite QR), never via the per-customer
+        chooser. Showing a GROUP row in the chooser would mislead staff into
+        tapping ``confirm-visit`` for a flow that requires ``confirm-group``.
         """
         now = now or timezone.now()
         campaigns = list(
             Campaign.objects.filter(
-                business=business, status=Campaign.Status.ACTIVE
-            ).select_related("rule", "reward")
+                business=business,
+                status=Campaign.Status.ACTIVE,
+            )
+            # ponytail: exclude GROUP at query time — one extra filter beats
+            # post-filtering a large list or hiding ineligible rows in the FE.
+            .exclude(campaign_type=Campaign.CampaignType.GROUP)
+            .select_related("rule", "reward")
         )
         participant_by_campaign = {
             p.campaign_id: p

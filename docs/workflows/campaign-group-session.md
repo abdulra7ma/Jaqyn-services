@@ -3,7 +3,7 @@ title: Campaign Group Session Workflow
 service: cross-cutting
 type: workflow
 status: active
-last_reviewed: 2026-06-30
+last_reviewed: 2026-07-02
 ---
 
 # Campaign Group Session
@@ -48,10 +48,18 @@ customer on a group-type campaign.
 6. **Group full.** When `GroupMember` count hits the campaign's required size,
    `CampaignGroupService` flips the group state and enqueues
    `send_group_full_notification`.
-7. **Staff confirms.** Staff scans the group token →
-   `POST /api/staff/campaigns/confirm-group/` (`staff/api.ts:139`) →
-   `staff_views` group branch → `CampaignGroupService` finalizes and
+7. **Staff confirms.** Staff scans the group's QR token. The unified scanner
+   resolves it as `kind="group"` and returns the full group payload:
+   `group_session_id`, `campaign_name`, `required_size`, `status`, `leader_name`,
+   and `members: [{name, status, is_leader}]`. The staff UI shows a **bottom
+   sheet** with the member roster and per-member check-in ticks (visual checklist
+   only — no per-member write endpoint). When ready, staff taps the primary action
+   → `POST /api/staff/campaigns/confirm-group/` (`staff/api.ts:139`) — the single
+   write — → `staff_views` group branch → `CampaignGroupService` finalizes and
    `CampaignRewardService` issues the reward per `reward_receiver_type`.
+
+   Group-type campaigns do **not** appear as rows in a customer-QR chooser sheet;
+   the group token is the only path to `confirm-group`.
 
 ## Mermaid
 
@@ -74,6 +82,9 @@ sequenceDiagram
     M->>CAPI: open group, join
     Note over CAPI,SVC: capacity reached
     SVC->>Q: send_group_full_notification
+    S->>SAPI: POST /api/staff/scan/ { group_token }
+    SAPI-->>FE: kind=group + group_session_id + members[]
+    Note over FE: bottom sheet: roster + check-in ticks (UI only)
     S->>SAPI: POST /api/staff/campaigns/confirm-group/
     SAPI->>SVC: finalize + issue reward
     SVC-->>FE: group completed
@@ -88,14 +99,11 @@ sequenceDiagram
 
 ## Gaps
 
-- 🟠 **Group completion may be unreachable from the customer UI.**
-  `docs/guides/campaigns-customer-workflow.md` records (Known gaps) that the group
-  **check-in QR token is not minted**, so although `confirm-group` exists on the
-  staff side, the customer may have no screen that surfaces a scannable group token
-  for staff to confirm. **Open question — verify** against
-  `campaigns/services/group.py` (does it mint a `QRCodeToken` for the group?) and
-  the group-detail component (does it render one?). If absent, the fix is to mint a
-  group token in `CampaignGroupService` on "group full" and render it in
-  `_components/group-detail.tsx`, mirroring the personal-QR pattern.
+- ~~🟠 **Group check-in QR token not minted.**~~ **Resolved.** The token was
+  always minted; the gap was in the scan response — `kind="group"` returned no
+  payload. The backend now returns the full group payload (`group_session_id`,
+  `campaign_name`, `required_size`, `status`, `leader_name`, `members[{name,
+  status, is_leader}]`), and the staff UI renders the roster bottom sheet. Group
+  completion is reachable.
 - `demo-fill` is a production-exposed endpoint (`customer/api.ts:276`) — confirm
   it's gated to non-prod or demo businesses only.

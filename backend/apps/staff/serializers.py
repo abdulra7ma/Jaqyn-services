@@ -3,10 +3,34 @@ from decimal import Decimal
 from rest_framework import serializers
 
 from apps.staff.models import StaffMember
+from apps.staff.services import ACTIVITY_KINDS
 
 
 class StaffScanSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=128)
+
+
+class StaffTodayStatsSerializer(serializers.Serializer):
+    """Serializes :class:`apps.staff.services.StaffTodayStats`."""
+
+    scans_today = serializers.IntegerField()
+    redemptions_today = serializers.IntegerField()
+
+
+class ActivityEventSerializer(serializers.Serializer):
+    """Serializes one :class:`apps.staff.services.ActivityEvent` feed row."""
+
+    id = serializers.CharField()
+    kind = serializers.ChoiceField(choices=ACTIVITY_KINDS)
+    customer = serializers.CharField(allow_blank=True)
+    label = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+
+
+class ActivityQuerySerializer(serializers.Serializer):
+    """Input for the ``?kind=`` feed filter — enum membership at the edge."""
+
+    kind = serializers.ChoiceField(choices=ACTIVITY_KINDS, required=False)
 
 
 class StaffCollectSerializer(serializers.Serializer):

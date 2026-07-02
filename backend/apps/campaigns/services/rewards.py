@@ -196,12 +196,18 @@ class CampaignRewardService:
 
     @staticmethod
     def _voucher_from_code_or_token(
-        code: str | None = None, token: str | None = None, request=None
+        code: str | None = None,
+        token: str | None = None,
+        voucher_id: object | None = None,
+        request: object | None = None,
     ) -> tuple[CampaignRewardVoucher, QRCodeToken | None]:
-        """Resolve a voucher from a redeem QR token or a typed-in code.
+        """Resolve a voucher from a redeem QR token, typed-in code, or voucher id.
 
-        Raises ``VOUCHER_NOT_FOUND`` when neither resolves. A QR token must be of
-        type ``CAMPAIGN_REWARD`` and point at an existing campaign voucher.
+        Raises ``VOUCHER_NOT_FOUND`` when none of the three resolves. A QR
+        token must be of type ``CAMPAIGN_REWARD`` and point at an existing
+        campaign voucher. ``voucher_id`` is the UUID surfaced in the
+        scan-customer ``active_vouchers`` list; the business-ownership check
+        runs in ``_assert_redeemable`` / the lock block, not here.
         """
         from apps.qr.services import resolve_qr_token
 
@@ -223,6 +229,18 @@ class CampaignRewardService:
                     "VOUCHER_NOT_FOUND", status_code=status.HTTP_404_NOT_FOUND
                 )
             return voucher, qr_token
+        if voucher_id is not None:
+            try:
+                return (
+                    CampaignRewardVoucher.objects.select_related(
+                        "campaign", "business", "reward", "customer"
+                    ).get(id=voucher_id),
+                    None,
+                )
+            except CampaignRewardVoucher.DoesNotExist:
+                raise JaqynAPIException(
+                    "VOUCHER_NOT_FOUND", status_code=status.HTTP_404_NOT_FOUND
+                )
         try:
             return (
                 CampaignRewardVoucher.objects.select_related(
@@ -241,7 +259,8 @@ class CampaignRewardService:
         staff: StaffMember,
         code: str | None = None,
         token: str | None = None,
-        request=None,
+        voucher_id: object | None = None,
+        request: object | None = None,
     ) -> CampaignRewardVoucher:
         """Resolve and validate a voucher for redemption without redeeming it (§19).
 
@@ -252,9 +271,13 @@ class CampaignRewardService:
         (``VOUCHER_EXPIRED``). Returns the voucher when valid; raises otherwise.
         Does not take a lock — use :meth:`redeem_reward_voucher` to actually
         flip the status.
+
+        ``voucher_id`` accepts the UUID from the scan-customer
+        ``active_vouchers`` list so the staff can validate without a second QR
+        scan; business-ownership is enforced by ``_assert_redeemable``.
         """
         voucher, _ = cls._voucher_from_code_or_token(
-            code=code, token=token, request=request
+            code=code, token=token, voucher_id=voucher_id, request=request
         )
         cls._assert_redeemable(voucher, staff)
         return voucher
@@ -295,9 +318,14 @@ class CampaignRewardService:
         staff: StaffMember,
         code: str | None = None,
         token: str | None = None,
-        request=None,
+        voucher_id: object | None = None,
+        request: object | None = None,
     ) -> CampaignRewardVoucher:
         """Redeem a voucher under a row lock, flipping it ACTIVE → REDEEMED (§19).
+
+        Accepts a ``voucher_id`` (UUID from the scan-customer ``active_vouchers``
+        list) in addition to the existing ``token``/``code`` paths so the staff
+        can redeem straight from the scan sheet.
 
         Re-fetches the voucher ``select_for_update`` inside an atomic block, then
         re-checks every precondition (business match, status ACTIVE, not expired)
@@ -308,7 +336,7 @@ class CampaignRewardService:
         ``ScanLog`` either way (success or block).
         """
         voucher, qr_token = cls._voucher_from_code_or_token(
-            code=code, token=token, request=request
+            code=code, token=token, voucher_id=voucher_id, request=request
         )
 
         error_code: str | None = None

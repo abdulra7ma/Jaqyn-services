@@ -3,7 +3,7 @@ title: Loyalty Earn & Redeem Workflow
 service: cross-cutting
 type: workflow
 status: active
-last_reviewed: 2026-06-30
+last_reviewed: 2026-07-02
 ---
 
 # Loyalty Earn & Redeem
@@ -52,10 +52,16 @@ redeeming are staff-driven at POS.
    (`loyalty/api.ts:14`) then
    `POST /api/customer/loyalty/vouchers/<id>/select-item/` (`loyalty/api.ts:16`).
    Vouchers list at `GET /api/customer/loyalty/vouchers/` (`loyalty/api.ts:15`).
-7. **Redeem voucher at POS.** Staff scans the voucher (payload prefixed
-   `loyalty:`) → `POST /api/staff/loyalty/redeem-voucher/` (`loyalty/api.ts:23`,
-   `staff/api.ts:136`) → `LoyaltyRedemptionService.redeem_voucher`
-   (`redemption.py:146`, locks the voucher row) marks it redeemed.
+7. **Redeem voucher at POS.** Two paths, same endpoint:
+   - **From customer scan (preferred):** when the customer scan response includes a
+     loyalty voucher in `active_vouchers`, the chooser sheet pins it at the top.
+     Staff taps redeem → `POST /api/staff/loyalty/redeem-voucher/` with `voucher_id`
+     (`staff/api.ts:136`). No second scan needed.
+   - **From voucher QR scan:** customer presents the loyalty voucher QR (payload
+     prefixed `loyalty:`); staff scans → same endpoint, accepts `token` or
+     `voucher_id`.
+   Either path → `LoyaltyRedemptionService.redeem_voucher` (`redemption.py:146`,
+   locks the voucher row) marks it redeemed.
 
 ## Mermaid
 
