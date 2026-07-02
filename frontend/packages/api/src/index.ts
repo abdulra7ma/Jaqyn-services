@@ -26,3 +26,8 @@ export type * from "./staff/types";
 export { loyaltyApi, type LoyaltyApi } from "./loyalty/api";
 export * from "./loyalty/hooks";
 export type * from "./loyalty/types";
+
+// ---- pitch API layer ----
+export { pitchApi } from "./pitch/api";
+export * from "./pitch/hooks";
+export type * from "./pitch/types";
