@@ -63,13 +63,7 @@ def test_emoji_update_persists_and_clears_photo(api_client, settings):
     user.avatar = SimpleUploadedFile("photo.png", _PNG_1x1, content_type="image/png")
     user.save()
 
-    # Authenticate using password login (staff user)
-    login = api_client.post(
-        "/api/auth/login-password/",
-        {"email": "", "password": "pass"},
-        format="json",
-    )
-    # Use OTP path instead since email is empty — set dev OTP
+    # Authenticate via OTP (staff users have no email; phone OTP is the correct path)
     api_client.post("/api/auth/request-otp/", {"phone": phone}, format="json")
     code = cache.get(otp_key(phone))["code"]
     login = api_client.post("/api/auth/verify-otp/", {"phone": phone, "code": code}, format="json")

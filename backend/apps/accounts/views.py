@@ -18,7 +18,6 @@ from apps.accounts.serializers import (
 )
 from apps.accounts.services import (
     authenticate_identifier,
-    authenticate_password,
     issue_email_otp,
     issue_otp,
     issue_password_reset_otp,
