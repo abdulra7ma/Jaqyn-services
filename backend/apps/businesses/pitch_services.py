@@ -141,7 +141,7 @@ def resolve_pitch(raw_token: str) -> tuple[PitchInvite, PitchView]:
     view = PitchView(
         business_id=str(business.id),
         business_name=business.name,
-        logo_path=business.logo.name if business.logo else None,
+        logo_path=business.logo.url if business.logo else None,
         category=business.category,
         default_goal=goal,
         default_reward=reward,

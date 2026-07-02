@@ -42,6 +42,7 @@ urlpatterns = [
     path("api/customer/loyalty/", include("apps.loyalty.customer_urls")),
     path("api/staff/loyalty/", include("apps.loyalty.staff_urls")),
     path("api/admin/campaigns/", include("apps.campaigns.admin_urls")),
+    path("api/pitch/", include("apps.businesses.pitch_urls")),
     path("api/admin/", include("apps.businesses.admin_urls")),
     path("api/admin/", include("apps.reporting.admin_urls")),
     path("api/admin/", include("apps.notifications.admin_urls")),

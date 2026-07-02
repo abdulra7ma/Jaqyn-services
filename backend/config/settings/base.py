@@ -269,6 +269,8 @@ REST_FRAMEWORK = {
         # 10/min per IP prevents a single source from flooding the admin inbox or
         # creating junk Business rows.
         "business_lead": "10/min",
+        # Public pitch-link endpoints — anonymous prospects; generous but capped.
+        "pitch": "20/min",
     },
 }
 
