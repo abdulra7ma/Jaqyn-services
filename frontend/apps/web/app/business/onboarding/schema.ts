@@ -4,18 +4,16 @@
 
 export const MENU_STYLES = ["Simple list", "Card grid", "Category tabs", "Featured first", "QR menu"];
 
-export type StaffRole = "manager" | "staff" | "viewer";
+export type StaffRole = "manager" | "cashier";
 
 export const STAFF_ROLES: { v: StaffRole; label: string }[] = [
   { v: "manager", label: "Manager" },
-  { v: "staff", label: "Staff" },
-  { v: "viewer", label: "Viewer" },
+  { v: "cashier", label: "Cashier" },
 ];
 
 export const ROLE_HINT: Record<StaffRole, string> = {
   manager: "Manage profile, menu, staff, campaigns & reports",
-  staff: "Scan QR, validate visits & redeem rewards",
-  viewer: "Read-only dashboard access",
+  cashier: "Scan QR, validate visits & redeem rewards",
 };
 
 // Max staff invites per business during onboarding. Business rule mirrors the

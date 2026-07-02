@@ -53,7 +53,8 @@ vi.mock("@jaqyn/api", () => ({
   }),
   useBusinessTypes: () => ({ data: [], isLoading: false }),
   useCatalog: () => ({ data: [], isLoading: false }),
-  useStaffInvites: () => ({ data: [], isLoading: false }),
+  useTeam: () => ({ data: { members: [], counts: { total: 0, active: 0, invited: 0, suspended: 0 } }, isLoading: false }),
+  useCreateStaffAccount: () => ({ mutate: vi.fn(), isPending: false }),
   useSaveOnboarding: () => ({ mutate: vi.fn(), isPending: false }),
   useSubmitOnboarding: () => ({
     mutate: submitMock,
@@ -63,8 +64,6 @@ vi.mock("@jaqyn/api", () => ({
   }),
   useAddCatalogItem: () => ({ mutate: vi.fn(), isPending: false }),
   useRemoveCatalogItem: () => ({ mutate: vi.fn(), isPending: false }),
-  useAddStaffInvite: () => ({ mutate: vi.fn(), isPending: false }),
-  useRemoveStaffInvite: () => ({ mutate: vi.fn(), isPending: false }),
   useUploadBusinessLogo: () => ({ mutate: vi.fn(), isPending: false }),
   useUploadBusinessCover: () => ({ mutate: vi.fn(), isPending: false }),
   useUploadCatalogItemImage: () => ({ mutate: vi.fn(), isPending: false }),

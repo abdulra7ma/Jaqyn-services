@@ -7,18 +7,17 @@
 
 import {
   useAddCatalogItem,
-  useAddStaffInvite,
   useBusinessMe,
   useBusinessTypes,
   useCatalog,
+  useCreateStaffAccount,
   useDeleteGalleryImage,
   useGallery,
   useOnboardingState,
   useRemoveCatalogItem,
-  useRemoveStaffInvite,
   useSaveOnboarding,
-  useStaffInvites,
   useSubmitOnboarding,
+  useTeam,
   useUploadBusinessCover,
   useUploadBusinessLogo,
   useUploadCatalogItemImage,
@@ -26,6 +25,7 @@ import {
   type BusinessType,
   type CatalogItem,
   type GalleryImage,
+  type TeamRow,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { AlertDialog } from "@jaqyn/ui";
@@ -118,13 +118,12 @@ export function OnboardingFlow() {
   const state = useOnboardingState(enabled);
   const types = useBusinessTypes();
   const catalog = useCatalog(enabled);
-  const staff = useStaffInvites(enabled);
+  const team = useTeam();
 
   const save = useSaveOnboarding();
   const addItem = useAddCatalogItem();
   const removeItem = useRemoveCatalogItem();
-  const addStaff = useAddStaffInvite();
-  const removeStaff = useRemoveStaffInvite();
+  const createStaff = useCreateStaffAccount();
   const submit = useSubmitOnboarding();
   const uploadLogo = useUploadBusinessLogo();
   const uploadCover = useUploadBusinessCover();
@@ -138,11 +137,11 @@ export function OnboardingFlow() {
   const [stage, setStage] = useState(1);
   const [f, setF] = useState<Form>(EMPTY);
   const [draft, setDraft] = useState({ name: "", category: "", price: "", duration: "" });
-  const [staffDraft, setStaffDraft] = useState<{ name: string; contact: string; role: StaffRole }>({
-    name: "",
-    contact: "",
-    role: "staff",
+  const [staffDraft, setStaffDraft] = useState<{ phone: string; role: StaffRole }>({
+    phone: "",
+    role: "cashier",
   });
+  const [staffTempPassword, setStaffTempPassword] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const hydrated = useRef(false);
@@ -235,8 +234,8 @@ export function OnboardingFlow() {
   }, []);
 
   const items = catalog.data ?? [];
-  const staffList = staff.data?.results ?? [];
-  const staffUsed = staff.data?.used ?? staffList.length;
+  const staffList = team.data?.members ?? [];
+  const staffUsed = staffList.length;
   const completion = state.data?.completion_score ?? 0;
   const missing = state.data?.missing_required_fields ?? [];
   const canSubmit = missing.length === 0 && !!f.businessType && items.length > 0 && !state.isError;
@@ -263,15 +262,17 @@ export function OnboardingFlow() {
       },
     );
   }
-  function addStaffInvite() {
+  function doCreateStaff() {
     if (staffUsed >= STAFF_LIMIT) return;
-    if (!staffDraft.name.trim()) return showToast("Enter a name");
-    if (!staffDraft.contact.trim()) return showToast("Enter an email or phone");
-    addStaff.mutate(
-      { full_name: staffDraft.name.trim(), contact: staffDraft.contact.trim(), role: staffDraft.role },
+    if (!staffDraft.phone.trim()) return showToast("Enter a phone number");
+    createStaff.mutate(
+      { phone: staffDraft.phone.trim(), role: staffDraft.role },
       {
-        onSuccess: () => setStaffDraft({ name: "", contact: "", role: "staff" }),
-        onError: (e) => showToast((e as { message?: string })?.message ?? "Failed to add"),
+        onSuccess: (r) => {
+          setStaffTempPassword(r.temp_password);
+          setStaffDraft({ phone: "", role: "cashier" });
+        },
+        onError: (e) => showToast((e as { message?: string })?.message ?? "Failed to create account"),
       },
     );
   }
@@ -490,13 +491,14 @@ export function OnboardingFlow() {
               )}
               {stage === 4 && (
                 <StageStaff
-                  staff={staffList}
+                  members={staffList}
                   used={staffUsed}
                   draft={staffDraft}
                   setDraft={setStaffDraft}
-                  onAdd={addStaffInvite}
-                  onRemove={(id) => removeStaff.mutate(id)}
-                  adding={addStaff.isPending}
+                  onCreate={doCreateStaff}
+                  creating={createStaff.isPending}
+                  tempPassword={staffTempPassword}
+                  onClearPassword={() => setStaffTempPassword(null)}
                 />
               )}
               {stage === 5 && (
@@ -1007,36 +1009,76 @@ function StageSetup(props: {
   );
 }
 
-type StaffRow = { id: string; full_name: string; contact: string; role: string };
-
 function StageStaff(props: {
-  staff: StaffRow[];
+  members: TeamRow[];
   used: number;
-  draft: { name: string; contact: string; role: StaffRole };
-  setDraft: (d: { name: string; contact: string; role: StaffRole }) => void;
-  onAdd: () => void;
-  onRemove: (id: string) => void;
-  adding: boolean;
+  draft: { phone: string; role: StaffRole };
+  setDraft: (d: { phone: string; role: StaffRole }) => void;
+  onCreate: () => void;
+  creating: boolean;
+  tempPassword: string | null;
+  onClearPassword: () => void;
 }) {
-  const { staff, used, draft, setDraft } = props;
+  const t = useT();
+  const { members, used, draft, setDraft, tempPassword } = props;
   const full = used >= STAFF_LIMIT;
+  const [copied, setCopied] = useState(false);
+
+  function copyPassword() {
+    if (!tempPassword) return;
+    // ponytail: navigator.clipboard is undefined in non-secure contexts; guard avoids runtime throw
+    if (!navigator.clipboard) return;
+    void navigator.clipboard.writeText(tempPassword).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   return (
     <div className="flex animate-[jqIn_.3s_ease] flex-col gap-4">
       <div className="flex items-center justify-between rounded-[14px] bg-[#FBF3E6] px-4 py-3">
-        <div className="text-[12.5px] leading-snug text-[#8A6A3A]">Add up to 5 teammates to your roster. You&rsquo;ll set up their login from the Staff page — no invite is sent automatically.</div>
+        <div className="text-[12.5px] leading-snug text-[#8A6A3A]">Create staff accounts now or add them later from the Staff page.</div>
         <span className="ml-3.5 flex-none font-display text-[13px] font-bold text-amber-deep">{used} / 5</span>
       </div>
 
+      {/* One-time password reveal — protected from accidental close */}
+      {tempPassword && (
+        <div className={CARD}>
+          <div className="font-display text-[15px] font-bold text-ink">{t("staff.create.passwordTitle")}</div>
+          <p className="mt-1.5 text-[12.5px] leading-relaxed text-subtle">{t("staff.create.passwordHelp")}</p>
+          <div className="mt-3 rounded-xl bg-amber/15 px-4 py-3.5">
+            <div className="font-mono text-lg font-extrabold tracking-[0.04em] text-amber-deep">{tempPassword}</div>
+          </div>
+          <div className="mt-3 flex gap-2.5">
+            <button
+              onClick={copyPassword}
+              className="flex-1 rounded-xl border border-line bg-card py-3 text-[13px] font-semibold text-ink transition hover:bg-board/40"
+            >
+              {copied ? t("common.copied") : t("staff.create.copy")}
+            </button>
+            <button
+              onClick={props.onClearPassword}
+              className="flex-1 rounded-xl bg-brand py-3 text-[13px] font-bold text-brand-fg shadow-glow"
+            >
+              {t("staff.create.done")}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className={CARD}>
-        <div className="font-display text-[15px] font-bold text-ink">Invite staff</div>
+        <div className="font-display text-[15px] font-bold text-ink">{t("staff.create.title")}</div>
         <div className="mt-3.5 flex flex-wrap gap-2.5">
-          <Field label="Full name" className="min-w-[140px] flex-1">
-            <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Aibek K." className={FIELD} />
+          <Field label={t("staff.create.phone")} className="min-w-[160px] flex-[2]">
+            <input
+              type="tel"
+              value={draft.phone}
+              onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+              placeholder={t("staff.create.phonePlaceholder")}
+              className={FIELD}
+            />
           </Field>
-          <Field label="Email or phone" className="min-w-[140px] flex-1">
-            <input value={draft.contact} onChange={(e) => setDraft({ ...draft, contact: e.target.value })} placeholder="aibek@… / +996…" className={FIELD} />
-          </Field>
-          <Field label="Role" className="w-[130px] flex-none">
+          <Field label={t("staff.create.role")} className="w-[130px] flex-none">
             <select value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as StaffRole })} className={FIELD}>
               {STAFF_ROLES.map((r) => (
                 <option key={r.v} value={r.v}>
@@ -1051,33 +1093,29 @@ function StageStaff(props: {
           {full ? (
             <span className="flex-none rounded-xl bg-[#F2EEE7] px-[18px] py-[11px] text-[13px] font-bold text-[#9A8B7B]">Limit reached</span>
           ) : (
-            <button onClick={props.onAdd} disabled={props.adding} className="flex-none rounded-xl bg-brand px-5 py-3 text-sm font-bold text-brand-fg disabled:opacity-60">
-              + Add invite
+            <button onClick={props.onCreate} disabled={props.creating} className="flex-none rounded-xl bg-brand px-5 py-3 text-sm font-bold text-brand-fg disabled:opacity-60">
+              {props.creating ? t("staff.create.submitting") : t("staff.create.submit")}
             </button>
           )}
         </div>
       </div>
 
       <div className="overflow-hidden rounded-[18px] border border-line bg-card">
-        <div className="border-b border-line px-5 py-[15px] font-display text-[15px] font-bold text-ink">Invited team</div>
-        {staff.length === 0 ? (
-          <div className="px-5 py-[30px] text-center text-[13.5px] text-subtle">No invites yet — staff is optional. You can skip and continue.</div>
+        <div className="border-b border-line px-5 py-[15px] font-display text-[15px] font-bold text-ink">Team</div>
+        {members.length === 0 ? (
+          <div className="px-5 py-[30px] text-center text-[13.5px] text-subtle">No staff yet — optional. You can skip and continue.</div>
         ) : (
-          staff.map((m) => {
-            const initials = (m.full_name || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-            const roleLabel = STAFF_ROLES.find((r) => r.v === m.role)?.label ?? m.role;
+          members.map((m) => {
+            const initials = (m.initials || m.name || "?").slice(0, 2).toUpperCase();
+            const rLabel = STAFF_ROLES.find((r) => r.v === m.role)?.label ?? m.role;
             return (
               <div key={m.id} className="flex items-center gap-3.5 border-b border-[#F4ECDF] px-5 py-3.5">
-                <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-[#F4ECDF] font-display text-[13px] font-bold text-brand">{initials || "?"}</div>
+                <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-[#F4ECDF] font-display text-[13px] font-bold text-brand">{initials}</div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-ink">{m.full_name || "—"}</div>
-                  <div className="text-xs text-subtle">{m.contact}</div>
+                  <div className="text-sm font-semibold text-ink">{m.name || "—"}</div>
+                  <div className="text-xs text-subtle">{m.phone || m.email || "—"}</div>
                 </div>
-                <span className="text-xs font-bold text-subtle">{roleLabel}</span>
-                <span className="rounded-pill bg-[#FBEFD9] px-2.5 py-[3px] text-[11px] font-bold text-amber-deep">Not joined</span>
-                <button onClick={() => props.onRemove(m.id)} aria-label={`Remove ${m.full_name}`} className="h-[30px] w-[30px] flex-none rounded-[9px] border border-line bg-card text-[15px] text-[#B0563A]">
-                  ×
-                </button>
+                <span className="text-xs font-bold text-subtle">{rLabel}</span>
               </div>
             );
           })
