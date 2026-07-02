@@ -121,3 +121,55 @@ def test_complete_staff_profile_sets_name_password_and_flag():
     assert updated.user.name == "Aibek"
     assert updated.user.check_password("newpass12")
     assert not updated.user.check_password(temp_password)  # temp password no longer valid
+
+
+# --- Security: credentialed-account guard ---
+
+
+def test_create_staff_account_blocks_existing_credentialed_user():
+    """Entering a phone belonging to a credentialed user must raise CONFLICT
+    and must NOT mutate that user's password."""
+    business = _make_business()
+    original_password = "secret-password-123"
+    victim = User.objects.create_user(
+        phone="+996700777888",
+        password=original_password,
+        role=User.Role.BUSINESS_OWNER,
+    )
+    with pytest.raises(Exception) as exc:
+        management.create_staff_account(business, "+996700777888", StaffMember.Role.CASHIER)
+    assert "CONFLICT" in repr(exc.value)
+    # Victim's password must be unchanged
+    victim.refresh_from_db()
+    assert victim.check_password(original_password)
+    # No StaffMember row created
+    assert not StaffMember.objects.filter(user=victim, business=business).exists()
+
+
+def test_create_staff_account_reuses_otp_only_user():
+    """A user created via OTP (no usable password) can be converted to a staff
+    account — their phone is unique and they have no credential to lose."""
+    business = _make_business()
+    otp_user = User.objects.create_user(
+        phone="+996700999000",
+        role=User.Role.CUSTOMER,
+    )
+    otp_user.set_unusable_password()
+    otp_user.save(update_fields=["password"])
+    assert not otp_user.has_usable_password()
+    member, password = management.create_staff_account(business, "+996700999000", StaffMember.Role.CASHIER)
+    otp_user.refresh_from_db()
+    assert member.user_id == otp_user.pk
+    assert otp_user.has_usable_password()
+    assert otp_user.check_password(password)
+
+
+def test_create_staff_endpoint_rejects_malformed_phone():
+    """Malformed phone (not E.164) must be rejected at the serializer level (400)."""
+    _business, client = _make_owner_client()
+    resp = client.post(
+        "/api/business/staff/",
+        {"phone": "abc", "role": "cashier"},
+        format="json",
+    )
+    assert resp.status_code == 400

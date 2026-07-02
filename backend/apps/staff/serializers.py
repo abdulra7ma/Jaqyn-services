@@ -97,7 +97,7 @@ class StaffRoleUpdateSerializer(serializers.Serializer):
 class StaffCreateSerializer(serializers.Serializer):
     """Input for owner-created staff: phone + role (name optional)."""
 
-    phone = serializers.CharField(max_length=32)
+    phone = serializers.RegexField(regex=r"^\+[1-9]\d{7,14}$")
     role = serializers.ChoiceField(choices=StaffMember.Role.choices)
     name = serializers.CharField(max_length=255, required=False, allow_blank=True)
 

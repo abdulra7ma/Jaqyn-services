@@ -463,14 +463,30 @@ def create_staff_account(
     staffer completes their own profile on first login. The plaintext password is
     returned exactly once for the owner to relay; only its hash is persisted.
 
-    Raises ``CONFLICT`` (409) if the user already has an active membership in this
-    business. Wrapped in a transaction because it creates an account + credential.
+    Raises ``CONFLICT`` (409) if:
+    - The user already has an active membership in this business.
+    - The phone belongs to an existing credentialed user (has a usable password),
+      which would otherwise allow an owner to clobber another user's credentials
+      (account takeover). OTP-only users (no usable password) are safe to reuse
+      because they have no credential to overwrite.
+
+    Wrapped in a transaction because it creates an account + credential.
     """
     temp_password = secrets.token_urlsafe(_TEMP_PASSWORD_LENGTH)
     with transaction.atomic():
-        user, _created = User.objects.get_or_create(
+        user, created = User.objects.get_or_create(
             phone=phone, defaults={"role": User.Role.STAFF}
         )
+        # Guard: never overwrite credentials of an existing credentialed account.
+        # An owner entering a phone that belongs to another owner, a customer who
+        # set a password, or staff elsewhere would silently reset their password
+        # and hand it to the merchant — account takeover by phone number.
+        # OTP-only users (no usable password) are safe to reuse; they have no
+        # stored credential to clobber.
+        if not created and user.has_usable_password():
+            raise JaqynAPIException(
+                "CONFLICT", "An account with this phone already exists", status_code=409
+            )
         if user.staff_memberships.filter(business=business, is_active=True).exists():
             raise JaqynAPIException(
                 "CONFLICT", "This person is already on your team", status_code=409
