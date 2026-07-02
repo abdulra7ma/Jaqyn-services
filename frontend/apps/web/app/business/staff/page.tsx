@@ -477,10 +477,17 @@ function CreateStaffModal({ onClose }: { onClose: () => void }) {
 
   function copyPassword() {
     if (!pwResult) return;
+    if (!navigator.clipboard) return;
     void navigator.clipboard.writeText(pwResult).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  }
+
+  function handleBackdropClick() {
+    // Don't dismiss the password-reveal panel on backdrop click.
+    if (pwResult) return;
+    handleClose();
   }
 
   return (
@@ -489,7 +496,7 @@ function CreateStaffModal({ onClose }: { onClose: () => void }) {
       role="dialog"
       aria-modal
       aria-labelledby="create-staff-title"
-      onClick={handleClose}
+      onClick={handleBackdropClick}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -534,7 +541,7 @@ function CreateStaffModal({ onClose }: { onClose: () => void }) {
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="+996 700 123456"
+                placeholder={t("staff.create.phonePlaceholder")}
                 className={FIELD}
               />
             </label>
