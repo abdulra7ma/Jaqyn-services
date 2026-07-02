@@ -3,6 +3,7 @@ CSRF-protected, staff-only. Views parse → call a service → return JsonRespon
 
 import json
 
+from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -47,8 +48,13 @@ def _serialize_lead(lead: Lead) -> dict:
 
 @staff_member_required
 def leads_page(request: HttpRequest):
-    """Render the Tabulator grid page inside the admin shell."""
-    return render(request, "leads/grid.html", {})
+    """Render the leads grid inside the themed admin shell.
+
+    Merges ``admin.site.each_context`` so the unfold sidebar/header render (a bare
+    context drops them); the grid data itself is fetched client-side from api_table.
+    """
+    context = {**admin.site.each_context(request), "title": "Leads"}
+    return render(request, "leads/grid.html", context)
 
 
 @require_http_methods(["GET"])
