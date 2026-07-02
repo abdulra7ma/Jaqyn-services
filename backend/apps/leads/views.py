@@ -4,7 +4,7 @@ CSRF-protected, staff-only. Views parse → call a service → return JsonRespon
 import json
 
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import HttpRequest, HttpResponseNotAllowed, JsonResponse
+from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_http_methods
 
