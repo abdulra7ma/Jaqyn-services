@@ -211,6 +211,37 @@ def get_staff_for_user(user) -> StaffMember:
         raise JaqynAPIException("PERMISSION_DENIED", status_code=status.HTTP_403_FORBIDDEN)
 
 
+def ensure_owner_staff(business: Business, *, active: bool = True) -> StaffMember | None:
+    """Create/toggle the owner's own StaffMember row so they can work the till.
+
+    An owner-operated shop's owner is its top staffer. This gives the owner a
+    ``MANAGER`` StaffMember for their own business (no PIN — they authenticate as
+    the user via JWT, not the shared-device PIN flow), which is what unlocks the
+    staff interface for them (``get_staff_for_user`` and the ``staff`` area).
+
+    Idempotent: the row is keyed on (business, owner) and reused on repeat calls;
+    ``active`` flips ``is_active`` so the onboarding/settings toggle can enable or
+    disable "owner works as staff" without deleting history. Returns the row, or
+    None when the business has no owner yet (nothing to attach).
+    """
+    if business.owner_id is None:
+        return None
+    staff, created = StaffMember.objects.get_or_create(
+        business=business,
+        user=business.owner,
+        defaults={
+            "name": business.owner.name or "Owner",
+            "role": StaffMember.Role.MANAGER,  # owner has full staff powers
+            "is_active": active,
+            "profile_completed": True,  # owner set up their profile during business onboarding
+        },
+    )
+    if not created and staff.is_active != active:
+        staff.is_active = active
+        staff.save(update_fields=["is_active", "updated_at"])
+    return staff
+
+
 def _signup_counts(business: Business) -> dict[int, int]:
     """Map staff_id → distinct customers first seen via this staff's scans.
 

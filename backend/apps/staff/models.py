@@ -14,6 +14,10 @@ class StaffMember(TimeStampedModel):
     pin_hash = models.CharField(max_length=255, blank=True, null=True)
     role = models.CharField(max_length=32, choices=Role.choices, default=Role.CASHIER)
     is_active = models.BooleanField(default=True)
+    # First-login profile setup done (name + own password chosen). Owner-created
+    # accounts start False and must complete on first login; owner-seeded rows
+    # (ensure_owner_staff) and pre-existing rows are backfilled True.
+    profile_completed = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.name} at {self.business.name}"
