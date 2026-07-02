@@ -19,12 +19,14 @@ from apps.businesses.views import (
     CatalogItemImageUploadView,
     GalleryDetailView,
     GalleryListCreateView,
+    OwnerStaffToggleView,
 )
 from apps.qr.views import BusinessQRView, RegenerateApprovalCodeView
 
 urlpatterns = [
     path("register/", BusinessRegisterView.as_view(), name="business-register"),
     path("me/", BusinessMeView.as_view(), name="business-me"),
+    path("owner-staff/", OwnerStaffToggleView.as_view(), name="business-owner-staff"),
     path("profile/logo/", BusinessLogoUploadView.as_view(), name="business-logo-upload"),
     path("profile/cover/", BusinessCoverUploadView.as_view(), name="business-cover-upload"),
     path("dashboard/", BusinessDashboardView.as_view(), name="business-dashboard"),

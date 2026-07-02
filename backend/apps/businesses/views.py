@@ -15,6 +15,7 @@ from apps.businesses.serializers import (
     BusinessSerializer,
     CatalogItemSerializer,
     GalleryUploadSerializer,
+    OwnerStaffToggleSerializer,
     PublicBusinessSerializer,
 )
 from apps.businesses.discovery import active_category_payload, public_business_payload
@@ -28,6 +29,7 @@ from apps.businesses.services import (
     set_business_logo,
     set_catalog_item_image,
 )
+from apps.staff.services.management import ensure_owner_staff
 from apps.reporting.services import business_metrics
 from core.exceptions import JaqynAPIException
 from core.permissions import IsBusinessOwner, IsBusinessOwnerOrAdmin
@@ -158,6 +160,31 @@ class BusinessMeView(APIView):
         serializer = BusinessSerializer(business, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        return success_response(BusinessSerializer(business).data)
+
+
+class OwnerStaffToggleView(APIView):
+    """Enable/disable the owner's own staff seat ("work as staff").
+
+    Owner-only. Enabling creates (or reactivates) the owner's MANAGER StaffMember
+    so they can switch into the staff interface; disabling deactivates it. Returns
+    the refreshed owner profile so the client sees the new ``owner_is_staff``.
+    """
+
+    permission_classes = [IsBusinessOwner]
+    serializer_class = OwnerStaffToggleSerializer
+
+    def get_business(self, request):
+        try:
+            return request.user.owned_business
+        except Business.DoesNotExist:
+            raise JaqynAPIException("VALIDATION_ERROR", "Business not found", status_code=404)
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        business = self.get_business(request)
+        ensure_owner_staff(business, active=serializer.validated_data["enabled"])
         return success_response(BusinessSerializer(business).data)
 
 

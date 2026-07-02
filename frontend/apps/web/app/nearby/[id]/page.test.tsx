@@ -58,6 +58,7 @@ function program(over: Partial<LoyaltyCardView>): LoyaltyCardView {
     business_id: "b-1",
     business_name: "Manas Coffee",
     business_logo_url: null,
+    business_card_accent: "",
     business_category: "",
     business_area: "",
     business_hours: {},

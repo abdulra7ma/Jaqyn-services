@@ -58,8 +58,12 @@ export function useRequireArea(required: Area) {
   const pathname = usePathname();
 
   const meReady = ready && isAuthenticated && !me.isLoading && me.data !== undefined;
+  // A user can hold several areas (owner-as-staff). Fall back to the single landing
+  // `area` when `areas` is absent (older payloads). `area` still drives redirects.
   const area = me.data?.area;
-  const allowed = meReady && area === required;
+  const areas = me.data?.areas ?? (area ? [area] : []);
+  const allowed = meReady && areas.includes(required);
+  const denied = meReady && !areas.includes(required);
 
   useEffect(() => {
     if (!ready) return;
@@ -67,11 +71,10 @@ export function useRequireArea(required: Area) {
       router.replace(`/login?return=${encodeURIComponent(pathname)}`);
       return;
     }
-    if (!meReady) return;
-    if (area !== required) {
+    if (denied) {
       router.replace(DEFAULT_PATH[area ?? "customer"]);
     }
-  }, [ready, isAuthenticated, meReady, area, required, router, pathname]);
+  }, [ready, isAuthenticated, denied, area, router, pathname]);
 
   return { allowed };
 }

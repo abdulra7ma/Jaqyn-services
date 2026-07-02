@@ -44,6 +44,11 @@ def register_business(owner: "User", data: dict) -> Business:
     owner.role = User.Role.BUSINESS_OWNER
     owner.save(update_fields=["role", "updated_at"])
     business = Business.objects.create(owner=owner, **data)
+    # Owner-operated by default: give the owner a staff seat so they can work the
+    # till without a second account. They can disable it later (settings toggle).
+    from apps.staff.services.management import ensure_owner_staff
+
+    ensure_owner_staff(business)
     emit_event("business_registered", business_id=str(business.id), owner_id=str(owner.id))
     return business
 

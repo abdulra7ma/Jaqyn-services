@@ -6,6 +6,8 @@ export type LoyaltyCardView = {
   business_id: string;
   business_name: string;
   business_logo_url: string | null;
+  /** Owner-chosen wallet-card gradient name; "" = auto (hashed from id). */
+  business_card_accent: string;
   business_category: string;
   business_area: string;
   /** Day-of-week → [open, close] (e.g. {"mon":["07:00","21:00"]}); may be empty. */

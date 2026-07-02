@@ -89,6 +89,7 @@ class LoyaltyCardSerializer(serializers.Serializer):
     business_id = serializers.UUIDField()
     business_name = serializers.CharField()
     business_logo_url = serializers.CharField(allow_null=True)
+    business_card_accent = serializers.CharField(allow_blank=True)
     business_category = serializers.CharField(allow_blank=True)
     business_area = serializers.CharField(allow_blank=True)
     business_hours = serializers.JSONField()

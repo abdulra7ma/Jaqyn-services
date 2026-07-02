@@ -34,6 +34,27 @@ export function GiftIcon(p: Props) {
   );
 }
 
+export function ImageIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
+  );
+}
+
+export function ListIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className}>
+      <path d="M8 6h13" />
+      <path d="M8 12h13" />
+      <path d="M8 18h13" />
+      <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
+    </svg>
+  );
+}
+
 export function UsersIcon(p: Props) {
   return (
     <svg {...base} className={p.className}>
@@ -91,6 +112,55 @@ export function ChartIcon(p: Props) {
       <path d="M10 20V4" />
       <path d="M16 20v-7" />
       <path d="M3 20h18" />
+    </svg>
+  );
+}
+
+export function GridIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className}>
+      <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
+      <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
+    </svg>
+  );
+}
+
+export function MegaphoneIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className}>
+      <path d="M3 10v4a1 1 0 0 0 1 1h3l8 4V5L7 9H4a1 1 0 0 0-1 1Z" />
+      <path d="M18.5 8.5a5 5 0 0 1 0 7" />
+      <path d="M7 15v3a1 1 0 0 0 1 1h1.5" />
+    </svg>
+  );
+}
+
+export function TicketIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className}>
+      <path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4Z" />
+      <path d="M14 6v12" strokeDasharray="1.5 2.5" />
+    </svg>
+  );
+}
+
+export function SettingsIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2.5v2.4M12 19.1v2.4M4.2 7l2 1.2M17.8 15.8l2 1.2M19.8 7l-2 1.2M6.2 15.8l-2 1.2" />
+    </svg>
+  );
+}
+
+export function GlobeIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3c2.5 2.4 3.8 5.6 3.8 9s-1.3 6.6-3.8 9c-2.5-2.4-3.8-5.6-3.8-9S9.5 5.4 12 3Z" />
     </svg>
   );
 }

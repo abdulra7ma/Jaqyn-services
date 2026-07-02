@@ -4,8 +4,10 @@ import {
   CARD_ACCENTS,
   buildWallet,
   cardAccent,
+  isCardAccent,
   programReady,
   progViz,
+  resolveAccent,
 } from "./wallet";
 
 function card(over: Partial<LoyaltyCardView> = {}): LoyaltyCardView {
@@ -14,6 +16,7 @@ function card(over: Partial<LoyaltyCardView> = {}): LoyaltyCardView {
     business_id: "b1",
     business_name: "Cafe",
     business_logo_url: null,
+    business_card_accent: "",
     business_category: "cafe",
     business_area: "Center",
     business_hours: {},
@@ -98,5 +101,24 @@ describe("buildWallet", () => {
     expect(wallet[0]!.programs).toHaveLength(2);
     expect(wallet[0]!.ready).toBe(false); // a: 1/6 stamp + 0/3 visit
     expect(wallet[1]!.ready).toBe(true); // b: 6/6 stamp
+  });
+
+  it("uses the owner-chosen card accent over the hash, ignoring invalid values", () => {
+    const chosen = buildWallet([card({ business_id: "x", business_card_accent: "sage" })]);
+    expect(chosen[0]!.accent).toBe("sage");
+    // blank and garbage both fall back to the deterministic hash
+    const auto = buildWallet([card({ business_id: "x", business_card_accent: "" })]);
+    expect(auto[0]!.accent).toBe(cardAccent("x"));
+    const bad = buildWallet([card({ business_id: "x", business_card_accent: "chartreuse" })]);
+    expect(bad[0]!.accent).toBe(cardAccent("x"));
+  });
+});
+
+describe("resolveAccent / isCardAccent", () => {
+  it("accepts valid names, rejects others", () => {
+    expect(isCardAccent("plum")).toBe(true);
+    expect(isCardAccent("nope")).toBe(false);
+    expect(resolveAccent("id", "indigo")).toBe("indigo");
+    expect(resolveAccent("id", "")).toBe(cardAccent("id"));
   });
 });

@@ -10,9 +10,22 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useBusinessMe, useMe } from "@jaqyn/api";
 import { LOCALES, useI18n, useT, type Locale } from "@jaqyn/i18n";
 import { UserAvatar } from "../../_components/kit";
+import {
+  ChartIcon,
+  GiftIcon,
+  GlobeIcon,
+  GridIcon,
+  MegaphoneIcon,
+  ScanIcon,
+  SettingsIcon,
+  TicketIcon,
+  UserIcon,
+  UsersIcon,
+} from "../../_components/icons";
 import { useAuth, useRequireArea } from "../../_lib/auth";
 
-type NavItem = { key: string; icon: string; href: string };
+type IconComponent = (props: { className?: string }) => React.JSX.Element;
+type NavItem = { key: string; icon: IconComponent; href: string };
 type NavSection = { key: string; items: NavItem[] };
 
 // Grouped, outcome-first owner sidebar. No more
@@ -21,32 +34,36 @@ type NavSection = { key: string; items: NavItem[] };
 // voucher redemption-tracking view, not a loyalty builder. Labels via @jaqyn/i18n.
 export const OWNER_NAV_SECTIONS: NavSection[] = [
   {
-    key: "owner.nav.section.grow",
+    // Dashboard stands alone at the top — no section label above it.
+    key: "",
+    items: [{ key: "owner.nav.dashboard", icon: GridIcon, href: "/business/dashboard" }],
+  },
+  {
+    key: "owner.nav.section.programs",
     items: [
-      { key: "owner.nav.dashboard", icon: "□", href: "/business/dashboard" },
-      { key: "owner.nav.campaigns", icon: "◇", href: "/business/campaigns" },
-      { key: "owner.nav.loyalty", icon: "◈", href: "/business/loyalty" },
+      { key: "owner.nav.campaigns", icon: MegaphoneIcon, href: "/business/campaigns" },
+      { key: "owner.nav.loyalty", icon: GiftIcon, href: "/business/loyalty" },
     ],
   },
   {
     key: "owner.nav.section.engage",
     items: [
-      { key: "owner.nav.qr", icon: "▦", href: "/business/qr" },
-      { key: "owner.nav.rewards", icon: "◎", href: "/business/rewards" },
+      { key: "owner.nav.qr", icon: ScanIcon, href: "/business/qr" },
+      { key: "owner.nav.rewards", icon: TicketIcon, href: "/business/rewards" },
     ],
   },
   {
     key: "owner.nav.section.insights",
     items: [
-      { key: "owner.nav.customers", icon: "◐", href: "/business/customers" },
-      { key: "owner.nav.analytics", icon: "◔", href: "/business/reports" },
+      { key: "owner.nav.customers", icon: UsersIcon, href: "/business/customers" },
+      { key: "owner.nav.analytics", icon: ChartIcon, href: "/business/reports" },
     ],
   },
   {
     key: "owner.nav.section.account",
     items: [
-      { key: "owner.nav.staff", icon: "◍", href: "/business/staff" },
-      { key: "owner.nav.settings", icon: "◑", href: "/business/profile" },
+      { key: "owner.nav.staff", icon: UserIcon, href: "/business/staff" },
+      { key: "owner.nav.settings", icon: SettingsIcon, href: "/business/profile" },
     ],
   },
 ];
@@ -60,10 +77,12 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
   return (
     <nav className="flex flex-col gap-4">
       {OWNER_NAV_SECTIONS.map((section) => (
-        <div key={section.key}>
-          <div className="mb-1.5 px-3 text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#7F7164]">
-            {t(section.key)}
-          </div>
+        <div key={section.key || section.items[0]!.href}>
+          {section.key && (
+            <div className="mb-1.5 px-3 text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#7F7164]">
+              {t(section.key)}
+            </div>
+          )}
           <div className="flex flex-col gap-0.5">
             {section.items.map((n) => {
               const active = pathname === n.href || pathname.startsWith(n.href + "/");
@@ -79,7 +98,7 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
                       : "text-[#C9BCA8] hover:bg-white/[0.06] hover:text-white"
                   }`}
                 >
-                  <span aria-hidden="true" className="w-[18px] text-center text-[15px]">{n.icon}</span>
+                  <n.icon className="h-[18px] w-[18px] flex-none" />
                   {t(n.key)}
                 </Link>
               );
@@ -95,7 +114,7 @@ function SidebarLanguageSwitch() {
   const { locale, setLocale, t } = useI18n();
   return (
     <label className="mb-3 flex items-center gap-2 rounded-[12px] border border-white/[0.07] bg-white/[0.04] px-3 py-2 text-[11.5px] font-semibold text-[#9F9183]">
-      <span aria-hidden="true">◎</span>
+      <GlobeIcon className="h-4 w-4 flex-none" />
       <span>{t("common.language")}</span>
       <select
         aria-label={t("common.language")}
@@ -120,6 +139,9 @@ function OwnerCard() {
   const me = useMe();
   const user = me.data?.user;
   const ownerName = user?.name || user?.phone || BIZ.owner;
+  // Only show the "work as staff" switch when the owner actually holds a staff
+  // seat (owner_is_staff toggle on → area granted). Otherwise it's a dead end.
+  const canStaff = (me.data?.areas ?? []).includes("staff");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -141,14 +163,16 @@ function OwnerCard() {
     <div ref={ref} className="relative mt-auto">
       {open && (
         <div className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-[14px] border border-white/10 bg-[#3A2E25] p-1.5 shadow-[0_16px_40px_-12px_rgba(0,0,0,.6)]">
-          <Link
-            href="/staff"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-[13px] font-semibold text-board hover:bg-white/5"
-          >
-            <span className="w-[18px] text-center text-[15px]">⊕</span>
-            {t("owner.nav.staffMode")}
-          </Link>
+          {canStaff && (
+            <Link
+              href="/staff"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-[13px] font-semibold text-board hover:bg-white/5"
+            >
+              <ScanIcon className="h-[18px] w-[18px] flex-none" />
+              {t("owner.nav.staffMode")}
+            </Link>
+          )}
           <button
             onClick={signOut}
             className="flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13px] font-semibold text-[#E8A48C] hover:bg-white/5"

@@ -10,6 +10,7 @@ function card(over: Partial<LoyaltyCardView> = {}): LoyaltyCardView {
     business_id: "b1",
     business_name: "Boorsok Bakery",
     business_logo_url: null,
+    business_card_accent: "",
     business_category: "bakery",
     business_area: "Osh Bazaar",
     business_hours: { mon: ["07:00", "21:00"] },

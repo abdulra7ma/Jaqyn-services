@@ -95,10 +95,10 @@ export function WalletCard({ card }: { card: WalletShopCard }) {
           <img
             src={card.businessLogoUrl}
             alt=""
-            className="h-12 w-12 rounded-tile object-cover ring-1 ring-white/30"
+            className="h-12 w-12 rounded-full object-cover ring-1 ring-white/30"
           />
         ) : (
-          <span className="flex h-12 w-12 items-center justify-center rounded-tile bg-white/20 font-display text-[16px] font-bold ring-1 ring-white/30">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 font-display text-[16px] font-bold ring-1 ring-white/30">
             {initials}
           </span>
         )}

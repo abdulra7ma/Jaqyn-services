@@ -6,6 +6,9 @@ const apiTarget = process.env.API_PROXY_TARGET || "http://localhost:8000";
 
 const nextConfig = {
   output: "standalone",
+  // Allow an isolated build dir per dev server (avoids .next corruption when
+  // several `next dev` instances run against this app at once). Defaults to .next.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
   transpilePackages: ["@jaqyn/api", "@jaqyn/ui", "@jaqyn/i18n"],
   // Don't redirect /api/foo/ → /api/foo (Django wants the trailing slash); just proxy.

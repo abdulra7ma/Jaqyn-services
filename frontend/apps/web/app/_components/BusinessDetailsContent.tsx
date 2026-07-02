@@ -90,27 +90,34 @@ function Action({ href, children }: { href: string; children: string }) {
   );
 }
 
+// Full-week hours order for the customer view. Matches the owner editor so
+// closed days are shown, not silently dropped.
+const HOURS_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+
 function renderHours(
   hours:
     | Record<string, [string, string]>
     | Record<string, string>
     | null
     | undefined,
+  t: (key: string) => string,
 ) {
   if (!hours) return null;
   const display = (hours as Record<string, string>).display;
   if (display) return <p className="text-sm text-subtle">{display}</p>;
-  const entries = Object.entries(hours).filter(([, value]) =>
-    Array.isArray(value),
-  ) as [string, [string, string]][];
-  if (entries.length === 0) return null;
+  const src = hours as Record<string, unknown>;
+  const rows = HOURS_DAYS.map((day) => {
+    const v = src[day];
+    return { day, span: Array.isArray(v) && v.length === 2 ? ([String(v[0]), String(v[1])] as const) : null };
+  });
+  if (rows.every((r) => !r.span)) return null;
   return (
     <ul className="flex flex-col gap-1 text-sm text-subtle">
-      {entries.map(([day, [from, to]]) => (
+      {rows.map(({ day, span }) => (
         <li key={day} className="flex justify-between">
-          <span className="uppercase">{day}</span>
-          <span>
-            {from}-{to}
+          <span>{t(`owner.settings.day.${day}`)}</span>
+          <span className={span ? "" : "text-subtle/70"}>
+            {span ? `${span[0]}–${span[1]}` : t("nearby.closed")}
           </span>
         </li>
       ))}
@@ -281,12 +288,12 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
                 );
               })()}
 
-            {renderHours(b.working_hours) && (
+            {renderHours(b.working_hours, t) && (
               <Card>
                 <p className="mb-2 font-display text-sm font-bold text-ink">
                   {t("business.hours")}
                 </p>
-                {renderHours(b.working_hours)}
+                {renderHours(b.working_hours, t)}
               </Card>
             )}
 

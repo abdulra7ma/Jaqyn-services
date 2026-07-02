@@ -28,6 +28,7 @@ class BusinessSerializer(serializers.ModelSerializer):
     missing_required_fields = serializers.SerializerMethodField()
     logo_url = serializers.SerializerMethodField()
     cover_url = serializers.SerializerMethodField()
+    owner_is_staff = serializers.SerializerMethodField()
 
     class Meta:
         model = Business
@@ -56,6 +57,7 @@ class BusinessSerializer(serializers.ModelSerializer):
             "cover_url",
             "glyph",
             "accent_color",
+            "card_accent",
             "price_level",
             "tags",
             "working_hours",
@@ -70,11 +72,13 @@ class BusinessSerializer(serializers.ModelSerializer):
             "change_note",
             "completion_score",
             "missing_required_fields",
+            "owner_is_staff",
             "created_at",
         )
         read_only_fields = (
             "id",
             "business_code",
+            "owner_is_staff",
             # logo_set / cover_set are set server-side by set_business_logo /
             # set_business_cover (services.py). Clients must upload a real image via
             # the dedicated upload endpoint — these flags cannot be faked via PATCH.
@@ -109,6 +113,13 @@ class BusinessSerializer(serializers.ModelSerializer):
         # Relative /media/... url (via MEDIA_URL) so it passes through the
         # frontend proxy; None when no cover is set.
         return obj.cover_image.url if obj.cover_image else None
+
+    def get_owner_is_staff(self, obj) -> bool:
+        # True when the owner holds an active staff seat — drives the owner→staff
+        # switch and its settings toggle. See staff ensure_owner_staff.
+        if obj.owner_id is None:
+            return False
+        return obj.staff_members.filter(user_id=obj.owner_id, is_active=True).exists()
 
 
 class PublicBusinessSerializer(serializers.ModelSerializer):
@@ -269,6 +280,12 @@ class PublicBusinessSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         url = obj.cover_image.url
         return request.build_absolute_uri(url) if request else url
+
+
+class OwnerStaffToggleSerializer(serializers.Serializer):
+    """Input for the owner "work as staff" toggle. Defaults to enabling the seat."""
+
+    enabled = serializers.BooleanField(default=True)
 
 
 class BusinessImageUploadSerializer(serializers.Serializer):

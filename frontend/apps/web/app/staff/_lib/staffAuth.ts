@@ -23,7 +23,11 @@ export function useStaffAuth() {
 
   const me = useMe(authed);
   const staff: StaffMembership | null = me.data?.staff ?? null;
-  const isStaff = me.data?.area === "staff";
+  // "Can act as staff" — true for real staff and for an owner working their own
+  // till (owner-as-staff). Uses `areas` (multi), not the single landing `area`,
+  // which for an owner is "business".
+  const areas = me.data?.areas ?? (me.data?.area ? [me.data.area] : []);
+  const isStaff = areas.includes("staff");
   const ready = mounted && (!authed || !me.isLoading);
 
   return { staff, isStaff, ready };

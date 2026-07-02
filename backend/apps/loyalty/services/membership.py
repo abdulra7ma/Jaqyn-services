@@ -17,6 +17,8 @@ class LoyaltyCardView:
     business_id: str
     business_name: str
     business_logo_url: str | None
+    # Owner-chosen wallet-card gradient name ("" = auto/hashed). Drives the card face color.
+    business_card_accent: str
     business_category: str
     business_area: str
     # Day-of-week -> [open, close] map (Business.working_hours); the wallet detail
@@ -77,6 +79,7 @@ class LoyaltyMembershipService:
             business_id=str(program.business_id),
             business_name=program.business.name,
             business_logo_url=logo_url,
+            business_card_accent=program.business.card_accent or "",
             business_category=program.business.category or "",
             business_area=program.business.area or "",
             business_hours=program.business.working_hours or {},

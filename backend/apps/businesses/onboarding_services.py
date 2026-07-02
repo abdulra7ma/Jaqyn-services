@@ -82,6 +82,12 @@ def activate_owner(raw: str, full_name: str, password: str):
         business.onboarding_status = Business.OnboardingStatus.IN_PROGRESS
     business.save(update_fields=["owner", "onboarding_status", "updated_at"])
 
+    # Owner-operated by default: seat the owner as staff so the till/scan interface
+    # works for them immediately. Toggleable later from settings.
+    from apps.staff.services.management import ensure_owner_staff
+
+    ensure_owner_staff(business)
+
     invite.status = BusinessOwnerInvite.Status.ACCEPTED
     invite.accepted_at = timezone.now()
     invite.save(update_fields=["status", "accepted_at", "updated_at"])

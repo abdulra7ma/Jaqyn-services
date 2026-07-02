@@ -44,6 +44,17 @@ class Business(TimeStampedModel):
         REJECTED = "rejected", "Rejected"
         DISABLED = "disabled", "Disabled"
 
+    class CardAccent(models.TextChoices):
+        # Wallet-card gradient the owner picks for their loyalty card face. Values
+        # match the `bg-wallet-*` gradients in the frontend Tailwind preset and the
+        # CARD_ACCENTS list in loyalty/_lib/wallet.ts — keep the three in sync.
+        # Blank ("") means "auto": the wallet falls back to a hash of the business id.
+        TERRACOTTA = "terracotta", "Terracotta"
+        AMBER = "amber", "Amber"
+        SAGE = "sage", "Sage"
+        PLUM = "plum", "Plum"
+        INDIGO = "indigo", "Indigo"
+
     class OnboardingStatus(models.TextChoices):
         NOT_STARTED = "not_started", "Not started"
         IN_PROGRESS = "in_progress", "In progress"
@@ -95,6 +106,10 @@ class Business(TimeStampedModel):
     cover_set = models.BooleanField(default=False)
     glyph = models.CharField(max_length=8, blank=True, default="")
     accent_color = models.CharField(max_length=16, blank=True, default="#C25E3C")
+    # Owner-chosen wallet-card gradient; blank = auto (hashed from id). See CardAccent.
+    card_accent = models.CharField(
+        max_length=16, choices=CardAccent.choices, blank=True, default=""
+    )
     price_level = models.CharField(max_length=8, blank=True, default="cc")
     tags = models.JSONField(default=list, blank=True)
     working_hours = models.JSONField(default=dict, blank=True)

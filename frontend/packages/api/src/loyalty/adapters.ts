@@ -13,7 +13,8 @@ export function adaptLoyaltyCard(raw: Raw): LoyaltyCardView {
       : {};
   return {
     program_id: text(raw.program_id), business_id: text(raw.business_id), business_name: text(raw.business_name),
-    business_logo_url: nullableText(raw.business_logo_url), type: type === "points" || type === "visit" ? type : "stamp",
+    business_logo_url: nullableText(raw.business_logo_url), business_card_accent: text(raw.business_card_accent),
+    type: type === "points" || type === "visit" ? type : "stamp",
     business_category: text(raw.business_category), business_area: text(raw.business_area), business_hours: hours,
     name: text(raw.name), reward_summary: text(raw.reward_summary), reward_expiry_days: num(raw.reward_expiry_days, 30), joined: Boolean(raw.joined),
     stamps_count: num(raw.stamps_count), visits_count: num(raw.visits_count),

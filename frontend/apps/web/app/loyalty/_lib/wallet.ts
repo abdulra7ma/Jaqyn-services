@@ -117,6 +117,18 @@ export function cardAccent(businessId: string): CardAccent {
   return CARD_ACCENTS[hash % CARD_ACCENTS.length]!;
 }
 
+/** Type guard: is `value` one of the five named accents? */
+export function isCardAccent(value: string): value is CardAccent {
+  return (CARD_ACCENTS as readonly string[]).includes(value);
+}
+
+/** Resolve a shop's card accent: the owner's chosen gradient when set to a valid
+ * name, otherwise the deterministic hash fallback. Lets a business design its
+ * wallet card from the profile while unset shops still get a stable color. */
+export function resolveAccent(businessId: string, chosen: string): CardAccent {
+  return isCardAccent(chosen) ? chosen : cardAccent(businessId);
+}
+
 /** Group the flat card list into one `WalletShopCard` per business, preserving
  * first-seen order. Each shop gets a derived accent and a `ready` flag. */
 export function buildWallet(cards: LoyaltyCardView[]): WalletShopCard[] {
@@ -132,7 +144,7 @@ export function buildWallet(cards: LoyaltyCardView[]): WalletShopCard[] {
         businessName: card.business_name,
         businessLogoUrl: card.business_logo_url,
         programs: [card],
-        accent: cardAccent(card.business_id),
+        accent: resolveAccent(card.business_id, card.business_card_accent),
         ready: programReady(card),
       });
     }

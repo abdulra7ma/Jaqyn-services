@@ -21,3 +21,5 @@ certs/
 
 # agent worktrees
 .worktrees/
+.turbo/
+.next-settings/
