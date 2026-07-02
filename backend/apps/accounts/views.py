@@ -36,7 +36,11 @@ def _onboarding_done(user):
     return bool(profile and profile.onboarding_completed)
 
 
-def _profile_done(user):
+def _profile_done(user) -> bool:
+    # Landing area decides which "profile complete" flag matters.
+    if resolve_area(user) == "staff":
+        membership = user.staff_memberships.filter(is_active=True).first()
+        return bool(membership and membership.profile_completed)
     profile = getattr(user, "customer_profile", None)
     return bool(profile and profile.profile_completed)
 
@@ -198,6 +202,7 @@ class MeView(APIView):
                 "role": membership.role,
                 "business_id": str(membership.business_id),
                 "business_name": membership.business.name,
+                "profile_completed": membership.profile_completed,
             }
         return success_response(data)
 
