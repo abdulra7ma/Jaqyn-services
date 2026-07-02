@@ -13,6 +13,8 @@ vi.mock("../../_lib/auth", () => ({
 const submitMock = vi.fn();
 const onboardState = {
   submitPending: false,
+  // undefined → wizard stays on the step flow; "completed" → verified/live screen.
+  onboardingStatus: undefined as string | undefined,
 };
 
 // Minimal API stubs — only what OnboardingFlow actually uses.
@@ -32,6 +34,7 @@ vi.mock("@jaqyn/api", () => ({
       location: null,
       business_type: null,
       menu_style: null,
+      onboarding_status: onboardState.onboardingStatus,
     },
     isLoading: false,
     isError: false,
@@ -42,6 +45,7 @@ vi.mock("@jaqyn/api", () => ({
       missing: [],
       can_submit: true,
       submitted: false,
+      onboarding_status: onboardState.onboardingStatus,
     },
     isLoading: false,
     isError: false,
@@ -75,6 +79,7 @@ describe("OnboardingFlow — submit confirm AlertDialog", () => {
   beforeEach(() => {
     submitMock.mockReset();
     onboardState.submitPending = false;
+    onboardState.onboardingStatus = undefined;
   });
 
   it("opens an AlertDialog with i18n title when Submit button is clicked", async () => {
@@ -136,5 +141,20 @@ describe("OnboardingFlow — submit confirm AlertDialog", () => {
 
     expect(submitMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("shows forward CTAs (not a dead-end) once verified & live", () => {
+    onboardState.onboardingStatus = "completed";
+    render(<OnboardingFlow />);
+
+    // Verified/live screen must offer a way forward — dashboard + first program.
+    const dashboard = screen.getByRole("link", { name: /dashboard/i });
+    expect(dashboard).toHaveAttribute("href", "/business/dashboard");
+
+    const firstProgram = screen.getByRole("link", { name: /loyalty program/i });
+    expect(firstProgram).toHaveAttribute("href", "/business/loyalty");
+
+    // The old dead-end had only "Refresh status".
+    expect(screen.queryByRole("button", { name: /refresh status/i })).not.toBeInTheDocument();
   });
 });

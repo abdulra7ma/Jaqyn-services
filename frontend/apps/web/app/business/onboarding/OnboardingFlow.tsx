@@ -29,6 +29,7 @@ import {
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { AlertDialog } from "@jaqyn/ui";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LocationPicker } from "../../_components/LocationPicker";
 import { useRequireAuth } from "../../_lib/auth";
@@ -1022,7 +1023,7 @@ function StageStaff(props: {
   return (
     <div className="flex animate-[jqIn_.3s_ease] flex-col gap-4">
       <div className="flex items-center justify-between rounded-[14px] bg-[#FBF3E6] px-4 py-3">
-        <div className="text-[12.5px] leading-snug text-[#8A6A3A]">Invite up to 5 teammates now. You can add more later.</div>
+        <div className="text-[12.5px] leading-snug text-[#8A6A3A]">Add up to 5 teammates to your roster. You&rsquo;ll set up their login from the Staff page — no invite is sent automatically.</div>
         <span className="ml-3.5 flex-none font-display text-[13px] font-bold text-amber-deep">{used} / 5</span>
       </div>
 
@@ -1073,7 +1074,7 @@ function StageStaff(props: {
                   <div className="text-xs text-subtle">{m.contact}</div>
                 </div>
                 <span className="text-xs font-bold text-subtle">{roleLabel}</span>
-                <span className="rounded-pill bg-[#FBEFD9] px-2.5 py-[3px] text-[11px] font-bold text-amber-deep">Pending</span>
+                <span className="rounded-pill bg-[#FBEFD9] px-2.5 py-[3px] text-[11px] font-bold text-amber-deep">Not joined</span>
                 <button onClick={() => props.onRemove(m.id)} aria-label={`Remove ${m.full_name}`} className="h-[30px] w-[30px] flex-none rounded-[9px] border border-line bg-card text-[15px] text-[#B0563A]">
                   ×
                 </button>
@@ -1250,9 +1251,26 @@ function Pending(props: {
             </div>
           </div>
 
-          <button onClick={props.onRefresh} className="mt-5 w-full rounded-[14px] border-[1.5px] border-line bg-card py-3.5 text-sm font-semibold text-ink">
-            Refresh status
-          </button>
+          {props.status === "completed" ? (
+            <div className="mt-5 flex flex-col gap-2.5">
+              <Link
+                href="/business/dashboard"
+                className="w-full rounded-[14px] bg-brand py-3.5 text-center text-sm font-bold text-brand-fg shadow-glow"
+              >
+                Go to your dashboard
+              </Link>
+              <Link
+                href="/business/loyalty"
+                className="w-full rounded-[14px] border-[1.5px] border-line bg-card py-3.5 text-center text-sm font-semibold text-ink"
+              >
+                Create your first loyalty program ›
+              </Link>
+            </div>
+          ) : (
+            <button onClick={props.onRefresh} className="mt-5 w-full rounded-[14px] border-[1.5px] border-line bg-card py-3.5 text-sm font-semibold text-ink">
+              Refresh status
+            </button>
+          )}
           <div className="mt-[18px] flex items-center gap-2 text-[12.5px] text-subtle">
             <span className="text-sm">✉️</span>Questions? Contact <b className="text-ink">hello@jaqyn.kg</b>
           </div>
