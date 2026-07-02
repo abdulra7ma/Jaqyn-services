@@ -157,7 +157,7 @@ def request_pitch_code(raw_token: str, email: str, ip_address: str | None) -> No
     (reusing the account OTP limits), caches the code under the link's namespace,
     and dispatches the email on commit. Raises RATE_LIMITED (429) when over limit.
     """
-    _load_claimable(raw_token)
+    invite = _load_claimable(raw_token)
     email = email.lower()
     if hit_limit(f"pitch-otp:{hash_token(raw_token)}", settings.OTP_RATE_LIMIT_PER_PHONE, 3600):
         raise JaqynAPIException("RATE_LIMITED", "Слишком много попыток", status.HTTP_429_TOO_MANY_REQUESTS)
@@ -167,7 +167,11 @@ def request_pitch_code(raw_token: str, email: str, ip_address: str | None) -> No
     cache.set(_pitch_otp_key(raw_token), {"code": code, "email": email}, settings.OTP_TTL_SECONDS)
     cache.delete(_pitch_otp_attempt_key(raw_token))
     transaction.on_commit(lambda: send_email_otp_task.delay(email, code))
-    emit_event("pitch_code_requested", token_hash=hash_token(raw_token))
+    emit_event(
+        "pitch_code_requested",
+        business_id=str(invite.business_id),
+        token_hash=hash_token(raw_token),
+    )
 
 
 def claim_pitch(
@@ -207,6 +211,11 @@ def claim_pitch(
         if attempts > PITCH_OTP_MAX_ATTEMPTS:
             raise JaqynAPIException("RATE_LIMITED", "Слишком много попыток", status.HTTP_429_TOO_MANY_REQUESTS)
         if payload["code"] != code:
+            raise JaqynAPIException("INVALID_OTP", "Неверный код", status.HTTP_400_BAD_REQUEST)
+        # Bind the OTP to the email it was mailed to. Without this, an attacker
+        # holding the link could request a code to their own address, then verify
+        # with a victim's email — taking over that account. Both sides are lowercased.
+        if payload["email"] != email:
             raise JaqynAPIException("INVALID_OTP", "Неверный код", status.HTTP_400_BAD_REQUEST)
 
         business = invite.business

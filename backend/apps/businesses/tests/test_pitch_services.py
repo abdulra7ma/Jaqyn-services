@@ -95,6 +95,27 @@ def test_double_claim_rejected():
     assert exc.value.status_code == 410
 
 
+def test_claim_email_must_match_code_recipient():
+    # Security: a code mailed to one address must not verify against another,
+    # or an attacker holding the link could take over any account. Code issued
+    # to attacker@evil.kg must be rejected when verify submits victim@real.kg.
+    victim = User.objects.create(phone="+996700000010", email="victim@real.kg",
+                                 role=User.Role.CUSTOMER)
+    b = draft()
+    _, raw = ps.generate_pitch_invite(b)
+    ps.request_pitch_code(raw, "attacker@evil.kg", None)
+    code = cache.get(ps._pitch_otp_key(raw))["code"]
+    with pytest.raises(JaqynAPIException) as exc:
+        ps.claim_pitch(raw, "victim@real.kg", code, goal=5, reward_text="кофе")
+    assert exc.value.status_code == 400
+    # The victim was not touched and the business was not claimed.
+    victim.refresh_from_db()
+    assert victim.role == User.Role.CUSTOMER
+    b.refresh_from_db()
+    assert b.owner is None
+    assert PitchInvite.objects.get(business=b).status != PitchInvite.Status.CLAIMED
+
+
 def test_claim_email_already_owns_business_conflicts():
     other = draft("Other")
     owner = User.objects.create(phone="+996700000009", email="taken@b.kg",
