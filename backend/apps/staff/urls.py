@@ -1,7 +1,12 @@
 from django.urls import path
 
 from apps.qr.views import StaffTodayCodeView
-from apps.staff.views import StaffProgramsView, StaffRecentActivityView, StaffScanView
+from apps.staff.views import (
+    StaffProgramsView,
+    StaffRecentActivityView,
+    StaffScanView,
+    StaffStatsView,
+)
 
 # The loyalty collect/redeem and groups verify/redeem staff endpoints moved to the
 # campaigns unified scanner at /api/staff/campaigns/ (scan, visit, confirm-group,
@@ -11,4 +16,5 @@ urlpatterns = [
     path("today-code/", StaffTodayCodeView.as_view(), name="staff-today-code"),
     path("scan/", StaffScanView.as_view(), name="staff-scan"),
     path("recent-activity/", StaffRecentActivityView.as_view(), name="staff-recent-activity"),
+    path("stats/", StaffStatsView.as_view(), name="staff-stats"),
 ]

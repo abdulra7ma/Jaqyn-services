@@ -3,14 +3,18 @@ title: Staff Nav + Profile + Avatar + Language — Contract (round 3)
 service: shared
 type: contract
 status: active
-last_reviewed: 2026-06-30
+last_reviewed: 2026-07-02
 ---
 # Staff Nav + Profile + Avatar + Language — Contract (round 3)
 
-Four things:
-1. **Consistent BOTTOM nav on every staff screen** (currently scan = bottom icon nav,
-   groups/activity = top segmented nav — inconsistent). Unify to ONE bottom nav, 4 tabs.
-2. **New staff Profile page** — business details, role, avatar (emoji + photo), language, logout.
+Four things (implemented in feat/staff-app-handoff):
+1. **Consistent BOTTOM nav on every staff screen** — **3 tabs: Scan · Activity · Profile.**
+   Groups tab removed; `/staff/groups` redirects to `/staff/scan`. Group check-in
+   is a bottom sheet within the scan flow, not a top-level destination.
+2. **New staff Profile page** — profile card (avatar + name + "role · business"),
+   stat tiles, ACCOUNT section with a language row, logout. Avatar editing (emoji +
+   photo) collapses behind an avatar tap. No business-details card, no
+   notifications row, no "Switch to owner view" (dropped per design round 4).
 3. **Move language out of the top header on ALL screens** (staff + customer) → into the profile page.
 4. **Avatar = emoji picker AND photo upload** (user chose both).
 
@@ -79,29 +83,32 @@ Four things:
   Use it in the staff profile, staff header, and customer profile avatar header.
 
 ### Consistent staff BOTTOM nav
-- New `apps/web/app/staff/_components/StaffNav.tsx`: a fixed/sticky BOTTOM nav, 4 tabs —
-  Scan (`/staff/scan`), Groups (`/staff/groups`), Activity (`/staff/activity`), **Profile
-  (`/staff/profile`)** — icon + label each, active = brand accent, uses `usePathname`.
-  Accept a `theme?: "light" | "dark"` prop (dark for the scanner's immersive screen, light for
-  the cream pages) but keep identical structure/icons/labels/position across both.
+- `apps/web/app/staff/_components/StaffNav.tsx`: a **floating white icon pill** —
+  fixed `bottom-4`, centered, `rounded-pill bg-card shadow-modal`, **3 icon-only tabs —
+  Scan (`/staff/scan`), Activity (`/staff/activity`), Profile (`/staff/profile`)** with
+  `aria-label`s, active = brand accent, uses `usePathname`. No text labels, no theme
+  prop (the pill stays white over both cream pages and the dark scanner). Groups tab
+  removed; `/staff/groups` redirects to `/staff/scan`.
 - `StaffShell.tsx`: REMOVE the top segmented `<nav>` and REMOVE `<LanguageSwitch/>` from the
-  header. Render children, then `<StaffNav theme="light"/>` pinned to the bottom; add bottom
-  padding so content clears the nav. Keep the business header (avatar + name + role + STAFF badge).
-- `scan/page.tsx`: replace its inline bottom `<nav>` with `<StaffNav theme="dark"/>` (same tabs,
-  now including Profile). Keep the dark immersive look.
+  header. Render children, then `<StaffNav/>` floating at the bottom; add bottom
+  padding so content clears the pill. Keep the business header (avatar + name + role + STAFF badge).
+- `scan/page.tsx`: replace its inline bottom `<nav>` with `<StaffNav/>` (same tabs,
+  now including Profile). Keep the dark immersive look; the pill floats white over it.
 
 ### New staff Profile page — `apps/web/app/staff/profile/page.tsx`
 Use `StaffShell` (so it gets the bottom nav). Pull data from `useMe()` (`me.data.staff` →
 business_name + role; `me.data.business` → name + status; `me.data.user` → name + avatar + avatar_emoji).
-Sections (match the Jaqyn card style — Card, rounded, warm tokens):
-- **Avatar header**: big Avatar (photo/emoji/initials) + staff name + role. An "edit avatar"
-  affordance: a small emoji-picker grid AND a "Upload photo" file input (`accept="image/*"`) →
-  `useUploadAvatar`. Selecting an emoji → `useUpdateProfile({ avatar_emoji })`.
-- **Business / company details**: business name, status badge, the staff member's role
-  (`staff.role`), business id if useful. Read-only card.
-- **Language**: a styled `<select>` bound to `useI18n().locale` / `setLocale` (NOT the old
-  `LanguageSwitch` chip) — same visual design as the customer profile's language select so it's
-  consistent. This is the new home for language on staff.
+Also pulls `GET /api/staff/stats/` for stat tiles (`{scans_today, redemptions_today}`).
+Sections (match the Jaqyn card style — Card, rounded, warm tokens), top to bottom:
+- **Profile card**: big Avatar (photo/emoji/initials) + staff name + "role · business"
+  subtitle. Tapping the avatar toggles the edit affordance: emoji-picker grid AND an
+  "Upload photo" file input (`accept="image/*"`) → `useUploadAvatar`; selecting an emoji →
+  `useUpdateProfile({ avatar_emoji })`. Collapsed by default so the card stays lean.
+- **Stat tiles**: scans today + rewards given today (same tiles as the Activity screen).
+- **ACCOUNT card**: a single language row (🌐 icon tile + label + styled `<select>` bound to
+  `useI18n().locale` / `setLocale`). No notifications row, no "Switch to owner view" —
+  both dropped per design round 4 (and /me can't flag owner access from the staff area anyway).
+- **Sign out**: full-width `danger`-variant button.
 - **Logout** button (ghost) → `staffAuth` logout / `tokenStore.clear()` then `router.replace("/staff/login")` (or "/").
 
 ### Move language off the top nav on CUSTOMER screens too

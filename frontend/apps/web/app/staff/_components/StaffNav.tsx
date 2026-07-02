@@ -10,23 +10,8 @@ export const STAFF_TABS = [
     key: "staff.tab.scan",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
-        <rect x="3" y="3" width="5" height="5" rx="1" />
-        <rect x="16" y="3" width="5" height="5" rx="1" />
-        <rect x="3" y="16" width="5" height="5" rx="1" />
-        <path d="M16 16h5v5M16 16v5" />
-        <path d="M11 3v2M11 8v2M3 11h2M8 11h2M11 11h2M11 16v2M11 21h2M16 11h2M21 11v2" />
-      </svg>
-    ),
-  },
-  {
-    href: "/staff/groups",
-    key: "staff.tab.groups",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
-        <circle cx="9" cy="7" r="3" />
-        <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        <path d="M21 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
+        <rect x="8.5" y="8.5" width="7" height="7" rx="1.5" />
       </svg>
     ),
   },
@@ -35,8 +20,7 @@ export const STAFF_TABS = [
     key: "staff.tab.activity",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
-        <circle cx="12" cy="12" r="9" />
-        <polyline points="12 7 12 12 15 15" />
+        <path d="M4 6h16M4 12h16M4 18h10" />
       </svg>
     ),
   },
@@ -52,21 +36,15 @@ export const STAFF_TABS = [
   },
 ] as const;
 
-export function StaffNav({ theme = "light" }: { theme?: "light" | "dark" }) {
+/** Floating icon-pill bottom nav — white pill, icon-only tabs, active in brand. */
+export function StaffNav() {
   const t = useT();
   const pathname = usePathname();
 
-  const isDark = theme === "dark";
-
   return (
     <nav
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-      className={[
-        "fixed bottom-0 left-0 right-0 z-50 flex lg:hidden",
-        isDark
-          ? "border-t border-white/10 bg-ink/92 backdrop-blur-sm"
-          : "border-t border-line bg-cream shadow-[0_-1px_0_0_rgba(0,0,0,.04)]",
-      ].join(" ")}
+      style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
+      className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-pill bg-card px-3 py-2 shadow-modal lg:hidden"
     >
       {STAFF_TABS.map(({ href, key, icon }) => {
         const active = pathname.startsWith(href);
@@ -74,17 +52,14 @@ export function StaffNav({ theme = "light" }: { theme?: "light" | "dark" }) {
           <Link
             key={href}
             href={href}
+            aria-label={t(key)}
+            aria-current={active ? "page" : undefined}
             className={[
-              "flex flex-1 flex-col items-center justify-center gap-1 py-3 text-[10.5px] font-bold tracking-[.04em] transition",
-              active
-                ? "text-brand"
-                : isDark
-                  ? "text-white/45 hover:text-white/70"
-                  : "text-subtle hover:text-ink",
+              "flex h-11 w-14 items-center justify-center rounded-pill transition",
+              active ? "text-brand" : "text-subtle hover:text-ink",
             ].join(" ")}
           >
             {icon}
-            {t(key)}
           </Link>
         );
       })}

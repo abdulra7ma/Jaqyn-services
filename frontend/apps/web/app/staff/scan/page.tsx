@@ -5,13 +5,15 @@ import {
   useConfirmSocial,
   useConfirmVisitUnified,
   useRedeemCampaignVoucher,
+  useRedeemVoucherById,
   useResolveScan,
 } from "@jaqyn/api";
 import type {
+  ActiveVoucher,
   CampaignScanRow,
   CampaignVoucherScanResult,
   ConfirmGroupResult,
-  GroupVoucherScan,
+  GroupScanResult,
   ScanCustomerResult,
   ScanDispatchResult,
   UnifiedCampaignLeg,
@@ -37,7 +39,8 @@ type OverlayState =
   // Focused success for the single program that was just confirmed. `awarded` is
   // the points added this confirm (null for non-points programs).
   | { kind: "single_result"; leg: UnifiedCampaignLeg; customerName: string; awarded: number | null }
-  | { kind: "group_eligible"; group: GroupVoucherScan }
+  // Group session scanned — full roster for the member-checklist sheet.
+  | { kind: "group_eligible"; group: GroupScanResult }
   | { kind: "reward_valid"; result: CampaignVoucherScanResult }
   | { kind: "reward_redeemed"; rewardTitle: string }
   | { kind: "group_done"; result: ConfirmGroupResult }
@@ -101,17 +104,18 @@ function CountdownBar({ duration, onDone }: { duration: number; onDone: () => vo
 
 // ─── sheet: loyalty chooser ("Apply loyalty" — pure choose-one) ─────────────────
 
-// One row per program. ONE TAP on a row's action does it: visit/stamp/social and
-// visit-basis points confirm immediately; spend / spend-basis points open the
-// bill keypad. Eligible rows first; ineligible rows are disabled at 55% with a
-// humanized reason. No apply-all, no global confirm.
+// One tap per tile/row does it: visit/stamp/social confirm immediately; spend /
+// spend-basis points open the bill keypad. Eligible tiles first; ineligible at
+// 55% with reason. Redeem entry is pinned at top when active_vouchers is present.
 function LoyaltyChooserSheet({
   result,
   onPickRow,
   onConfirmRow,
   onConfirmSocial,
+  onRedeemVoucher,
   onDismiss,
   pendingCampaignId,
+  redeemPending,
 }: {
   result: ScanCustomerResult;
   // Spend / spend-basis points → open the keypad for this row.
@@ -120,14 +124,23 @@ function LoyaltyChooserSheet({
   onConfirmRow: (row: CampaignScanRow) => void;
   // Social → confirm the post now.
   onConfirmSocial: (row: CampaignScanRow) => void;
+  // Redeem a specific voucher by id from the active_vouchers list.
+  onRedeemVoucher: (v: ActiveVoucher) => void;
   onDismiss: () => void;
   // The campaign currently being confirmed (so its action shows a spinner).
   pendingCampaignId: string | null;
+  redeemPending: boolean;
 }) {
   const t = useT();
   const initial = (result.customer.name.trim()[0] ?? "•").toUpperCase();
-  // Eligible rows first; preserve relative order within each group.
+  // Eligible rows first; preserve relative order within each group. GROUP-type
+  // campaigns are excluded at the adapter layer (B2 spec).
   const rows = [...result.rows].sort((a, b) => Number(b.eligible) - Number(a.eligible));
+  const vouchers = result.active_vouchers;
+
+  // Local picker state: when multiple vouchers exist, show a mini-list before
+  // confirming. Single voucher → confirm directly on tap.
+  const [pickingVoucher, setPickingVoucher] = useState(false);
 
   return (
     <Sheet
@@ -151,31 +164,113 @@ function LoyaltyChooserSheet({
         </div>
       </div>
 
-      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)", marginTop: 18 }}>
-        {t("staff.chooser.title")}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 11 }}>
-        {rows.map((row) => (
-          <ChooserRow
-            key={row.campaign_id}
-            row={row}
-            pending={pendingCampaignId === row.campaign_id}
-            onPick={onPickRow}
-            onConfirm={onConfirmRow}
-            onConfirmSocial={onConfirmSocial}
-          />
-        ))}
-
-        {result.none_eligible && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#F6F0E6", borderRadius: 13, padding: "12px 14px" }}>
-            <span style={{ fontSize: 16 }}>🚫</span>
-            <div style={{ fontSize: 12.5, color: "var(--soft, #8C7A6A)", lineHeight: 1.4 }}>
-              {t("staff.campaign.noneEligible")}
+      {/* ── Redeem entry: pinned at top when customer has active vouchers ── */}
+      {vouchers.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          {!pickingVoucher ? (
+            <button
+              type="button"
+              disabled={redeemPending}
+              onClick={() => {
+                if (vouchers.length === 1) {
+                  onRedeemVoucher(vouchers[0]!);
+                } else {
+                  setPickingVoucher(true);
+                }
+              }}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", gap: 12,
+                padding: "13px 15px", border: "none", borderRadius: 14,
+                background: "linear-gradient(135deg, #C25E3C, #A2492A)",
+                color: "#fff", cursor: redeemPending ? "wait" : "pointer",
+                boxShadow: "0 8px 20px -6px rgba(160,73,42,.5)",
+                opacity: redeemPending ? 0.7 : 1,
+              }}
+            >
+              <span style={{ fontSize: 22 }}>🎁</span>
+              <span style={{ flex: 1, textAlign: "left" }}>
+                <span style={{ display: "block", font: "700 14.5px 'Hanken Grotesk',sans-serif" }}>
+                  {redeemPending ? "…" : t("staff.chooser.redeemEntry")}
+                </span>
+                <span style={{ display: "block", fontSize: 12, opacity: 0.82, marginTop: 1 }}>
+                  {vouchers.length === 1
+                    ? vouchers[0]!.label
+                    : t("staff.chooser.voucherCount").replace("{n}", String(vouchers.length))}
+                </span>
+              </span>
+              <span style={{ fontSize: 16, opacity: 0.7 }}>›</span>
+            </button>
+          ) : (
+            /* Multi-voucher picker list */
+            <div style={{ border: "1.5px solid var(--line, #EFE3D1)", borderRadius: 14, overflow: "hidden" }}>
+              {vouchers.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => { setPickingVoucher(false); onRedeemVoucher(v); }}
+                  style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 12,
+                    padding: "12px 15px", border: "none", borderBottom: "1px solid var(--line, #EFE3D1)",
+                    background: "#fff", cursor: "pointer", textAlign: "left",
+                  }}
+                >
+                  <span style={{ fontSize: 18 }}>🎁</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", font: "700 13.5px 'Hanken Grotesk',sans-serif", color: "var(--ink, #2E241D)" }}>{v.label}</span>
+                    {v.expires_label && (
+                      <span style={{ display: "block", fontSize: 11.5, color: "var(--soft, #8C7A6A)", marginTop: 1 }}>{v.expires_label}</span>
+                    )}
+                  </span>
+                  <span style={{ fontSize: 14, color: "var(--accent, #C25E3C)", fontWeight: 700 }}>›</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPickingVoucher(false)}
+                style={{ width: "100%", padding: "10px 15px", border: "none", background: "#FAFAFA", color: "var(--soft, #8C7A6A)", font: "600 13px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+              >
+                {t("common.cancel")}
+              </button>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Program tiles ── */}
+      {rows.length > 0 && (
+        <>
+          <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)", marginTop: vouchers.length > 0 ? 18 : 16 }}>
+            {t("staff.chooser.redeemPrograms")}
           </div>
-        )}
-      </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 9, marginTop: 10 }}>
+            {rows.map((row) => (
+              <ProgramTile
+                key={row.campaign_id}
+                row={row}
+                pending={pendingCampaignId === row.campaign_id}
+                onPick={onPickRow}
+                onConfirm={onConfirmRow}
+                onConfirmSocial={onConfirmSocial}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {rows.length === 0 && vouchers.length === 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#F6F0E6", borderRadius: 13, padding: "12px 14px", marginTop: 16 }}>
+          <span style={{ fontSize: 16 }}>🚫</span>
+          <div style={{ fontSize: 12.5, color: "var(--soft, #8C7A6A)", lineHeight: 1.4 }}>
+            {t("staff.campaign.noneEligible")}
+          </div>
+        </div>
+      )}
+
+      {result.none_eligible && rows.length > 0 && (
+        <div style={{ marginTop: 8, fontSize: 12, color: "var(--soft, #8C7A6A)", textAlign: "center", lineHeight: 1.4 }}>
+          {t("staff.campaign.noneEligible")}
+        </div>
+      )}
 
       <button
         type="button"
@@ -195,8 +290,9 @@ function maskPhone(phone: string): string {
   return `${p.slice(0, 2)}••••${p.slice(-3)}`;
 }
 
-// The state line + per-mechanic action for one chooser row.
-function ChooserRow({
+// Program tile — 2–3 columns in the chooser grid. Big mechanic icon + one word
+// label + program name as the small second line. ONE TAP confirms (or opens keypad).
+function ProgramTile({
   row,
   pending,
   onPick,
@@ -211,81 +307,50 @@ function ChooserRow({
 }) {
   const t = useT();
 
-  // The customer's current state for this program, by mechanic.
-  let stateLine: string;
-  if (row.mechanic === "stamp") {
-    stateLine = t("staff.chooser.stampsState").replace("{progress}", String(row.current_count)).replace("{required}", String(row.goal));
-  } else if (row.mechanic === "points") {
-    stateLine = t("staff.chooser.pointsState").replace("{balance}", String(row.points_balance));
-  } else if (row.mechanic === "social") {
-    stateLine = row.business_name;
-  } else {
-    stateLine = t("staff.chooser.visitsState").replace("{progress}", String(row.current_count)).replace("{required}", String(row.goal));
-  }
-
-  // The action label + handler, by mechanic.
-  let actionLabel: string;
+  let icon: string;
+  let word: string;
   let onAction: () => void;
+
   if (row.mechanic === "stamp") {
-    actionLabel = t("staff.chooser.addStamp");
-    onAction = () => onConfirm(row);
+    icon = "☕"; word = t("staff.scan.progStamp"); onAction = () => onConfirm(row);
   } else if (row.mechanic === "points") {
+    icon = "⭐";
     if (row.points_per_som != null) {
-      actionLabel = t("staff.chooser.enterBill");
-      onAction = () => onPick(row);
+      word = t("staff.chooser.enterBill"); onAction = () => onPick(row);
     } else {
-      // Visit-basis: flat per-visit award, no amount.
-      actionLabel = t("staff.chooser.addPoints").replace("{n}", String(row.points_per_visit ?? 0));
+      word = t("staff.chooser.addPoints").replace("{n}", String(row.points_per_visit ?? 0));
       onAction = () => onConfirm(row);
     }
   } else if (row.mechanic === "social") {
-    actionLabel = t("staff.chooser.confirmPost");
-    onAction = () => onConfirmSocial(row);
+    icon = "📢"; word = t("staff.chooser.confirmPost"); onAction = () => onConfirmSocial(row);
   } else {
-    actionLabel = t("staff.chooser.countVisit");
-    onAction = () => onConfirm(row);
+    icon = "📍"; word = t("staff.scan.progSpend"); onAction = () => onConfirm(row);
   }
 
-  const pct = row.mechanic === "points" ? cashbackPct(row) : null;
   const disabled = !row.eligible || pending;
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={disabled ? undefined : onAction}
+      disabled={disabled}
       style={{
-        display: "flex", alignItems: "center", gap: 11,
-        width: "100%", padding: "12px 14px", borderRadius: 13,
-        background: "#F8F4EC",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        gap: 5, padding: "14px 8px", border: "none", borderRadius: 14,
+        background: disabled ? "#F0EAE0" : "#F8F4EC",
         opacity: row.eligible ? 1 : 0.55,
+        cursor: disabled ? "not-allowed" : "pointer",
+        minHeight: 88,
       }}
     >
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 14, fontWeight: 700 }}>{row.name}</span>
-          {pct != null && (
-            <span style={{ font: "700 10.5px 'Hanken Grotesk',sans-serif", padding: "2px 7px", borderRadius: 99, background: "#E4F0E7", color: "#3F7355" }}>
-              {t("staff.chooser.pctBack").replace("{pct}", String(pct))}
-            </span>
-          )}
-        </span>
-        <span style={{ display: "block", fontSize: 12, color: "var(--soft, #8C7A6A)", marginTop: 2 }}>
-          {row.eligible ? stateLine : humanizeReason(t, row.reason)}
-        </span>
+      <span style={{ fontSize: 26 }}>{pending ? "⏳" : icon}</span>
+      <span style={{ font: "700 12px 'Hanken Grotesk',sans-serif", color: disabled ? "var(--soft, #8C7A6A)" : "var(--ink, #2E241D)", textAlign: "center", lineHeight: 1.2 }}>
+        {word}
       </span>
-      <button
-        type="button"
-        onClick={onAction}
-        disabled={disabled}
-        style={{
-          flexShrink: 0, padding: "9px 14px", border: "none", borderRadius: 11,
-          background: disabled ? "#EFE3D1" : "var(--accent, #C25E3C)",
-          color: disabled ? "var(--soft, #8C7A6A)" : "#fff",
-          font: "700 13px 'Hanken Grotesk',sans-serif", whiteSpace: "nowrap",
-          cursor: disabled ? "not-allowed" : "pointer",
-        }}
-      >
-        {pending ? "…" : actionLabel}
-      </button>
-    </div>
+      <span style={{ fontSize: 10.5, color: "var(--soft, #8C7A6A)", textAlign: "center", lineHeight: 1.2, maxWidth: "100%" }}>
+        {row.eligible ? row.name : humanizeReason(t, row.reason)}
+      </span>
+    </button>
   );
 }
 
@@ -467,7 +532,8 @@ function SingleResultSheet({
           boxShadow: "0 14px 30px -8px rgba(94,139,106,.6)",
         }}>✓</div>
         <div style={{ fontSize: 13.5, color: "var(--soft, #8C7A6A)", fontWeight: 600, marginTop: 14 }}>
-          {customerName} · {t("cmp.staff.bothCounted")}
+          {/* Leaner copy: "Saved to their rewards" on completion, else name · counted */}
+          {completed ? t("staff.scan.savedToRewards") : `${customerName} · ${t("cmp.staff.bothCounted")}`}
         </div>
       </div>
 
@@ -512,12 +578,22 @@ function GroupEligibleSheet({
   onDismiss,
   isPending,
 }: {
-  group: GroupVoucherScan;
+  group: GroupScanResult;
   onConfirm: () => void;
   onDismiss: () => void;
   isPending: boolean;
 }) {
   const t = useT();
+  // Local checklist state — UI-only visual aid. A single confirm-group call is
+  // the only write; no per-member API exists yet.
+  // ponytail: add per-member check-in endpoint if partial-arrival tracking is needed
+  const [ticked, setTicked] = useState<Set<number>>(
+    () => new Set(group.members.map((m, i) => m.status === "checked_in" ? i : -1).filter(i => i >= 0))
+  );
+
+  const checkedInCount = ticked.size;
+  const total = group.members.length || group.required_size;
+
   return (
     <Sheet
       open
@@ -527,18 +603,59 @@ function GroupEligibleSheet({
       showGrabber={false}
       ariaLabel={group.campaign_name}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <div style={{ font: "700 17px 'Bricolage Grotesque',sans-serif", lineHeight: 1.2 }}>{group.campaign_name}</div>
-          <div style={{ fontSize: 12.5, color: "var(--soft, #8C7A6A)", marginTop: 3 }}>{group.business_name}</div>
+      {/* Campaign name + big check-in count */}
+      <div style={{ font: "700 17px 'Bricolage Grotesque',sans-serif", lineHeight: 1.2 }}>{group.campaign_name}</div>
+      <div style={{ font: "800 34px 'Bricolage Grotesque',sans-serif", color: "var(--sage, #3F7355)", marginTop: 6, lineHeight: 1 }}>
+        {t("staff.groups.checkedInOf")
+          .replace("{n}", String(checkedInCount))
+          .replace("{total}", String(total))}
+      </div>
+
+      {/* Member roster */}
+      {group.members.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 14, border: "1px solid var(--line, #EFE3D1)", borderRadius: 14, overflow: "hidden" }}>
+          {group.members.map((member, i) => {
+            const checked = ticked.has(i);
+            return (
+              <button
+                key={i}
+                type="button"
+                aria-label={t("staff.groups.memberChecked")}
+                onClick={() => setTicked((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(i)) next.delete(i); else next.add(i);
+                  return next;
+                })}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12, padding: "12px 15px",
+                  border: "none", borderBottom: i < group.members.length - 1 ? "1px solid var(--line, #EFE3D1)" : "none",
+                  background: checked ? "#F0F7F2" : "#fff", cursor: "pointer", textAlign: "left",
+                }}
+              >
+                {/* Tick circle */}
+                <div style={{
+                  width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
+                  background: checked ? "var(--sage, #3F7355)" : "transparent",
+                  border: checked ? "none" : "2px solid var(--line, #EFE3D1)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#fff", fontSize: 14, fontWeight: 700,
+                }}>
+                  {checked ? "✓" : ""}
+                </div>
+                <span style={{ flex: 1, font: "600 14px 'Hanken Grotesk',sans-serif", color: "var(--ink, #2E241D)" }}>
+                  {member.name}
+                </span>
+                {member.is_leader && (
+                  <span style={{ font: "700 10.5px 'Hanken Grotesk',sans-serif", padding: "3px 8px", borderRadius: 99, background: "#FBEFD9", color: "#B07A1E" }}>
+                    {t("staff.chooser.leader")}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
-        <span style={{ font: "700 11px 'Hanken Grotesk',sans-serif", padding: "4px 11px", borderRadius: 99, background: "#E4F0E7", color: "#3F7355" }}>
-          {t("staff.campaign.eligible")}
-        </span>
-      </div>
-      <div style={{ background: "#FBF3E6", borderRadius: 12, padding: "11px 14px", marginTop: 16, fontSize: 12.5, color: "#8A6A3A" }}>
-        {t("staff.campaign.membersCheckedIn").replace("{count}", group.checked_in_label)}
-      </div>
+      )}
+
       <button
         type="button"
         onClick={onConfirm}
@@ -550,7 +667,7 @@ function GroupEligibleSheet({
           boxShadow: "0 12px 26px -8px rgba(94,139,106,.55)", opacity: isPending ? 0.6 : 1,
         }}
       >
-        {isPending ? "…" : t("staff.campaign.confirmGroup")}
+        {isPending ? "…" : t("staff.groups.redeemGroup")}
       </button>
       <button
         type="button"
@@ -577,12 +694,13 @@ function RewardValidSheet({
   isPending: boolean;
 }) {
   const t = useT();
+  // Only show rows that have a value — keeps the card lean.
   const rows: { label: string; value: string }[] = [
     { label: t("staff.campaign.customer"), value: result.customer_name ?? "" },
     { label: t("staff.campaign.campaign"), value: result.campaign_name ?? "" },
     { label: t("staff.campaign.expires"), value: result.expires_label ?? "" },
     { label: t("staff.campaign.code"), value: result.code ?? "" },
-  ];
+  ].filter((r) => !!r.value);
   return (
     <Sheet
       open
@@ -808,6 +926,7 @@ export default function StaffScanPage() {
   const confirmVisit = useConfirmVisitUnified();
   const confirmSocial = useConfirmSocial();
   const redeemVoucher = useRedeemCampaignVoucher();
+  const redeemById = useRedeemVoucherById();
   const confirmGroup = useConfirmGroup();
 
   const [overlay, setOverlay] = useState<OverlayState>(null);
@@ -846,6 +965,7 @@ export default function StaffScanPage() {
     confirmVisit.reset();
     confirmSocial.reset();
     redeemVoucher.reset();
+    redeemById.reset();
     confirmGroup.reset();
   };
 
@@ -870,6 +990,22 @@ export default function StaffScanPage() {
         if (dispatch.kind === "voucher") {
           const v = dispatch.voucher;
           if (v.state === "valid") {
+            // Voucher scan that carries a group session → open group sheet.
+            if (v.group != null) {
+              // ponytail: GroupVoucherScan has no member roster; synthesise a minimal GroupScanResult
+              setOverlay({
+                kind: "group_eligible",
+                group: {
+                  group_session_id: v.group.group_session_id,
+                  campaign_name: v.group.campaign_name,
+                  required_size: 0,
+                  status: "active",
+                  leader_name: "",
+                  members: [],
+                },
+              });
+              return;
+            }
             setOverlay({ kind: "reward_valid", result: v });
             return;
           }
@@ -878,6 +1014,10 @@ export default function StaffScanPage() {
             title: t(`staff.campaign.invalid.${v.state}`),
             reason: v.reason ?? t("staff.campaign.invalid.generic"),
           });
+          return;
+        }
+        if (dispatch.kind === "group") {
+          setOverlay({ kind: "group_eligible", group: dispatch.group });
           return;
         }
         // kind === "invalid"
@@ -972,6 +1112,16 @@ export default function StaffScanPage() {
         onError(error) { setPendingCampaignId(null); showError(error); },
       },
     );
+  };
+
+  // Redeem a voucher by id from the chooser-sheet active_vouchers list (B2).
+  const handleRedeemVoucher = (v: ActiveVoucher) => {
+    redeemById.mutate({ id: v.id, source: v.source }, {
+      onSuccess(data) {
+        setOverlay({ kind: "reward_redeemed", rewardTitle: data.reward_title || v.label });
+      },
+      onError(error) { showError(error); },
+    });
   };
 
   const handleRedeem = () => {
@@ -1087,8 +1237,10 @@ export default function StaffScanPage() {
             onPickRow={handlePickRow}
             onConfirmRow={handleConfirmRow}
             onConfirmSocial={handleConfirmSocialRow}
+            onRedeemVoucher={handleRedeemVoucher}
             onDismiss={dismiss}
             pendingCampaignId={pendingCampaignId}
+            redeemPending={redeemById.isPending}
           />
         )}
         {overlay?.kind === "amount" && (
@@ -1134,7 +1286,7 @@ export default function StaffScanPage() {
       </div>
 
       {/* Light bottom nav over the immersive scanner — matches the design. */}
-      <StaffNav theme="light" />
+      <StaffNav />
     </div>
   );
 }

@@ -15,6 +15,9 @@ export type StaffLoginResult = {
 
 export type TodayCode = { code: string; valid_from: string; valid_to: string };
 
+/** GET /api/staff/stats/ — today's counters for the staff member's business. */
+export type StaffTodayStats = { scans_today: number; redemptions_today: number };
+
 export type ScanResult = {
   type: string;
   business: string | null;
@@ -29,17 +32,25 @@ export type StaffRedemption = {
   expires_at: string | null;
 };
 
-export type ScanLogRow = {
+/** One event in the unified activity feed (GET /api/staff/recent-activity/). */
+export type ActivityEventKind = "redeem" | "stamp" | "visit" | "points" | "social";
+
+export type ActivityEvent = {
   id: string;
-  action: string;
-  status: string;
-  failure_reason: string | null;
+  kind: ActivityEventKind;
+  /** Masked customer name, e.g. "Aida N." */
+  customer: string;
+  /** Human label for the event, e.g. reward title or program name. */
+  label: string;
   created_at: string;
 };
 
-export type RecentActivity = {
-  scans: ScanLogRow[];
-  redemptions: { id: string; code: string; status: string; created_at: string }[];
+/** Paginated response from GET /api/staff/recent-activity/ */
+export type RecentActivityPage = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: ActivityEvent[];
 };
 
 // ---- Campaign-aware scan (apps.campaigns — plan §1.3 / §3 staff surface) -----
@@ -87,11 +98,41 @@ export type CampaignScanRow = {
   current_spend: string;
 };
 
+// An active voucher the customer holds for this business — surfaced in the
+// scan-customer response so staff can redeem from the chooser sheet directly.
+export type ActiveVoucher = {
+  id: string;
+  // Which redeem endpoint to call: "campaign" → /staff/campaigns/redeem-voucher/,
+  // "loyalty" → /staff/loyalty/redeem-voucher/
+  source: "campaign" | "loyalty";
+  label: string;
+  expires_label: string;
+};
+
 export type ScanCustomerResult = {
   customer: { id: string; name: string; phone: string };
   rows: CampaignScanRow[];
   // True when nothing the customer joined is countable right now.
   none_eligible: boolean;
+  // Active vouchers this customer holds for the current business (may be empty).
+  active_vouchers: ActiveVoucher[];
+};
+
+// One member in a group session roster.
+export type GroupMember = {
+  name: string;
+  status: "joined" | "checked_in" | string;
+  is_leader: boolean;
+};
+
+// Full group session payload returned by kind="group" in the scan dispatch.
+export type GroupScanResult = {
+  group_session_id: string;
+  campaign_name: string;
+  required_size: number;
+  status: string;
+  leader_name: string;
+  members: GroupMember[];
 };
 
 // Outcome of confirming a visit toward one campaign.
@@ -138,9 +179,10 @@ export type UnifiedScanResult = {
 
 // Read-only resolve of a scanned token → which preview the screen should open.
 export type ScanDispatchResult =
-  | { kind: "customer"; customer: ScanCustomerResult; voucher: null; reason: null }
-  | { kind: "voucher"; customer: null; voucher: CampaignVoucherScanResult; reason: null }
-  | { kind: "invalid"; customer: null; voucher: null; reason: string | null };
+  | { kind: "customer"; customer: ScanCustomerResult; voucher: null; group: null; reason: null }
+  | { kind: "voucher"; customer: null; voucher: CampaignVoucherScanResult; group: null; reason: null }
+  | { kind: "group"; customer: null; voucher: null; group: GroupScanResult; reason: null }
+  | { kind: "invalid"; customer: null; voucher: null; group: null; reason: string | null };
 
 export type CampaignVoucherScanState = "valid" | "redeemed" | "expired" | "cancelled" | "not_found";
 

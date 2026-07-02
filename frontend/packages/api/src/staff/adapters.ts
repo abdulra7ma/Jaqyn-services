@@ -13,9 +13,11 @@
 //   • customer_name on a confirm-visit / redeem result — ProgressResult and the
 //     voucher serializer carry no customer name; left blank.
 import type {
+  ActiveVoucher,
   CampaignScanRow,
   CampaignVoucherScanResult,
   ConfirmVisitResult,
+  GroupScanResult,
   RedeemCampaignVoucherResult,
   ScanCustomerResult,
   ScanDispatchResult,
@@ -77,6 +79,14 @@ export function adaptScanCustomerResult(raw: Raw): ScanCustomerResult {
       current_spend: String(row.current_spend ?? "0"),
     };
   });
+  const activeVouchers: ActiveVoucher[] = Array.isArray(raw.active_vouchers)
+    ? raw.active_vouchers.map((v: Raw) => ({
+        id: String(v.id ?? ""),
+        source: v.source === "loyalty" ? "loyalty" : "campaign",
+        label: String(v.label ?? ""),
+        expires_label: String(v.expires_label ?? ""),
+      }))
+    : [];
   return {
     customer: {
       id: raw.customer?.id ?? "",
@@ -86,6 +96,7 @@ export function adaptScanCustomerResult(raw: Raw): ScanCustomerResult {
     },
     rows,
     none_eligible: rows.length === 0 || rows.every((r) => !r.eligible),
+    active_vouchers: activeVouchers,
   };
 }
 
@@ -161,9 +172,13 @@ export function adaptRedeemResult(raw: Raw): RedeemCampaignVoucherResult {
 // voucher-scan adapters per kind so the screen branches on a single tag.
 export function adaptScanDispatch(raw: Raw): ScanDispatchResult {
   if (raw.kind === "customer") {
+    // Legacy path: raw payload uses separate loyalty/campaigns arrays instead of
+    // the unified customer object. Adapt into ScanCustomerResult shape inline.
     if (Array.isArray(raw.loyalty) || Array.isArray(raw.campaigns)) {
       const loyalty: Raw[] = Array.isArray(raw.loyalty) ? raw.loyalty : [];
-      const campaigns: Raw[] = Array.isArray(raw.campaigns) ? raw.campaigns : [];
+      // GROUP-type campaigns are excluded from the chooser (B2 spec).
+      const campaigns: Raw[] = (Array.isArray(raw.campaigns) ? raw.campaigns : [])
+        .filter((r: Raw) => r.campaign_type !== "group");
       const loyaltyRows: CampaignScanRow[] = loyalty.map((row) => ({
         campaign_id: `loyalty:${row.program_id ?? ""}`,
         name: row.name ?? "",
@@ -198,15 +213,24 @@ export function adaptScanDispatch(raw: Raw): ScanDispatchResult {
         goal: Number(row.required_count ?? 0),
         eligible: Boolean(row.eligible),
         reason: row.reason_code ?? null,
-        mechanic: "visit",
+        mechanic: (row.mechanic ?? "visit") as CampaignScanRow["mechanic"],
         campaign_type: "individual",
-        reward_title: null,
+        reward_title: row.reward_title ?? null,
         points_balance: 0,
         points_per_som: null,
         points_per_visit: null,
         cashback_per_point: null,
         current_spend: "0",
       }));
+      const allRows = [...loyaltyRows, ...campaignRows];
+      const activeVouchers: ActiveVoucher[] = Array.isArray(raw.active_vouchers)
+        ? raw.active_vouchers.map((v: Raw) => ({
+            id: String(v.id ?? ""),
+            source: v.source === "loyalty" ? ("loyalty" as const) : ("campaign" as const),
+            label: String(v.label ?? ""),
+            expires_label: String(v.expires_label ?? ""),
+          }))
+        : [];
       return {
         kind: "customer",
         customer: {
@@ -215,17 +239,20 @@ export function adaptScanDispatch(raw: Raw): ScanDispatchResult {
             name: raw.customer?.name ?? "",
             phone: raw.customer?.phone_masked ?? "",
           },
-          rows: [...loyaltyRows, ...campaignRows],
-          none_eligible: ![...loyaltyRows, ...campaignRows].some((row) => row.eligible),
+          rows: allRows,
+          none_eligible: !allRows.some((row) => row.eligible),
+          active_vouchers: activeVouchers,
         },
         voucher: null,
+        group: null,
         reason: null,
       };
     }
     return {
       kind: "customer",
-      customer: adaptScanCustomerResult(raw.customer ?? {}),
+      customer: adaptScanCustomerResult(raw),
       voucher: null,
+      group: null,
       reason: null,
     };
   }
@@ -236,8 +263,28 @@ export function adaptScanDispatch(raw: Raw): ScanDispatchResult {
       kind: "voucher",
       customer: null,
       voucher,
+      group: null,
       reason: null,
     };
   }
-  return { kind: "invalid", customer: null, voucher: null, reason: raw.reason_code ?? raw.reason ?? null };
+  if (raw.kind === "group") {
+    const g = raw.group ?? raw; // backend may inline fields or nest under "group"
+    const members = Array.isArray(g.members)
+      ? g.members.map((m: Raw) => ({
+          name: String(m.name ?? ""),
+          status: String(m.status ?? "joined"),
+          is_leader: Boolean(m.is_leader),
+        }))
+      : [];
+    const groupResult: GroupScanResult = {
+      group_session_id: String(g.group_session_id ?? raw.group_session_id ?? ""),
+      campaign_name: String(g.campaign_name ?? raw.campaign_name ?? ""),
+      required_size: Number(g.required_size ?? raw.required_size ?? 0),
+      status: String(g.status ?? raw.status ?? ""),
+      leader_name: String(g.leader_name ?? raw.leader_name ?? ""),
+      members,
+    };
+    return { kind: "group", customer: null, voucher: null, group: groupResult, reason: null };
+  }
+  return { kind: "invalid", customer: null, voucher: null, group: null, reason: raw.reason_code ?? raw.reason ?? null };
 }

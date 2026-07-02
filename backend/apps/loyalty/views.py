@@ -418,6 +418,8 @@ class StaffRedeemVoucherView(_WriteThrottleMixin, APIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         voucher = LoyaltyRedemptionService.redeem_voucher(
-            serializer.validated_data["code"], get_staff_for_user(request.user)
+            get_staff_for_user(request.user),
+            code=serializer.validated_data.get("code"),
+            voucher_id=serializer.validated_data.get("voucher_id"),
         )
         return success_response(LoyaltyVoucherSerializer(voucher).data)

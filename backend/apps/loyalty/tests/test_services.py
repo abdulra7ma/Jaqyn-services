@@ -149,5 +149,5 @@ def test_select_item_rejects_other_business_and_redeems(actors):
     assert exc.value.code == "CATALOG_ITEM_NOT_FOUND"
     item = CatalogItem.objects.create(business=business, name="Coffee")
     LoyaltyRedemptionService.select_voucher_item(voucher, item, customer)
-    redeemed = LoyaltyRedemptionService.redeem_voucher(voucher.voucher_code, staff)
+    redeemed = LoyaltyRedemptionService.redeem_voucher(staff, code=voucher.voucher_code)
     assert redeemed.status == LoyaltyVoucher.Status.REDEEMED

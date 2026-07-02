@@ -14,17 +14,20 @@ import {
   adaptVoucherScanResult,
 } from "./adapters";
 import type {
+  ActiveVoucher,
+  ActivityEventKind,
   CampaignVoucherScanResult,
   CampaignVoucherScanState,
   ConfirmGroupResult,
   ConfirmSocialResult,
-  RecentActivity,
+  RecentActivityPage,
   RedeemCampaignVoucherResult,
   ScanCustomerResult,
   ScanDispatchResult,
   ScanResult,
   UnifiedScanResult,
   StaffRedemption,
+  StaffTodayStats,
   TodayCode,
 } from "./types";
 
@@ -46,12 +49,18 @@ export const staffApi = {
     session.clear();
   },
   todayCode: () => api.get<TodayCode>("/api/staff/today-code/"),
+  stats: () => api.get<StaffTodayStats>("/api/staff/stats/"),
   scan: (token: string) => api.post<ScanResult>("/api/staff/scan/", { token }),
   redeem: (body: { code?: string; token?: string }) =>
     api.post<StaffRedemption>("/api/staff/redeem/", body),
   redeemManual: (code: string) =>
     api.post<StaffRedemption>("/api/staff/redeem/manual-code/", { code }),
-  recentActivity: () => api.get<RecentActivity>("/api/staff/recent-activity/"),
+  recentActivity: (kind?: ActivityEventKind) =>
+    api.get<RecentActivityPage>(
+      kind
+        ? `/api/staff/recent-activity/?kind=${kind}`
+        : "/api/staff/recent-activity/",
+    ),
 
   // ---- campaign-aware scan (apps.campaigns — plan §3) ----
   scanCustomerForCampaigns: (token: string): Promise<ScanCustomerResult> =>
@@ -135,6 +144,13 @@ export const staffApi = {
     code.startsWith("loyalty:")
       ? api.post<any>("/api/staff/loyalty/redeem-voucher/", { code: code.slice("loyalty:".length) }).then(adaptRedeemResult)
       : api.post<any>("/api/staff/campaigns/redeem-voucher/", { code }).then(adaptRedeemResult),
+  // Redeem by voucher id + source — used when the id is surfaced via the
+  // scan-customer active_vouchers list (B2: redeem from chooser sheet). The
+  // source tag selects the right endpoint; both now accept {voucher_id}.
+  redeemVoucherById: (voucher: Pick<ActiveVoucher, "id" | "source">): Promise<RedeemCampaignVoucherResult> =>
+    voucher.source === "loyalty"
+      ? api.post<any>("/api/staff/loyalty/redeem-voucher/", { voucher_id: voucher.id }).then(adaptRedeemResult)
+      : api.post<any>("/api/staff/campaigns/redeem-voucher/", { voucher_id: voucher.id }).then(adaptRedeemResult),
   confirmGroup: (sessionId: string): Promise<ConfirmGroupResult> =>
     api.post<ConfirmGroupResult>("/api/staff/campaigns/confirm-group/", {
       group_session_id: sessionId,

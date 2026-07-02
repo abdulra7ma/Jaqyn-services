@@ -906,3 +906,81 @@ def test_scan_dispatch_voucher_token_happy_path():
     data = response.data["data"]
     assert data["kind"] == "voucher"
     assert data["voucher"]["id"] == str(voucher.id)
+
+
+# --- B2: redeem-from-scan via voucher_id -----------------------------------
+
+
+def test_redeem_campaign_voucher_by_id_happy_path():
+    """Redeem endpoint accepts a voucher_id from the scan-customer response."""
+    business = make_business()
+    staff = make_staff(business)
+    campaign = make_campaign(business, required_count=1)
+    customer = make_customer()
+    result = CampaignProgressService.record_campaign_action(campaign, customer, staff=staff)
+    voucher_id = str(result.voucher.id)
+
+    response = staff_client(staff).post(
+        "/api/staff/campaigns/redeem-voucher/",
+        {"voucher_id": voucher_id},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.data["data"]["status"] == CampaignRewardVoucher.Status.REDEEMED
+
+
+def test_redeem_campaign_voucher_by_id_wrong_business_rejected():
+    """Redeeming a voucher_id from another business returns 403."""
+    business = make_business("b01")
+    other = make_business("b02")
+    staff_a = make_staff(business, suffix="s01")
+    staff_b = make_staff(other, suffix="s02")
+    campaign = make_campaign(business, required_count=1)
+    customer = make_customer("c01")
+    result = CampaignProgressService.record_campaign_action(campaign, customer, staff=staff_a)
+
+    response = staff_client(staff_b).post(
+        "/api/staff/campaigns/redeem-voucher/",
+        {"voucher_id": str(result.voucher.id)},
+        format="json",
+    )
+    assert response.status_code == 403
+    assert response.data["error"]["code"] == "WRONG_BUSINESS"
+
+
+def test_redeem_campaign_voucher_requires_at_least_one_field():
+    business = make_business()
+    staff = make_staff(business)
+    response = staff_client(staff).post(
+        "/api/staff/campaigns/redeem-voucher/", {}, format="json"
+    )
+    assert response.status_code == 400
+
+
+# --- B2: GROUP campaigns excluded from scan-customer chooser ---------------
+
+
+def test_scan_customer_excludes_group_campaigns():
+    """GROUP campaigns must not appear in the scan-customer chooser rows."""
+    business = make_business()
+    staff = make_staff(business)
+    _individual = make_campaign(business, required_count=3)
+    make_campaign(
+        business,
+        campaign_type=Campaign.CampaignType.GROUP,
+        required_group_size=4,
+    )
+    customer = make_customer()
+    token = get_or_create_customer_profile_token(customer).token
+
+    response = staff_client(staff).post(
+        "/api/staff/campaigns/scan-customer/", {"token": token}, format="json"
+    )
+    assert response.status_code == 200
+    campaign_ids = [row["campaign"]["id"] for row in response.data["data"]["campaigns"]]
+    # GROUP campaign must not appear.
+    group_ids = [
+        str(c.id)
+        for c in Campaign.objects.filter(campaign_type=Campaign.CampaignType.GROUP)
+    ]
+    assert not any(gid in campaign_ids for gid in group_ids)

@@ -41,6 +41,15 @@ class UnifiedStaffScanView(APIView):
             loyalty = [row.__dict__ for row in result.loyalty or []]
             customer = result.customer
             phone = getattr(customer, "phone", None) or ""
+            active_vouchers = [
+                {
+                    "id": v.id,
+                    "source": v.source,
+                    "label": v.label,
+                    "expires_label": v.expires_label,
+                }
+                for v in result.active_vouchers
+            ]
             return success_response(
                 {
                     "kind": "customer",
@@ -50,6 +59,7 @@ class UnifiedStaffScanView(APIView):
                     },
                     "loyalty": loyalty,
                     "campaigns": campaigns,
+                    "active_vouchers": active_vouchers,
                 }
             )
         if result.kind == "voucher":
@@ -64,10 +74,18 @@ class UnifiedStaffScanView(APIView):
                 {"kind": "voucher", "domain": result.domain, "voucher": voucher}
             )
         if result.kind == "group":
+            g = result.group
+            if g is None:
+                return success_response({"kind": "invalid", "reason_code": "INVALID_QR_TOKEN"})
             return success_response(
                 {
                     "kind": "group",
-                    "group_id": str(result.group.id) if result.group else None,
+                    "group_session_id": g.group_session_id,
+                    "campaign_name": g.campaign_name,
+                    "required_size": g.required_size,
+                    "status": g.status,
+                    "leader_name": g.leader_name,
+                    "members": g.members,
                 }
             )
         return success_response({"kind": "invalid", "reason_code": result.reason_code})

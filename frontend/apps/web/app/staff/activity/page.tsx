@@ -1,38 +1,58 @@
 "use client";
 
-import { useRecentActivity } from "@jaqyn/api";
+import { useRecentActivity, useStaffStats } from "@jaqyn/api";
+import type { ActivityEventKind } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
-import { Badge, Button, Card } from "@jaqyn/ui";
+import { Button, Card } from "@jaqyn/ui";
 import Link from "next/link";
+import { useState } from "react";
 import { StaffShell } from "../_components/StaffShell";
 import { QueryBoundary } from "../../_components/QueryBoundary";
 import { useStaffAuth } from "../_lib/staffAuth";
 
-function fmtTime(iso?: string) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+/** Today's counter tile — same pattern as profile page. */
+function StatTile({ label, value }: { label: string; value: number | undefined }) {
+  return (
+    <div className="rounded-xl border border-line bg-card p-4 shadow-card">
+      <div className="text-[12.5px] font-semibold text-subtle">{label}</div>
+      <div className="mt-2 font-display text-[28px] font-extrabold leading-none text-ink">
+        {value ?? "—"}
+      </div>
+    </div>
+  );
 }
 
-// Campaign scan-log action codes → i18n keys (FE-4). The backend logs every
-// campaign confirm/redeem through apps.qr.ScanLog (plan §1.1); map the known
-// codes to friendly copy and fall back to the raw action for loyalty scans.
-const CAMPAIGN_ACTION_LABELS: Record<string, string> = {
-  campaign_visit: "staff.activity.campaignVisit",
-  campaign_complete: "staff.activity.campaignComplete",
-  campaign_redeem: "staff.activity.campaignRedeem",
-  campaign_group: "staff.activity.campaignGroup",
+// Map kind → emoji icon for the icon tile.
+const KIND_ICON: Record<ActivityEventKind, string> = {
+  redeem: "🎁",
+  stamp: "☕",
+  visit: "📍",
+  points: "⭐",
+  social: "📢",
 };
 
-type Row = { id: string; who: string; what: string; time: string; tone: "ok" | "danger" | "warn" | "neutral" };
+function fmtRelative(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return `${diff}с`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}м`;
+  return `${Math.floor(diff / 3600)}ч`;
+}
+
+// Filter chip spec: All → no kind param; others map directly.
+type FilterKey = "all" | ActivityEventKind;
+
+const FILTER_CHIPS: FilterKey[] = ["all", "redeem", "stamp", "visit"];
 
 export default function StaffActivityPage() {
   const t = useT();
   const { isStaff, ready } = useStaffAuth();
-  const activity = useRecentActivity(isStaff);
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const stats = useStaffStats(ready && isStaff);
+  const kind = filter === "all" ? undefined : filter;
+  const activity = useRecentActivity(ready && isStaff, kind);
 
   return (
-    <StaffShell title={t("staff.title")}>
+    <StaffShell title={t("staff.activity.title")}>
       {!ready ? null : !isStaff ? (
         <Card>
           <p className="text-sm text-subtle">{t("staff.login")}</p>
@@ -42,53 +62,85 @@ export default function StaffActivityPage() {
         </Card>
       ) : (
         <div className="flex animate-[jqIn_.3s_ease] flex-col gap-5">
+          {/* ── Today's stats ── */}
+          <div className="grid grid-cols-2 gap-3">
+            <StatTile
+              label={t("staff.profile.scansToday")}
+              value={stats.data?.scans_today}
+            />
+            <StatTile
+              label={t("staff.profile.redemptionsToday")}
+              value={stats.data?.redemptions_today}
+            />
+          </div>
+
+          {/* ── Filter chips ── */}
+          <div className="flex gap-2 overflow-x-auto pb-0.5">
+            {FILTER_CHIPS.map((chip) => {
+              const active = filter === chip;
+              return (
+                <button
+                  key={chip}
+                  onClick={() => setFilter(chip)}
+                  className={[
+                    "flex-none rounded-pill px-4 py-2 text-[13px] font-bold transition",
+                    active
+                      ? "bg-brand text-white"
+                      : "border border-line bg-card text-subtle",
+                  ].join(" ")}
+                >
+                  {t(`staff.activity.filter.${chip}`)}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ── Event list ── */}
           <QueryBoundary query={activity}>
             {(data) => {
-              const rows: Row[] = [
-                ...data.redemptions.map((r) => ({
-                  id: `r-${r.id}`,
-                  who: r.code,
-                  what: `${t("staff.activity.redemptions")} · ${r.code}`,
-                  time: fmtTime(r.created_at),
-                  tone: (r.status === "redeemed" ? "ok" : "neutral") as Row["tone"],
-                })),
-                ...data.scans.map((s) => {
-                  const campaignKey = CAMPAIGN_ACTION_LABELS[s.action];
-                  return {
-                    id: `s-${s.id}`,
-                    who: s.action,
-                    what: campaignKey ? t(campaignKey) : s.action,
-                    time: fmtTime(s.created_at),
-                    tone: (s.status === "success" ? "ok" : s.status === "blocked" ? "danger" : "warn") as Row["tone"],
-                  };
-                }),
-              ];
+              const events = data.results;
 
-              if (rows.length === 0) {
+              if (events.length === 0) {
                 return (
-                  <div className="py-10 text-center text-subtle">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-line text-[26px]">≡</div>
-                    <div className="mt-4 font-display text-[17px] font-bold text-ink">{t("staff.activity.emptyTitle")}</div>
-                  </div>
+                  <p className="py-6 text-center text-sm text-subtle">
+                    {filter === "all"
+                      ? t("staff.activity.emptyTitle")
+                      : t("staff.activity.emptyFilter")}
+                  </p>
                 );
               }
 
               return (
                 <div>
-                  <p className="mb-3 text-[13.5px] font-semibold text-subtle">{t("staff.activity.title")}</p>
+                  {/* RECENT label — design-system Label style */}
+                  <p className="mb-3 text-[12.5px] font-bold uppercase tracking-[.04em] text-subtle">
+                    {t("staff.activity.recent")}
+                  </p>
                   <div className="flex flex-col gap-px overflow-hidden rounded-2xl border border-line bg-line">
-                    {rows.map((row) => (
-                      <div key={row.id} className="flex items-center justify-between bg-card px-4 py-3.5">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span className="flex h-[34px] w-[34px] flex-none items-center justify-center rounded-full bg-brand-muted font-display text-[13px] font-bold text-brand">
-                            {row.who.trim().charAt(0).toUpperCase() || "•"}
-                          </span>
-                          <span className="truncate text-sm font-semibold text-ink">{row.what}</span>
+                    {events.map((event) => (
+                      <div
+                        key={event.id}
+                        className="flex items-center justify-between gap-3 bg-card px-4 py-3.5"
+                      >
+                        {/* Icon tile */}
+                        <div className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[14px] bg-board text-[20px]">
+                          {KIND_ICON[event.kind]}
                         </div>
-                        <div className="flex flex-none items-center gap-2">
-                          <Badge tone={row.tone}>{row.tone === "ok" ? "✓" : row.tone}</Badge>
-                          <span className="text-xs text-subtle">{row.time}</span>
+
+                        {/* Text */}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-ink">
+                            {event.customer}
+                          </p>
+                          <p className="truncate text-[12.5px] text-subtle">
+                            {event.label || t(`staff.activity.kind.${event.kind}`)}
+                          </p>
                         </div>
+
+                        {/* Time */}
+                        <span className="flex-none text-xs text-subtle">
+                          {fmtRelative(event.created_at)}
+                        </span>
                       </div>
                     ))}
                   </div>

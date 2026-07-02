@@ -3,7 +3,7 @@ title: Campaign Collect & Redeem Workflow
 service: cross-cutting
 type: workflow
 status: active
-last_reviewed: 2026-06-30
+last_reviewed: 2026-07-02
 ---
 
 # Campaign Collect & Redeem
@@ -60,10 +60,15 @@ the loop.)
 7. **Present voucher.** `POST /api/customer/campaign-vouchers/<id>/present/`
    (`customer/api.ts:252`) puts the voucher into a presentable/redeemable state and
    renders its QR.
-8. **Staff redeems.** Staff scans the voucher →
-   `POST /api/staff/campaigns/scan-voucher/` (`staff/api.ts:112`) then
-   `POST /api/staff/campaigns/redeem-voucher/` (`staff/api.ts:137`) →
-   `CampaignRewardService` marks it redeemed. Customer's wallet updates on next poll.
+8. **Staff redeems.** Two paths, both end at the same endpoint:
+   - **From customer scan (preferred, no second scan):** when the customer scan
+     response includes `active_vouchers`, the chooser sheet pins a redeem entry.
+     Staff taps it → `POST /api/staff/campaigns/redeem-voucher/` with `voucher_id`
+     (`staff/api.ts:137`) — no second QR scan needed.
+   - **From voucher QR scan:** customer presents the voucher QR;
+     `POST /api/staff/campaigns/redeem-voucher/` with `token` or `voucher_id`.
+   Either path → `CampaignRewardService` marks the voucher redeemed. Customer's
+   wallet updates on next poll.
 
 ## Mermaid
 
@@ -86,10 +91,13 @@ sequenceDiagram
     SAPI->>SVC: ProgressService.record + RewardService.maybe_issue
     SVC-->>SAPI: progress / voucher
     Note over FE,CAPI: /rewards polls every 3s -> shows unlocked voucher
-    C->>FE: present voucher
-    FE->>CAPI: POST /api/customer/campaign-vouchers/{id}/present/
-    S->>SAPI: POST /api/staff/campaigns/scan-voucher/
-    S->>SAPI: POST /api/staff/campaigns/redeem-voucher/
+    alt redeem from customer scan (preferred)
+        Note over S,SAPI: active_vouchers in scan response; staff taps redeem
+        S->>SAPI: POST /api/staff/campaigns/redeem-voucher/ {voucher_id}
+    else redeem from voucher QR
+        C->>FE: present voucher QR
+        S->>SAPI: POST /api/staff/campaigns/redeem-voucher/ {token or voucher_id}
+    end
     SAPI->>SVC: RewardService.redeem
     SVC-->>FE: wallet reflects redeemed (next poll)
 ```
@@ -104,9 +112,10 @@ sequenceDiagram
 
 ## Gaps
 
-- **Two-scan round trip:** collect (`/collect`) and redeem (`/rewards`) are
-  separate customer screens each requiring a staff scan of the same personal QR.
-  Acceptable for POS but the highest-friction part of the loop.
+- ~~**Two-scan round trip:**~~ **Resolved.** The customer scan response now
+  includes `active_vouchers`; the chooser sheet offers a redeem action at the top,
+  so collect and redeem are one scan (see step 8 and
+  [staff-scan-unified](staff-scan-unified.md)).
 - 🔴 **Dead redeem path:** legacy `staffApi.redeem`/`redeemManual`
   (`staff/api.ts:51,53`) point at non-existent `/api/staff/redeem/*`. The live
   redeem uses `/api/staff/campaigns/redeem-voucher/`. **Fix:** delete the dead

@@ -131,6 +131,7 @@ class RedeemVoucherView(_StaffScanView):
             staff,
             token=serializer.validated_data.get("token"),
             code=serializer.validated_data.get("code"),
+            voucher_id=serializer.validated_data.get("voucher_id"),
             request=request,
         )
         return success_response(

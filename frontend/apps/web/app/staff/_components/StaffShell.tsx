@@ -86,13 +86,13 @@ export function StaffShell({
           <h1 className="font-display text-[22px] font-bold text-ink">{title}</h1>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-5 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] pt-5 lg:px-10 lg:pb-8 lg:pt-8">
+        <main className="flex-1 overflow-y-auto px-5 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] pt-5 lg:px-10 lg:pb-8 lg:pt-8">
           <div className="mx-auto w-full max-w-2xl">{children}</div>
         </main>
       </div>
 
       {/* Bottom nav — mobile only (hidden on lg via StaffNav's own class) */}
-      <StaffNav theme="light" />
+      <StaffNav />
     </div>
   );
 }
@@ -112,7 +112,7 @@ function StaffSidebar({ businessName, role }: { businessName: string; role: stri
         </div>
       </div>
 
-      {/* nav — Groups / Activity / Profile (no Scan on desktop) */}
+      {/* nav — Activity / Profile (no Scan on desktop) */}
       <nav className="mt-6 flex flex-col gap-1">
         {DESKTOP_TABS.map(({ href, key, icon }) => {
           const active = pathname.startsWith(href);

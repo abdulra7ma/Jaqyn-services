@@ -184,7 +184,15 @@ class AwardSerializer(serializers.Serializer):
 
 
 class RedeemVoucherSerializer(serializers.Serializer):
-    code = serializers.CharField(max_length=32)
+    """Staff redeem-voucher input — accepts a voucher code or the id from the scan sheet."""
+
+    code = serializers.CharField(max_length=32, required=False)
+    voucher_id = serializers.UUIDField(required=False)
+
+    def validate(self, attrs: dict) -> dict:
+        if not attrs.get("code") and not attrs.get("voucher_id"):
+            raise serializers.ValidationError("code or voucher_id is required")
+        return attrs
 
 
 class ScanSerializer(serializers.Serializer):
