@@ -2,7 +2,7 @@
 
 // Desktop + mobile business-onboarding wizard, wired live to the backend.
 // Loads the owner's business + onboarding state, autosaves each step (debounced
-// PATCH /api/business/onboarding/), manages the catalog and staff invites through
+// PATCH /api/business/onboarding/), manages the catalog and staff accounts through
 // their endpoints, and submits for verification. Visual language from Jaqyn.dc.html.
 
 import {
@@ -44,7 +44,7 @@ const STEP_DEFS = [
   { n: 1, label: "Business identity", sub: "Profile & location" },
   { n: 2, label: "Business type", sub: "What you offer" },
   { n: 3, label: "Setup", sub: "Build your catalog" },
-  { n: 4, label: "Invite staff", sub: "Optional · up to 5" },
+  { n: 4, label: "Add staff", sub: "Optional · up to 5" },
   { n: 5, label: "Review & submit", sub: "Final check" },
 ];
 const STEP_TITLE: Record<number, string> = {
@@ -118,7 +118,7 @@ export function OnboardingFlow() {
   const state = useOnboardingState(enabled);
   const types = useBusinessTypes();
   const catalog = useCatalog(enabled);
-  const team = useTeam();
+  const team = useTeam(enabled);
 
   const save = useSaveOnboarding();
   const addItem = useAddCatalogItem();
