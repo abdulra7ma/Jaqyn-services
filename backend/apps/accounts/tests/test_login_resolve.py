@@ -22,3 +22,14 @@ def test_resolve_phone_without_password_sends_otp():
     r = resolve_login_method("+996700999000", None)  # unknown phone → otp signup path
     assert r["method"] == "otp"
     assert r["request_id"]
+
+
+def test_password_login_by_phone(client):
+    from apps.accounts.models import User
+    User.objects.create_user(phone="+996700222333", password="pw12345678", role=User.Role.STAFF)
+    resp = client.post(
+        "/api/auth/login-password/", {"identifier": "+996700222333", "password": "pw12345678"},
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["access"]

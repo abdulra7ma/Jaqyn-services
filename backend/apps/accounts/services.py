@@ -306,12 +306,26 @@ def resolve_areas(user) -> list[str]:
     return areas
 
 
-def authenticate_password(email, password):
-    """Email + password fallback login. Returns (user, access, refresh)."""
-    user = User.objects.filter(email__iexact=email, is_active=True).first()
+def authenticate_identifier(identifier: str, password: str) -> tuple[User, str, str]:
+    """Password login by phone OR email. Returns (user, access, refresh).
+
+    Email (contains ``@``) matches on ``email__iexact``; otherwise on ``phone``.
+    Same generic ``INVALID_CREDENTIALS`` on any failure (no user, unusable
+    password, wrong password) so the reason isn't leaked.
+    """
+    if "@" in identifier:
+        user = User.objects.filter(email__iexact=identifier, is_active=True).first()
+    else:
+        user = User.objects.filter(phone=identifier, is_active=True).first()
     if user is None or not user.has_usable_password() or not user.check_password(password):
         raise JaqynAPIException(
-            "INVALID_CREDENTIALS", "Invalid email or password", status.HTTP_401_UNAUTHORIZED
+            "INVALID_CREDENTIALS", "Invalid credentials", status.HTTP_401_UNAUTHORIZED
         )
     refresh = RefreshToken.for_user(user)
     return user, str(refresh.access_token), str(refresh)
+
+
+# Backward-compatible alias (any other callers keep working).
+def authenticate_password(email: str, password: str) -> tuple[User, str, str]:
+    """Alias for authenticate_identifier; accepts email or phone."""
+    return authenticate_identifier(email, password)

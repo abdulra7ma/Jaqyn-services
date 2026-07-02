@@ -37,7 +37,7 @@ class VerifyOTPSerializer(serializers.Serializer):
 
 
 class PasswordLoginSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    identifier = serializers.CharField(max_length=255)
     password = serializers.CharField(max_length=128)
 
 

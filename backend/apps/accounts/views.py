@@ -17,6 +17,7 @@ from apps.accounts.serializers import (
     VerifyOTPSerializer,
 )
 from apps.accounts.services import (
+    authenticate_identifier,
     authenticate_password,
     issue_email_otp,
     issue_otp,
@@ -121,8 +122,8 @@ class PasswordLoginView(APIView):
     def post(self, request):
         serializer = PasswordLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user, access, refresh = authenticate_password(
-            serializer.validated_data["email"], serializer.validated_data["password"]
+        user, access, refresh = authenticate_identifier(
+            serializer.validated_data["identifier"], serializer.validated_data["password"]
         )
         return success_response(_auth_payload(user, access, refresh))
 
