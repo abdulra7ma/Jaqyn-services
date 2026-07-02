@@ -27,6 +27,8 @@ module.exports = {
         danger: "#B42318",
         // sheet grab-handle tone (design-system §10 bottom-sheet grabber #E0D3BF)
         handle: "#E0D3BF",
+        // icon-tile background (design-system §1 --tile, "Known gaps" in DS doc)
+        tile: "#F4ECDF",
       },
       fontFamily: {
         display: ["var(--font-display)", "Bricolage Grotesque", "system-ui", "sans-serif"],
