@@ -132,7 +132,7 @@ export function ClaimSheet({ token, businessName, goal, rewardText, open, onClos
                 type="email"
                 inputMode="email"
                 autoComplete="email"
-                placeholder="you@example.com"
+                placeholder={t("pitch.claim.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required

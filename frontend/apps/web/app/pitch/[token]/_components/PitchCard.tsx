@@ -17,11 +17,15 @@ type StampCellProps = {
 };
 
 function StampCell({ index, total, filled, onTap }: StampCellProps) {
+  const t = useT();
   const isLast = index === total - 1;
+  const stampAriaLabel = filled
+    ? t("pitch.a11y.stampFilled").replace("{n}", String(index + 1))
+    : t("pitch.a11y.stampEmpty").replace("{n}", String(index + 1));
   return (
     <motion.button
       type="button"
-      aria-label={filled ? `Stamp ${index + 1} filled` : `Stamp ${index + 1} empty`}
+      aria-label={stampAriaLabel}
       aria-pressed={filled}
       onClick={onTap}
       className={cn(
@@ -62,7 +66,7 @@ function RewardEditor({ goal, reward, onChange }: RewardEditorProps) {
       <div className="mb-2.5 flex items-center justify-center gap-3">
         <button
           type="button"
-          aria-label="Decrease goal"
+          aria-label={t("pitch.a11y.decreaseGoal")}
           disabled={goal <= 1}
           onClick={() => onChange(Math.max(1, goal - 1), reward)}
           className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-lg font-bold text-white disabled:opacity-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
@@ -74,7 +78,7 @@ function RewardEditor({ goal, reward, onChange }: RewardEditorProps) {
         </span>
         <button
           type="button"
-          aria-label="Increase goal"
+          aria-label={t("pitch.a11y.increaseGoal")}
           disabled={goal >= 20}
           onClick={() => onChange(Math.min(20, goal + 1), reward)}
           className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/50 text-lg font-bold text-white disabled:opacity-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
@@ -85,12 +89,12 @@ function RewardEditor({ goal, reward, onChange }: RewardEditorProps) {
       {/* Reward text */}
       <input
         type="text"
-        aria-label="Reward description"
+        aria-label={t("pitch.a11y.rewardLabel")}
         value={reward}
         onChange={(e) => onChange(goal, e.target.value)}
         maxLength={60}
         className="w-full rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-center text-sm font-semibold text-white placeholder:text-white/40 focus:outline focus:outline-2 focus:outline-white"
-        placeholder="e.g. coffee"
+        placeholder={t("pitch.editor.rewardPlaceholder")}
       />
     </div>
   );
@@ -183,7 +187,7 @@ export function PitchCard({ businessId, businessName, logoUrl, goal, reward, onC
           type="button"
           onClick={() => setEditorOpen((o) => !o)}
           aria-expanded={editorOpen}
-          aria-label="Edit reward"
+          aria-label={t("pitch.a11y.editReward")}
           className="shrink-0 rounded-pill border border-white/40 bg-white/20 px-3 py-1.5 text-[11px] font-bold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
         >
           {rewardLabel}
@@ -191,7 +195,7 @@ export function PitchCard({ businessId, businessName, logoUrl, goal, reward, onC
       </div>
 
       {/* stamp grid */}
-      <div className="relative mt-4 flex items-center gap-2" aria-label="Stamp card">
+      <div className="relative mt-4 flex items-center gap-2" aria-label={t("pitch.a11y.stampCard")}>
         {Array.from({ length: goal }).map((_, i) => (
           <StampCell
             key={i}

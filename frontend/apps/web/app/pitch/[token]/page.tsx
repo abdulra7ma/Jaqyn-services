@@ -31,7 +31,7 @@ function DeadLink() {
           href="https://t.me/jaqyn"
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-[16px] bg-brand px-6 py-3.5 text-[15px] font-bold text-white shadow-glow hover:bg-brand-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-pill bg-brand px-6 py-3.5 text-[15px] font-bold text-white shadow-glow hover:bg-brand-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
         >
           {t("pitch.dead.telegram")}
         </a>
@@ -145,10 +145,11 @@ export default function PitchPage() {
   const { token } = useParams<{ token: string }>();
   const resolve = usePitchResolve(token);
 
+  const t = useT();
   if (resolve.isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-cream">
-        <Loading label="Loading…" />
+        <Loading label={t("common.loading")} />
       </div>
     );
   }
