@@ -110,8 +110,8 @@ describe("Pitch page", () => {
     // Open the claim sheet via the sticky CTA
     await user.click(screen.getByRole("button", { name: "pitch.cta" }));
 
-    // Fill in the email input (type="email" → role=textbox in jsdom)
-    const emailInput = screen.getByRole("textbox");
+    // Email input is now labelled via id="pitch-email"; getByLabelText is unambiguous
+    const emailInput = screen.getByLabelText("pitch.claim.emailLabel");
     await user.type(emailInput, "owner@example.com");
 
     // Submit the form

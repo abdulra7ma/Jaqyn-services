@@ -127,6 +127,7 @@ export function ClaimSheet({ token, businessName, goal, rewardText, open, onClos
             <p className="mt-1 text-sm text-subtle">{t("pitch.claim.emailSub")}</p>
             <form className="mt-5 flex flex-col gap-4" onSubmit={handleEmailSubmit}>
               <Input
+                id="pitch-email"
                 label={t("pitch.claim.emailLabel")}
                 type="email"
                 inputMode="email"
@@ -152,6 +153,7 @@ export function ClaimSheet({ token, businessName, goal, rewardText, open, onClos
             <p className="mt-1 text-sm text-subtle">{codeSub}</p>
             <form className="mt-5 flex flex-col gap-4" onSubmit={handleCodeSubmit}>
               <Input
+                id="pitch-code"
                 label={t("pitch.claim.codeTitle")}
                 type="tel"
                 inputMode="numeric"
@@ -167,7 +169,7 @@ export function ClaimSheet({ token, businessName, goal, rewardText, open, onClos
                 </p>
               )}
               <Button type="submit" disabled={verifyPitch.isPending || code.length < 6}>
-                {verifyPitch.isPending ? t("common.loading") : t("pitch.claim.getCode")}
+                {verifyPitch.isPending ? t("common.loading") : t("pitch.claim.confirm")}
               </Button>
               <button
                 type="button"
