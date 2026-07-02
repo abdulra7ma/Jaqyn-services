@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "apps.reporting",
     "apps.notifications",
     "apps.system",
+    "apps.leads",
 ]
 
 # --- Django admin theming (django-unfold) ---
