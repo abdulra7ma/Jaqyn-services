@@ -26,3 +26,5 @@ export const pitchApi = {
       { auth: false },
     ),
 };
+
+export type PitchApi = typeof pitchApi;
