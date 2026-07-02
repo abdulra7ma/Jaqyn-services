@@ -48,6 +48,10 @@ export const staffApi = {
     tokenStore.clear();
     session.clear();
   },
+  // First-login profile setup: set the staffer's name + their own password
+  // (replacing the owner-issued one-time password) and flip profile_completed.
+  completeProfile: (body: { name: string; new_password: string }) =>
+    api.post<{ profile_completed: boolean }>("/api/staff/profile/complete/", body),
   todayCode: () => api.get<TodayCode>("/api/staff/today-code/"),
   stats: () => api.get<StaffTodayStats>("/api/staff/stats/"),
   scan: (token: string) => api.post<ScanResult>("/api/staff/scan/", { token }),

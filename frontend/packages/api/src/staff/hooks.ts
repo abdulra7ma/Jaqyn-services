@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { staffApi } from "./api";
+import { qk } from "../customer/hooks";
 import type { ActivityEventKind } from "./types";
 
 export const sqk = {
@@ -27,6 +28,16 @@ export const useRecentActivity = (enabled = true, kind?: ActivityEventKind) =>
 
 export const useStaffScan = () =>
   useMutation({ mutationFn: (token: string) => staffApi.scan(token) });
+
+// First-login profile completion. Invalidates the shared `me` query so the
+// StaffShell gate re-reads profile_completed and stops redirecting to onboarding.
+export const useCompleteStaffProfile = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; new_password: string }) => staffApi.completeProfile(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.me }),
+  });
+};
 
 export const useStaffRedeem = () => {
   const qc = useQueryClient();

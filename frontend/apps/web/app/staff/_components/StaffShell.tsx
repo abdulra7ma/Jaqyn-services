@@ -4,7 +4,7 @@ import { staffApi, useMe } from "@jaqyn/api";
 import { useI18n, useT, type Locale } from "@jaqyn/i18n";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { InitialTile, UserAvatar } from "../../_components/kit";
 import { useRequireArea } from "../../_lib/auth";
 import { useStaffAuth } from "../_lib/staffAuth";
@@ -25,8 +25,20 @@ export function StaffShell({
   children: ReactNode;
 }) {
   const t = useT();
+  const router = useRouter();
   const { staff } = useStaffAuth();
   const { allowed } = useRequireArea("staff");
+  const me = useMe();
+
+  // First-login gate: a staff account created by the owner starts with
+  // profile_completed=false and must set its name + own password before using
+  // the app. The onboarding screen renders its own chrome (not StaffShell), so
+  // this redirect never loops.
+  useEffect(() => {
+    if (staff && staff.profile_completed === false) router.replace("/staff/onboarding");
+  }, [staff, router]);
+  // Owners who also work as staff get a way back to their business dashboard.
+  const canBusiness = (me.data?.areas ?? []).includes("business");
 
   if (!allowed) return null;
 
@@ -67,9 +79,18 @@ export function StaffShell({
               </div>
             </div>
           </div>
-          <span className="rounded-pill bg-amber/15 px-2.5 py-1 text-[11px] font-bold text-amber-deep">
-            {t("staff.badge")}
-          </span>
+          {canBusiness ? (
+            <Link
+              href="/business/dashboard"
+              className="rounded-pill border border-line bg-card px-3 py-1.5 text-[11.5px] font-bold text-ink transition hover:border-brand hover:text-brand"
+            >
+              {t("staff.backToBusiness")}
+            </Link>
+          ) : (
+            <span className="rounded-pill bg-amber/15 px-2.5 py-1 text-[11px] font-bold text-amber-deep">
+              {t("staff.badge")}
+            </span>
+          )}
         </header>
 
         {/* Title header — desktop */}
@@ -144,6 +165,7 @@ function StaffAccountFooter() {
   const router = useRouter();
   const me = useMe();
   const user = me.data?.user;
+  const canBusiness = (me.data?.areas ?? []).includes("business");
 
   function signOut() {
     staffApi.logout();
@@ -183,6 +205,15 @@ function StaffAccountFooter() {
         ))}
       </div>
       <div className="my-1 h-px bg-line" />
+      {canBusiness && (
+        <Link
+          href="/business/dashboard"
+          className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2.5 text-left text-[13px] font-semibold text-ink hover:bg-board/40"
+        >
+          <span className="w-[18px] text-center">⌂</span>
+          {t("staff.backToBusiness")}
+        </Link>
+      )}
       <button
         onClick={signOut}
         className="flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2.5 text-left text-[13px] font-semibold text-brand hover:bg-board/40"
