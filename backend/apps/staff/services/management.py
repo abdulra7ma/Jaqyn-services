@@ -33,6 +33,7 @@ from django.utils import timezone
 
 from rest_framework import status
 
+from apps.accounts.models import User
 from apps.businesses.models import Business, StaffInvite
 from apps.campaigns.models import CampaignRewardVoucher
 from apps.qr.models import ScanLog
@@ -449,6 +450,43 @@ def reset_staff_password(business: Business, staff_id: str) -> str:
         user.password = make_password(temp_password)
         user.save(update_fields=["password"])
     return temp_password
+
+
+def create_staff_account(
+    business: Business, phone: str, role: str, name: str = ""
+) -> tuple[StaffMember, str]:
+    """Create a staff login for ``business`` and return (member, one-time password).
+
+    Owner-driven, invite-free staff creation. Creates (or reuses) the ``User``
+    keyed on ``phone`` with role STAFF, sets an auto-generated password, and
+    creates an active ``StaffMember`` with ``profile_completed=False`` so the
+    staffer completes their own profile on first login. The plaintext password is
+    returned exactly once for the owner to relay; only its hash is persisted.
+
+    Raises ``CONFLICT`` (409) if the user already has an active membership in this
+    business. Wrapped in a transaction because it creates an account + credential.
+    """
+    temp_password = secrets.token_urlsafe(_TEMP_PASSWORD_LENGTH)
+    with transaction.atomic():
+        user, _created = User.objects.get_or_create(
+            phone=phone, defaults={"role": User.Role.STAFF}
+        )
+        if user.staff_memberships.filter(business=business, is_active=True).exists():
+            raise JaqynAPIException(
+                "CONFLICT", "This person is already on your team", status_code=409
+            )
+        user.role = User.Role.STAFF
+        user.password = make_password(temp_password)
+        user.save(update_fields=["role", "password", "updated_at"])
+        member = StaffMember.objects.create(
+            business=business,
+            user=user,
+            name=name or (user.name or ""),
+            role=role,
+            is_active=True,
+            profile_completed=False,
+        )
+    return member, temp_password
 
 
 def remove_staff_member(business: Business, staff_id: str) -> None:
