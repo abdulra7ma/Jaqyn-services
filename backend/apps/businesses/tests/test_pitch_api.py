@@ -1,8 +1,7 @@
 import pytest
 from django.core.cache import cache
 
-from apps.accounts.models import User
-from apps.businesses.models import Business, PitchInvite
+from apps.businesses.models import Business
 from apps.businesses import pitch_services as ps
 
 pytestmark = pytest.mark.django_db
