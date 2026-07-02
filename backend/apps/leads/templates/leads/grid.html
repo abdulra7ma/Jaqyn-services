@@ -21,6 +21,8 @@
             style="padding:9px 16px; border-radius:12px; border:0; color:#fff; font-weight:600; font-size:13px; background:#C25E3C; cursor:pointer;">+ {% trans "Row" %}</button>
     <button id="add-column" type="button"
             style="padding:9px 16px; border-radius:12px; border:1.5px solid #EFE3D1; background:#fff; color:#2E241D; font-weight:600; font-size:13px; cursor:pointer;">+ {% trans "Column" %}</button>
+    <button id="columns" type="button"
+            style="padding:9px 16px; border-radius:12px; border:1.5px solid #EFE3D1; background:#fff; color:#2E241D; font-weight:600; font-size:13px; cursor:pointer;">{% trans "Columns" %}</button>
     <label style="padding:9px 16px; border-radius:12px; border:1.5px solid #EFE3D1; background:#fff; color:#2E241D; font-weight:600; font-size:13px; cursor:pointer;">
       {% trans "Upload JSON" %}<input id="upload" type="file" accept="application/json" style="display:none;">
     </label>
@@ -52,6 +54,7 @@
     rows: "{% url 'leads_api_rows' %}",
     row: (id) => `{% url 'leads_api_row' 0 %}`.replace('0', id),
     columns: "{% url 'leads_api_columns' %}",
+    column: (id) => `{% url 'leads_api_column' 0 %}`.replace('0', id),
   };
 </script>
 <script src="{% static 'leads/grid.js' %}"></script>

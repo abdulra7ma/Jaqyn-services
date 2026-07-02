@@ -67,6 +67,25 @@ function inputForColumn(col) {
   }
 }
 
+// Design-system switch (§5), scaled down: track 34x20, knob 16, on #C25E3C.
+function makeSwitch(initialOn, onToggle, title = '') {
+  const sw = document.createElement('button');
+  sw.type = 'button';
+  if (title) sw.title = title;
+  sw.style.cssText = 'flex:0 0 auto;position:relative;width:34px;height:20px;border:0;border-radius:99px;cursor:pointer;transition:background .15s;padding:0;';
+  const knob = document.createElement('span');
+  knob.style.cssText = 'position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.25);';
+  sw.appendChild(knob);
+  let on = initialOn;
+  const paint = () => {
+    sw.style.background = on ? '#C25E3C' : '#E0D3BF';
+    knob.style.transform = on ? 'translateX(14px)' : 'translateX(0)';
+  };
+  paint();
+  sw.addEventListener('click', (e) => { e.stopPropagation(); on = !on; paint(); onToggle(on); });
+  return sw;
+}
+
 // Open the shared modal. buildBody(bodyEl) fills the form; onSave() returns
 // false to keep it open (validation fail), anything else closes it.
 function openModal(title, buildBody, onSave) {
@@ -115,26 +134,10 @@ class ToggleHeader {
     this.arrow = document.createElement('span');
     this.arrow.style.cssText = 'font-size:10px;color:#8C7A6A;width:8px;';
 
-    // Design-system switch (§5), scaled down: track 34x20, knob 16, on #C25E3C.
-    const sw = document.createElement('button');
-    sw.type = 'button';
-    sw.title = 'Toggle search on this column';
-    sw.style.cssText = 'flex:0 0 auto;position:relative;width:34px;height:20px;border:0;border-radius:99px;cursor:pointer;transition:background .15s;padding:0;';
-    const knob = document.createElement('span');
-    knob.style.cssText = 'position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.25);';
-    sw.appendChild(knob);
-    const paint = () => {
-      const on = filterEnabled[colId];
-      sw.style.background = on ? '#C25E3C' : '#E0D3BF';
-      knob.style.transform = on ? 'translateX(14px)' : 'translateX(0)';
-    };
-    paint();
-    sw.addEventListener('click', (e) => {
-      e.stopPropagation();
-      filterEnabled[colId] = !filterEnabled[colId];
-      paint();
-      params.context.toggleFilter(colId, filterEnabled[colId]);
-    });
+    const sw = makeSwitch(filterEnabled[colId], (on) => {
+      filterEnabled[colId] = on;
+      params.context.toggleFilter(colId, on);
+    }, 'Toggle search on this column');
 
     this.eGui.append(label, this.arrow, sw);
     this.onSort = () => this.refreshArrow();
@@ -180,10 +183,12 @@ async function init() {
     },
     { colId: 'created_by', headerName: 'Created by', field: 'created_by', editable: false, width: 150 },
   ];
-  data.columns.filter((c) => c.is_visible).forEach((c) => {
+  // Include every column; hidden ones start collapsed but stay toggleable
+  // from the Columns panel (filtering them out would make them unrecoverable).
+  data.columns.forEach((c) => {
     columnDefs.push({
       colId: `data.${c.key}`, headerName: c.label, field: `data.${c.key}`,
-      editable: !!c.editable, ...editorFor(c),
+      editable: !!c.editable, hide: !c.is_visible, ...editorFor(c),
     });
   });
 
@@ -282,6 +287,26 @@ async function init() {
       if (res.error) { alert(res.error); return false; }
       location.reload();
     });
+  });
+
+  document.getElementById('columns').addEventListener('click', () => {
+    openModal('Show / hide columns', (body) => {
+      data.columns.forEach((c) => {
+        const colId = `data.${c.key}`;
+        const col = gridApi.getColumn(colId);
+        const sw = makeSwitch(col ? col.isVisible() : c.is_visible, (visible) => {
+          gridApi.setColumnsVisible([colId], visible);
+          api_json('PATCH', U.column(c.id), { is_visible: visible });
+        });
+        const rowEl = document.createElement('div');
+        rowEl.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 0;';
+        const name = document.createElement('span');
+        name.textContent = c.label;
+        name.style.cssText = 'font-size:14px;color:#2E241D;';
+        rowEl.append(name, sw);
+        body.appendChild(rowEl);
+      });
+    }, () => true);  // toggles apply live; Save just closes.
   });
 
   document.getElementById('upload').addEventListener('change', async (e) => {
