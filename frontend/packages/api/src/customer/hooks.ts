@@ -227,6 +227,9 @@ export const useDemoFillGroup = () => {
 export const useRequestOtp = () =>
   useMutation({ mutationFn: (phone: string) => customerApi.requestOtp(phone) });
 
+export const useLoginResolve = () =>
+  useMutation({ mutationFn: (identifier: string) => customerApi.loginResolve(identifier) });
+
 export const useVerifyOtp = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -239,8 +242,8 @@ export const useVerifyOtp = () => {
 export const usePasswordLogin = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ email, password }: { email: string; password: string }) =>
-      customerApi.passwordLogin(email, password),
+    mutationFn: ({ identifier, password }: { identifier: string; password: string }) =>
+      customerApi.passwordLogin(identifier, password),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.me }),
   });
 };

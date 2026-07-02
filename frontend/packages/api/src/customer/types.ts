@@ -36,11 +36,15 @@ export type StaffMembership = {
   role: "cashier" | "manager";
   business_id: string;
   business_name: string;
+  profile_completed: boolean;
 };
 
 export type Me = {
   user: User;
+  /** Landing area after login (single). Use `areas` for what the user may switch into. */
   area: Area;
+  /** Every area the user may enter — e.g. an owner-as-staff has both business + staff. */
+  areas?: Area[];
   limits?: { max_active_groups: number };
   profile: CustomerProfile | null;
   business?: { id: string; name: string; status: string };

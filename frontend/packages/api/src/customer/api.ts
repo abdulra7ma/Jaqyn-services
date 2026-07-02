@@ -45,10 +45,13 @@ import type {
   QrResolve,
 } from "./types";
 
+export type LoginResolveResult = { method: "otp" | "password"; request_id?: string };
+
 export interface CustomerApi {
   requestOtp(phone: string): Promise<RequestOtpResult>;
   verifyOtp(phone: string, code: string): Promise<VerifyOtpResult>;
-  passwordLogin(email: string, password: string): Promise<PasswordLoginResult>;
+  loginResolve(identifier: string): Promise<LoginResolveResult>;
+  passwordLogin(identifier: string, password: string): Promise<PasswordLoginResult>;
   requestPasswordReset(email: string): Promise<{ message: string }>;
   resetPassword(email: string, code: string, newPassword: string): Promise<ResetPasswordResult>;
   requestEmailOtp(payload: RequestEmailOtpPayload): Promise<RequestOtpResult>;
@@ -105,6 +108,8 @@ function queryString(params?: Record<string, unknown>): string {
 export const customerApi: CustomerApi = {
   requestOtp: (phone) =>
     api.post<RequestOtpResult>("/api/auth/request-otp/", { phone }, { auth: false }),
+  loginResolve: (identifier) =>
+    api.post<LoginResolveResult>("/api/auth/login/resolve/", { identifier }, { auth: false }),
   verifyOtp: async (phone, code) => {
     const res = await api.post<VerifyOtpResult>(
       "/api/auth/verify-otp/",
@@ -115,10 +120,10 @@ export const customerApi: CustomerApi = {
     session.setUserId(res.user.id);
     return res;
   },
-  passwordLogin: async (email, password) => {
+  passwordLogin: async (identifier, password) => {
     const res = await api.post<PasswordLoginResult>(
       "/api/auth/login-password/",
-      { email, password },
+      { identifier, password },
       { auth: false },
     );
     tokenStore.set(res.access, res.refresh);
