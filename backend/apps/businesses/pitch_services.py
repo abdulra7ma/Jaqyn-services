@@ -75,6 +75,8 @@ def _pitch_otp_key(raw: str) -> str:
 
 
 def _pitch_otp_attempt_key(raw: str) -> str:
+    # Wrong-attempt counter for this link's code, in the same hash-keyed pitch
+    # namespace as _pitch_otp_key; burns the code once PITCH_OTP_MAX_ATTEMPTS is hit.
     return f"pitch_otp_attempts:{hash_token(raw)}"
 
 

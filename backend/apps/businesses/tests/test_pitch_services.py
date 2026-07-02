@@ -89,8 +89,10 @@ def test_double_claim_rejected():
     ps.request_pitch_code(raw, "o@b.kg", None)
     code = cache.get(ps._pitch_otp_key(raw))["code"]
     ps.claim_pitch(raw, "o@b.kg", code, goal=5, reward_text="кофе")
-    with pytest.raises(JaqynAPIException):
+    with pytest.raises(JaqynAPIException) as exc:
         ps.claim_pitch(raw, "o@b.kg", code, goal=5, reward_text="кофе")
+    # Second claim hits the CLAIMED guard before the OTP check → 410 Gone.
+    assert exc.value.status_code == 410
 
 
 def test_claim_email_already_owns_business_conflicts():
