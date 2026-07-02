@@ -59,3 +59,18 @@ def test_patch_row_updates_status(client, staff):
     assert resp.status_code == 200
     lead.refresh_from_db()
     assert lead.status_id == s2.pk
+
+
+def test_create_row_with_payload_coerces_and_sets_status(client, staff):
+    client.force_login(staff)
+    status = LeadStatus.objects.create(name="Contacted", is_default=True)
+    LeadColumn.objects.create(key="rating", label="Rating", type="number")
+    resp = client.post(
+        reverse("leads_api_rows"),
+        data=json.dumps({"data": {"rating": "4.7"}, "status_id": status.pk}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 201
+    lead = Lead.objects.get(pk=resp.json()["id"])
+    assert lead.data["rating"] == 4.7  # coerced str -> float by the column type
+    assert lead.status_id == status.pk

@@ -88,13 +88,21 @@ def api_upload(request: HttpRequest) -> JsonResponse:
 
 @require_http_methods(["POST"])
 def api_rows(request: HttpRequest) -> JsonResponse:
-    """Create a blank row (add-row button)."""
+    """Create a row. An optional JSON body ``{data, status_id}`` seeds the new row
+    (from the add-row modal); an empty/absent body creates a blank row."""
     forbidden = _forbid_non_staff(request)
     if forbidden:
         return forbidden
     lead = Lead.objects.create(
         data={}, status=services._default_status(), created_by=request.user
     )
+    body = json.loads(request.body or "{}")
+    if body.get("data") or body.get("status_id"):
+        try:
+            services.update_row(lead, body.get("data", {}), body.get("status_id"), request.user)
+        except services.LeadServiceError as exc:
+            lead.delete()
+            return JsonResponse({"error": str(exc)}, status=400)
     return JsonResponse(_serialize_lead(lead), status=201)
 
 

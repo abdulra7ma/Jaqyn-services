@@ -27,6 +27,76 @@ function applyFilterVisibility() {
     .join('');
 }
 
+/* ---- Modal (design-system §10) + form-field helpers ---------------------- */
+const INPUT_CSS = 'border:1.5px solid #EFE3D1;border-radius:15px;padding:12px 14px;font-size:14px;font-weight:500;color:#2E241D;background:#fff;width:100%;box-sizing:border-box;';
+const FIELD_LABEL_CSS = 'font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#8C7A6A;margin-bottom:6px;display:block;';
+
+function field(labelText, control) {
+  const wrap = document.createElement('div');
+  const l = document.createElement('label');
+  l.textContent = labelText;
+  l.style.cssText = FIELD_LABEL_CSS;
+  wrap.append(l, control);
+  return wrap;
+}
+function textInput(type = 'text', value = '') {
+  const i = document.createElement('input');
+  i.type = type; i.value = value; i.style.cssText = INPUT_CSS;
+  return i;
+}
+function selectInput(options, value = '', allowBlank = true) {
+  const s = document.createElement('select');
+  s.style.cssText = INPUT_CSS;
+  if (allowBlank) { const b = document.createElement('option'); b.value = ''; b.textContent = '—'; s.appendChild(b); }
+  options.forEach((o) => {
+    const opt = document.createElement('option');
+    opt.value = o; opt.textContent = o;
+    if (String(o) === String(value)) opt.selected = true;
+    s.appendChild(opt);
+  });
+  return s;
+}
+function inputForColumn(col) {
+  switch (col.type) {
+    case 'number': return textInput('number');
+    case 'date': return textInput('date');
+    case 'boolean': return selectInput(['true', 'false']);
+    case 'select':
+    case 'multiselect': return selectInput(col.choices || []);
+    default: return textInput('text');
+  }
+}
+
+// Open the shared modal. buildBody(bodyEl) fills the form; onSave() returns
+// false to keep it open (validation fail), anything else closes it.
+function openModal(title, buildBody, onSave) {
+  const backdrop = document.getElementById('modal-backdrop');
+  document.getElementById('modal-title').textContent = title;
+  const body = document.getElementById('modal-body');
+  body.innerHTML = '';
+  buildBody(body);
+  backdrop.style.display = 'flex';
+  const saveBtn = document.getElementById('modal-save');
+  const cancelBtn = document.getElementById('modal-cancel');
+  function cleanup() {
+    backdrop.style.display = 'none';
+    saveBtn.removeEventListener('click', onSaveClick);
+    cancelBtn.removeEventListener('click', cleanup);
+    backdrop.removeEventListener('mousedown', onBackdrop);
+    document.removeEventListener('keydown', onKey);
+  }
+  async function onSaveClick() {
+    saveBtn.disabled = true;
+    try { if ((await onSave()) !== false) cleanup(); } finally { saveBtn.disabled = false; }
+  }
+  const onBackdrop = (e) => { if (e.target === backdrop) cleanup(); };
+  const onKey = (e) => { if (e.key === 'Escape') cleanup(); };
+  saveBtn.addEventListener('click', onSaveClick);
+  cancelBtn.addEventListener('click', cleanup);
+  backdrop.addEventListener('mousedown', onBackdrop);
+  document.addEventListener('keydown', onKey);
+}
+
 /* Custom header: clickable label (sort) + sort arrow + on/off search switch. */
 class ToggleHeader {
   init(params) {
@@ -166,18 +236,52 @@ async function init() {
     gridApi.setGridOption('quickFilterText', e.target.value);
   });
 
-  document.getElementById('add-row').addEventListener('click', async () => {
-    const row = await api_json('POST', U.rows);
-    gridApi.applyTransaction({ add: [row], addIndex: 0 });
+  document.getElementById('add-row').addEventListener('click', () => {
+    const inputs = {};
+    let statusEl;
+    openModal('Add lead', (body) => {
+      const dflt = statuses.find((s) => s.is_default);
+      statusEl = selectInput(statuses.map((s) => s.name), dflt ? dflt.name : '');
+      body.appendChild(field('Status', statusEl));
+      data.columns.filter((c) => c.is_visible).forEach((c) => {
+        const el = inputForColumn(c);
+        inputs[c.key] = el;
+        body.appendChild(field(c.label, el));
+      });
+    }, async () => {
+      const payload = {};
+      Object.entries(inputs).forEach(([k, el]) => { if (el.value !== '') payload[k] = el.value; });
+      const s = statusByName[statusEl.value];
+      const res = await api_json('POST', U.rows, { data: payload, status_id: s ? s.id : null });
+      if (res.error) { alert(res.error); return false; }
+      gridApi.applyTransaction({ add: [res], addIndex: 0 });
+    });
   });
 
-  document.getElementById('add-column').addEventListener('click', async () => {
-    const label = prompt('Column label?');
-    if (!label) return;
-    const type = prompt('Type? text/number/date/boolean/url/select/multiselect', 'text') || 'text';
-    const res = await api_json('POST', U.columns, { key: label, label, type });
-    if (res.error) return alert(res.error);
-    location.reload();
+  document.getElementById('add-column').addEventListener('click', () => {
+    let labelEl, typeEl, choicesEl, choicesWrap;
+    openModal('Add column', (body) => {
+      labelEl = textInput('text');
+      typeEl = selectInput(['text', 'number', 'date', 'boolean', 'url', 'select', 'multiselect'], 'text', false);
+      choicesEl = textInput('text');
+      choicesEl.placeholder = 'High, Medium, Low';
+      choicesWrap = field('Choices (comma-separated)', choicesEl);
+      const syncChoices = () => {
+        choicesWrap.style.display = (typeEl.value === 'select' || typeEl.value === 'multiselect') ? 'block' : 'none';
+      };
+      typeEl.addEventListener('change', syncChoices);
+      body.append(field('Label', labelEl), field('Type', typeEl), choicesWrap);
+      syncChoices();
+    }, async () => {
+      const label = labelEl.value.trim();
+      if (!label) { labelEl.focus(); return false; }
+      const type = typeEl.value;
+      const choices = (type === 'select' || type === 'multiselect')
+        ? choicesEl.value.split(',').map((s) => s.trim()).filter(Boolean) : [];
+      const res = await api_json('POST', U.columns, { key: label, label, type, choices });
+      if (res.error) { alert(res.error); return false; }
+      location.reload();
+    });
   });
 
   document.getElementById('upload').addEventListener('change', async (e) => {
