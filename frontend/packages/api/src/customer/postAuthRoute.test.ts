@@ -49,7 +49,12 @@ test("business user -> business console regardless of return", () => {
   assert.equal(postAuthRoute(r, "/"), "/business/dashboard");
 });
 
-test("staff user -> staff console", () => {
-  const r: AuthResult = { ...base, area: "staff", profile_completed: false };
+test("staff user with complete profile -> staff console", () => {
+  const r: AuthResult = { ...base, area: "staff", profile_completed: true };
   assert.equal(postAuthRoute(r, "/"), "/staff");
+});
+
+test("staff user with incomplete profile -> /staff/onboarding", () => {
+  const r: AuthResult = { ...base, area: "staff", profile_completed: false };
+  assert.equal(postAuthRoute(r, "/"), "/staff/onboarding");
 });
