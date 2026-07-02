@@ -30,6 +30,8 @@ import type {
   CampaignVoucherRow,
   CatalogItem,
   CatalogItemPayload,
+  CreateStaffPayload,
+  CreateStaffResult,
   Dashboard,
   GalleryImage,
   InviteValidation,
@@ -89,6 +91,8 @@ export const businessApi = {
   uploadCover: (file: File) => uploadBusinessImage("/api/business/profile/cover/", file),
   updateMe: (patch: Omit<Partial<BusinessProfile>, "working_hours"> & { working_hours?: unknown }) =>
     api.patch<BusinessProfile>("/api/business/me/", patch),
+  setOwnerStaff: (enabled: boolean) =>
+    api.post<BusinessProfile>("/api/business/owner-staff/", { enabled }),
   dashboard: () => api.get<Dashboard>("/api/business/dashboard/"),
   qr: () => api.get<MerchantQr>("/api/business/qr/"),
   regenerateApprovalCode: () =>
@@ -193,6 +197,8 @@ export const businessApi = {
   resetStaffPassword: (id: string) =>
     api.post<StaffPasswordReset>(`/api/business/staff/${id}/reset-password/`),
   removeStaffMember: (id: string) => api.delete<unknown>(`/api/business/staff/${id}/`),
+  createStaffAccount: (p: CreateStaffPayload) =>
+    api.post<CreateStaffResult>("/api/business/staff/", p),
 
   // ---- campaigns (apps.campaigns — plan §1.3) ----
   // List supports ?type=individual|group|social & ?status=active|draft|completed

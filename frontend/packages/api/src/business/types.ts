@@ -40,6 +40,9 @@ export type BusinessProfile = {
   cover_set?: boolean;
   glyph?: string;
   accent_color?: string;
+  // Owner-chosen wallet-card gradient (terracotta/amber/sage/plum/indigo); "" = auto
+  // (hashed from business id). See loyalty/_lib/wallet.ts CARD_ACCENTS.
+  card_accent?: string;
   price_level?: string;
   tags?: string[];
   working_hours: Record<string, [string, string]> | null;
@@ -54,6 +57,8 @@ export type BusinessProfile = {
   change_note?: string;
   completion_score?: number;
   missing_required_fields?: { label: string; step: number }[];
+  // Whether the owner holds an active staff seat (can switch to the staff app).
+  owner_is_staff?: boolean;
   created_at: string;
 };
 
@@ -528,3 +533,7 @@ export type BusinessReport = {
 };
 
 export type ReportRange = { date_from: string; date_to: string };
+
+// ---- owner-created staff accounts (POST /api/business/staff/) ---------------
+export type CreateStaffPayload = { phone: string; role: "manager" | "cashier"; name?: string };
+export type CreateStaffResult = { member: TeamRow; temp_password: string };

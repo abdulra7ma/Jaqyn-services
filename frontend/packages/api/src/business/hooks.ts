@@ -8,6 +8,7 @@ import type {
   CampaignLifecycleAction,
   CampaignPayload,
   CatalogItemPayload,
+  CreateStaffPayload,
   OnboardingProfilePatch,
   ReportPeriod,
   ReportRange,
@@ -75,6 +76,20 @@ export const useUpdateBusiness = () => {
     },
   });
 };
+// Toggle the owner's "work as staff" seat. Writes the fresh business into `me`
+// and invalidates the customer `me` key (["me"]) so the owner's `areas` (and the
+// staff-switch nav) refresh without a reload.
+export const useSetOwnerStaff = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) => businessApi.setOwnerStaff(enabled),
+    onSuccess: (b) => {
+      qc.setQueryData(bqk.me, b);
+      qc.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+};
+
 export const useRegenerateApprovalCode = () =>
   useMutation({ mutationFn: () => businessApi.regenerateApprovalCode() });
 
@@ -244,6 +259,14 @@ export const useRemoveStaffMember = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => businessApi.removeStaffMember(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: bqk.team }),
+  });
+};
+
+export const useCreateStaffAccount = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: CreateStaffPayload) => businessApi.createStaffAccount(p),
     onSuccess: () => qc.invalidateQueries({ queryKey: bqk.team }),
   });
 };
