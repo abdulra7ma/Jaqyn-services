@@ -6,7 +6,7 @@
 // Owner-gated like the other /business pages (useAuth → no render until ready).
 
 import {
-  useAddStaffInvite,
+  useCreateStaffAccount,
   useReactivateStaff,
   useRemoveStaffInvite,
   useRemoveStaffMember,
@@ -71,7 +71,7 @@ export default function ManageStaffPage() {
               onClick={() => setInviteOpen(true)}
               className="whitespace-nowrap rounded-xl bg-brand px-[18px] py-[11px] text-[13.5px] font-semibold text-brand-fg transition active:scale-[.99]"
             >
-              {t("biz.staff.invite")}
+              {t("staff.create.addButton")}
             </button>
           </div>
 
@@ -93,7 +93,7 @@ export default function ManageStaffPage() {
           {detailId && (
             <StaffDrawer id={detailId} onClose={() => setDetailId(null)} />
           )}
-          {inviteOpen && <InviteModal onClose={() => setInviteOpen(false)} />}
+          {inviteOpen && <CreateStaffModal onClose={() => setInviteOpen(false)} />}
         </div>
     </OwnerShell>
   );
@@ -447,26 +447,40 @@ function InviteDetail({ member, onClose }: { member: TeamRow; onClose: () => voi
   );
 }
 
-// ---- Invite modal ----------------------------------------------------------
+// ---- Create staff modal ----------------------------------------------------
 
-function InviteModal({ onClose }: { onClose: () => void }) {
+function CreateStaffModal({ onClose }: { onClose: () => void }) {
   const t = useT();
   const errMessage = useErrMessage();
-  const add = useAddStaffInvite();
-  const [name, setName] = useState("");
-  const [contact, setContact] = useState("");
-  // Invite roles map to the staff-invite payload; default to the cashier-tier.
+  const create = useCreateStaffAccount();
+  const [phone, setPhone] = useState("");
   const [role, setRole] = useState<TeamRole>("cashier");
+  const [pwResult, setPwResult] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const FIELD =
     "mt-1.5 w-full rounded-xl border-[1.5px] border-line bg-card px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-brand";
   const LABEL = "text-xs font-bold text-subtle";
 
   function onSubmit() {
-    add.mutate(
-      { full_name: name.trim() || undefined, contact: contact.trim(), role },
-      { onSuccess: onClose },
+    create.mutate(
+      { phone: phone.trim(), role },
+      { onSuccess: (r) => setPwResult(r.temp_password) },
     );
+  }
+
+  function handleClose() {
+    setPwResult(null);
+    setCopied(false);
+    onClose();
+  }
+
+  function copyPassword() {
+    if (!pwResult) return;
+    void navigator.clipboard.writeText(pwResult).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
 
   return (
@@ -474,60 +488,87 @@ function InviteModal({ onClose }: { onClose: () => void }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
       role="dialog"
       aria-modal
-      onClick={onClose}
+      aria-labelledby="create-staff-title"
+      onClick={handleClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-md rounded-[18px] border border-line bg-card p-5"
       >
-        <h3 className="font-display text-[16px] font-bold text-ink">{t("biz.staff.invite.title")}</h3>
-        <label className="mt-4 block">
-          <span className={LABEL}>{t("biz.staff.invite.name")}</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t("biz.staff.invite.namePlaceholder")}
-            className={FIELD}
-          />
-        </label>
-        <label className="mt-3 block">
-          <span className={LABEL}>{t("biz.staff.invite.contact")}</span>
-          <input
-            value={contact}
-            onChange={(e) => setContact(e.target.value)}
-            placeholder={t("biz.staff.invite.contactPlaceholder")}
-            className={FIELD}
-          />
-        </label>
-        <label className="mt-3 block">
-          <span className={LABEL}>{t("biz.staff.invite.role")}</span>
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value as TeamRole)}
-            className={FIELD}
-          >
-            <option value="cashier">{t("biz.staff.role.cashier")}</option>
-            <option value="manager">{t("biz.staff.role.manager")}</option>
-          </select>
-        </label>
-        {add.isError && (
-          <p className="mt-3 text-[12.5px] font-semibold text-danger">{errMessage(add.error)}</p>
+        {pwResult ? (
+          // One-time password reveal panel
+          <>
+            <h3 id="create-staff-title" className="font-display text-[16px] font-bold text-ink">
+              {t("staff.create.passwordTitle")}
+            </h3>
+            <p className="mt-2 text-[13px] leading-relaxed text-subtle">
+              {t("staff.create.passwordHelp")}
+            </p>
+            <div className="mt-4 rounded-xl bg-amber/15 px-4 py-4">
+              <div className="font-mono text-xl font-extrabold tracking-[0.04em] text-amber-deep">
+                {pwResult}
+              </div>
+            </div>
+            <button
+              onClick={copyPassword}
+              className="mt-3 w-full rounded-xl border border-line bg-card py-3 text-[13px] font-semibold text-ink transition hover:bg-board/40"
+            >
+              {copied ? t("common.copied") : t("staff.create.copy")}
+            </button>
+            <button
+              onClick={handleClose}
+              className="mt-2.5 w-full rounded-xl bg-brand py-3 text-sm font-bold text-brand-fg shadow-glow"
+            >
+              {t("staff.create.done")}
+            </button>
+          </>
+        ) : (
+          // Create form
+          <>
+            <h3 id="create-staff-title" className="font-display text-[16px] font-bold text-ink">
+              {t("staff.create.title")}
+            </h3>
+            <label className="mt-4 block">
+              <span className={LABEL}>{t("staff.create.phone")}</span>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+996 700 123456"
+                className={FIELD}
+              />
+            </label>
+            <label className="mt-3 block">
+              <span className={LABEL}>{t("staff.create.role")}</span>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as TeamRole)}
+                className={FIELD}
+              >
+                <option value="cashier">{t("biz.staff.role.cashier")}</option>
+                <option value="manager">{t("biz.staff.role.manager")}</option>
+              </select>
+            </label>
+            {create.isError && (
+              <p className="mt-3 text-[12.5px] font-semibold text-danger">{errMessage(create.error)}</p>
+            )}
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={handleClose}
+                className="rounded-xl border-[1.5px] border-line bg-card px-4 py-3 text-sm font-semibold text-ink"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={onSubmit}
+                disabled={!phone.trim() || create.isPending}
+                className="flex-1 rounded-xl bg-brand py-3 text-sm font-bold text-brand-fg shadow-glow disabled:opacity-60"
+              >
+                {create.isPending ? t("staff.create.submitting") : t("staff.create.submit")}
+              </button>
+            </div>
+          </>
         )}
-        <div className="mt-5 flex gap-3">
-          <button
-            onClick={onClose}
-            className="rounded-xl border-[1.5px] border-line bg-card px-4 py-3 text-sm font-semibold text-ink"
-          >
-            {t("common.cancel")}
-          </button>
-          <button
-            onClick={onSubmit}
-            disabled={!contact.trim() || add.isPending}
-            className="flex-1 rounded-xl bg-brand py-3 text-sm font-bold text-brand-fg shadow-glow disabled:opacity-60"
-          >
-            {add.isPending ? t("biz.staff.invite.sending") : t("biz.staff.invite.send")}
-          </button>
-        </div>
       </div>
     </div>
   );

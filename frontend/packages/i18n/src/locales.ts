@@ -720,6 +720,18 @@ export const messages: Record<Locale, Record<string, string>> = {
     "biz.staff.invite.send": "Отправить приглашение",
     "biz.staff.invite.sending": "Отправляем…",
 
+    // Create staff account modal (replaces invite flow).
+    "staff.create.addButton": "+ Добавить сотрудника",
+    "staff.create.title": "Создать аккаунт сотрудника",
+    "staff.create.phone": "Номер телефона",
+    "staff.create.role": "Роль",
+    "staff.create.submit": "Создать аккаунт",
+    "staff.create.submitting": "Создаём…",
+    "staff.create.passwordTitle": "Аккаунт создан",
+    "staff.create.passwordHelp": "Передайте этот пароль сотруднику. Вы больше не увидите его.",
+    "staff.create.copy": "Скопировать пароль",
+    "staff.create.done": "Готово",
+
     // Onboarding submit-for-verification confirm dialog.
     "biz.onboard.submit.title": "Отправить на проверку?",
     "biz.onboard.submit.description":
@@ -2188,6 +2200,18 @@ export const messages: Record<Locale, Record<string, string>> = {
     "biz.staff.invite.role": "Role",
     "biz.staff.invite.send": "Send invite",
     "biz.staff.invite.sending": "Sending…",
+
+    // Create staff account modal (replaces invite flow).
+    "staff.create.addButton": "+ Add staff",
+    "staff.create.title": "Create staff account",
+    "staff.create.phone": "Phone number",
+    "staff.create.role": "Role",
+    "staff.create.submit": "Create account",
+    "staff.create.submitting": "Creating…",
+    "staff.create.passwordTitle": "Account created",
+    "staff.create.passwordHelp": "Share this password with the staffer. You won't see it again.",
+    "staff.create.copy": "Copy password",
+    "staff.create.done": "Done",
 
     // Onboarding submit-for-verification confirm dialog.
     "biz.onboard.submit.title": "Submit for verification?",
