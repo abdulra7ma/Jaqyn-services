@@ -25,6 +25,8 @@ module.exports = {
         amber: { DEFAULT: "#E7A23E", deep: "#B07A1E" },
         ok: "#3F7355",
         danger: "#B42318",
+        // icon-tile backgrounds (design-system §1 --tile; §8 icon tiles, §10 empty-state)
+        tile: "#F4ECDF",
         // sheet grab-handle tone (design-system §10 bottom-sheet grabber #E0D3BF)
         handle: "#E0D3BF",
       },
