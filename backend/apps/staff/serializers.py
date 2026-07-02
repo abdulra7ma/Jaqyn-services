@@ -92,3 +92,18 @@ class StaffRoleUpdateSerializer(serializers.Serializer):
     """Input for PATCH role change — enforces enum membership at the edge."""
 
     role = serializers.ChoiceField(choices=StaffMember.Role.choices)
+
+
+class StaffCreateSerializer(serializers.Serializer):
+    """Input for owner-created staff: phone + role (name optional)."""
+
+    phone = serializers.CharField(max_length=32)
+    role = serializers.ChoiceField(choices=StaffMember.Role.choices)
+    name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+
+
+class StaffCreateResultSerializer(serializers.Serializer):
+    """Response for POST /api/business/staff/ — member row + one-time password."""
+
+    member = TeamRowSerializer()
+    temp_password = serializers.CharField()

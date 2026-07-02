@@ -1,5 +1,6 @@
 """Tests for owner-created staff accounts and profile_completed flag."""
 import pytest
+from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.businesses.models import Business
@@ -52,3 +53,55 @@ def test_create_staff_account_conflict_on_existing_membership():
         management.create_staff_account(business, "+996700111222", StaffMember.Role.MANAGER)
     # ponytail: .code is the canonical field; str() renders only the message
     assert "CONFLICT" in repr(exc.value)
+
+
+# --- POST /api/business/staff/ endpoint ---
+
+
+def _make_owner_client() -> tuple[Business, APIClient]:
+    """Build an approved business + an APIClient authenticated as its owner."""
+    owner = User.objects.create_user(
+        phone="+996709999002",
+        role=User.Role.BUSINESS_OWNER,
+        is_phone_verified=True,
+        name="Owner2",
+    )
+    business = Business.objects.create(
+        owner=owner,
+        name="Test Cafe 2",
+        category="cafe",
+        address="Main 2",
+        area="center",
+        phone="+996709100002",
+        working_hours={},
+        status=Business.Status.APPROVED,
+    )
+    client = APIClient()
+    client.force_authenticate(user=owner)
+    return business, client
+
+
+def test_create_staff_endpoint_owner_only_and_returns_password():
+    business, client = _make_owner_client()
+    resp = client.post(
+        "/api/business/staff/",
+        {"phone": "+996700333444", "role": "cashier"},
+        format="json",
+    )
+    assert resp.status_code == 200
+    body = resp.json()["data"]
+    assert body["temp_password"]
+    assert body["member"]["role"] == "cashier"
+    # ponytail: _member_status returns "active" for is_active=True members;
+    # "invited" is the status for StaffInvite rows only. A freshly created
+    # StaffMember (is_active=True) reports "active".
+    assert body["member"]["status"] == "active"
+
+
+def test_create_staff_endpoint_rejects_anonymous():
+    resp = APIClient().post(
+        "/api/business/staff/",
+        {"phone": "+996700333444", "role": "cashier"},
+        format="json",
+    )
+    assert resp.status_code in (401, 403)

@@ -16,6 +16,8 @@ from rest_framework.views import APIView
 from apps.businesses.models import Business
 from apps.staff import services
 from apps.staff.serializers import (
+    StaffCreateResultSerializer,
+    StaffCreateSerializer,
     StaffRoleUpdateSerializer,
     TeamListSerializer,
     TeamRowSerializer,
@@ -46,8 +48,13 @@ class _StaffWriteMixin(_OwnerStaffMixin):
         return [ScopedRateThrottle()]
 
 
-class StaffTeamListView(_OwnerStaffMixin, APIView):
-    """GET /api/business/staff/ — merged team list (members + pending invites)."""
+class StaffTeamListView(_StaffWriteMixin, APIView):
+    """GET list; POST create a staff account (returns a one-time password).
+
+    GET uses the write mixin (owner-only + throttle) because POST is on the
+    same view. The throttle scope fires for POST writes; GET is effectively
+    low-frequency for owners so applying staff_manage to GET is acceptable.
+    """
 
     serializer_class = TeamListSerializer
 
@@ -55,6 +62,21 @@ class StaffTeamListView(_OwnerStaffMixin, APIView):
         business = self.get_business(request)
         team = services.list_team(business)
         return success_response(TeamListSerializer(team).data)
+
+    def post(self, request: Request) -> Response:
+        business = self.get_business(request)
+        serializer = StaffCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        member, temp_password = services.create_staff_account(
+            business,
+            serializer.validated_data["phone"],
+            serializer.validated_data["role"],
+            serializer.validated_data.get("name", ""),
+        )
+        row = services.get_staff_detail(business, str(member.id))
+        return success_response(
+            StaffCreateResultSerializer({"member": row, "temp_password": temp_password}).data
+        )
 
 
 class StaffMemberDetailView(_StaffWriteMixin, APIView):
