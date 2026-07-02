@@ -8,6 +8,7 @@ scan→advance→redeem flow lives in ``apps.campaigns`` under
 surface the staff till still calls.
 """
 
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.campaigns.models import Campaign, CampaignRewardVoucher
@@ -16,6 +17,7 @@ from apps.qr.services import resolve_qr_token
 from apps.staff.serializers import (
     ActivityEventSerializer,
     ActivityQuerySerializer,
+    StaffProfileCompleteSerializer,
     StaffScanSerializer,
     StaffTodayStatsSerializer,
 )
@@ -24,6 +26,7 @@ from apps.staff.services import (
     get_staff_today_stats,
     list_activity_events,
 )
+from apps.staff.services import management
 from core.exceptions import JaqynAPIException
 from core.pagination import StandardResultsSetPagination
 from core.permissions import IsStaff
@@ -157,3 +160,25 @@ class StaffRecentActivityView(APIView):
         return paginator.get_paginated_response(
             ActivityEventSerializer(page, many=True).data
         )
+
+
+class StaffProfileCompleteView(APIView):
+    """Staff member's first-login profile completion: name + own password.
+
+    Requires only IsAuthenticated (not IsStaff) so the freshly created account
+    can call this before profile_completed is True. The service enforces that the
+    caller has an active staff membership via get_staff_for_user.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = StaffProfileCompleteSerializer
+
+    def post(self, request):
+        serializer = StaffProfileCompleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        management.complete_staff_profile(
+            request.user,
+            serializer.validated_data["name"],
+            serializer.validated_data["new_password"],
+        )
+        return success_response({"profile_completed": True})

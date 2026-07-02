@@ -489,6 +489,27 @@ def create_staff_account(
     return member, temp_password
 
 
+def complete_staff_profile(user: User, name: str, new_password: str) -> StaffMember:
+    """Finish a staff member's first-login setup: name + their own password.
+
+    Sets ``User.name`` and ``StaffMember.name`` to ``name``, replaces the
+    auto-generated password with ``new_password``, and flips
+    ``profile_completed=True``. Resolves the caller's active membership via
+    ``get_staff_for_user`` (raises PERMISSION_DENIED if none). Credential
+    mutation → wrapped in a transaction. Avatar is uploaded separately via the
+    existing account avatar endpoint.
+    """
+    member = get_staff_for_user(user)
+    with transaction.atomic():
+        user.name = name
+        user.set_password(new_password)
+        user.save(update_fields=["name", "password", "updated_at"])
+        member.name = name
+        member.profile_completed = True
+        member.save(update_fields=["name", "profile_completed", "updated_at"])
+    return member
+
+
 def remove_staff_member(business: Business, staff_id: str) -> None:
     """Delete a staff member from ``business``.
 

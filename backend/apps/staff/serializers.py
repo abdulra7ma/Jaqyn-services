@@ -107,3 +107,10 @@ class StaffCreateResultSerializer(serializers.Serializer):
 
     member = TeamRowSerializer()
     temp_password = serializers.CharField()
+
+
+class StaffProfileCompleteSerializer(serializers.Serializer):
+    """Input for staff first-login profile completion."""
+
+    name = serializers.CharField(max_length=255)
+    new_password = serializers.CharField(min_length=8, max_length=128)  # min mirrors password reset

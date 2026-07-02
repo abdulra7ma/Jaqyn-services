@@ -105,3 +105,19 @@ def test_create_staff_endpoint_rejects_anonymous():
         format="json",
     )
     assert resp.status_code in (401, 403)
+
+
+# --- Staff profile completion (first-login setup) ---
+
+
+def test_complete_staff_profile_sets_name_password_and_flag():
+    business = _make_business()
+    member, temp_password = management.create_staff_account(business, "+996700555666", StaffMember.Role.CASHIER)
+    updated = management.complete_staff_profile(member.user, name="Aibek", new_password="newpass12")
+    updated.refresh_from_db()
+    updated.user.refresh_from_db()
+    assert updated.profile_completed is True
+    assert updated.name == "Aibek"
+    assert updated.user.name == "Aibek"
+    assert updated.user.check_password("newpass12")
+    assert not updated.user.check_password(temp_password)  # temp password no longer valid
