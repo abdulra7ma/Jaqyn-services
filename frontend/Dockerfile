@@ -27,6 +27,22 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # proxy points at nothing. Railway passes the service var as a build arg.
 ARG API_PROXY_TARGET="http://localhost:8000"
 ENV API_PROXY_TARGET=$API_PROXY_TARGET
+# Remaining NEXT_PUBLIC_* are baked into the client bundle at build time too.
+# Each MUST be declared as an ARG here or `next build` sees undefined regardless
+# of the Railway service var — Docker does not inherit host env at build time.
+# Empty defaults are safe: an unset var behaves exactly as before.
+ARG NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=""
+ENV NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+ARG NEXT_PUBLIC_DGIS_MAPGL_KEY=""
+ENV NEXT_PUBLIC_DGIS_MAPGL_KEY=$NEXT_PUBLIC_DGIS_MAPGL_KEY
+ARG NEXT_PUBLIC_MAP_PROVIDER=""
+ENV NEXT_PUBLIC_MAP_PROVIDER=$NEXT_PUBLIC_MAP_PROVIDER
+ARG NEXT_PUBLIC_LANDING_URL=""
+ENV NEXT_PUBLIC_LANDING_URL=$NEXT_PUBLIC_LANDING_URL
+ARG NEXT_PUBLIC_DEMO_MODE=""
+ENV NEXT_PUBLIC_DEMO_MODE=$NEXT_PUBLIC_DEMO_MODE
+ARG NEXT_PUBLIC_ENABLE_TEST_UPLOAD=""
+ENV NEXT_PUBLIC_ENABLE_TEST_UPLOAD=$NEXT_PUBLIC_ENABLE_TEST_UPLOAD
 RUN pnpm --filter web build
 
 # ---- dev: hot-reload target (bind-mount source over it) ----
