@@ -39,6 +39,7 @@ class, not the hex. Mapping from the tokens below:
 | radius `card` | `14px` | `rounded-xl` |
 | radius `modal` | `24px` | `rounded-modal` (centered modal / dialog) |
 | radius `sheet` | `24px 24px 0 0` | `rounded-sheet` (bottom-sheet top corners) |
+| `--tile` | `#F4ECDF` | `bg-tile` (icon-tile backgrounds, §8 / §10 empty-state) |
 | `--handle` (grabber) | `#E0D3BF` | `bg-handle` (sheet grab-handle, §10) |
 | shadow Accent | — | `shadow-glow` |
 | shadow Soft/Float | — | `shadow-card` |
@@ -47,7 +48,6 @@ class, not the hex. Mapping from the tokens below:
 | brand gradient | — | `bg-brand-gradient` |
 
 **Known gaps** (extend the preset, don't hardcode, when you hit these):
-- `--tile` (`#F4ECDF`) — no Tailwind token yet.
 - Status / voucher tints (§1) — not yet in the preset.
 
 When a value below has no class, add it to `tailwind-preset.js` rather than

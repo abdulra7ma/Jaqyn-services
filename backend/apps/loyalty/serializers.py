@@ -102,6 +102,7 @@ class LoyaltyCardSerializer(serializers.Serializer):
     visits_count = serializers.IntegerField()
     required_count = serializers.IntegerField(allow_null=True)
     points_balance = serializers.IntegerField()
+    min_redeem_points = serializers.IntegerField(allow_null=True)
     points_per_som = serializers.DecimalField(
         max_digits=12, decimal_places=2, allow_null=True
     )
@@ -111,6 +112,15 @@ class LoyaltyCardSerializer(serializers.Serializer):
     pct_back = serializers.DecimalField(
         max_digits=12, decimal_places=2, allow_null=True
     )
+
+
+class LoyaltyHomeSummarySerializer(serializers.Serializer):
+    visit_streak_days = serializers.IntegerField(min_value=0)
+    streak_active_today = serializers.BooleanField()
+    featured_campaign_ids = serializers.ListField(child=serializers.UUIDField())
+    rewards_earned = serializers.IntegerField(min_value=0)
+    som_saved = serializers.DecimalField(max_digits=14, decimal_places=2)
+    active_cards = serializers.IntegerField(min_value=0)
 
 
 class LoyaltyTransactionSerializer(serializers.ModelSerializer):

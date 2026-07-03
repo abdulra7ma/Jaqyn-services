@@ -322,6 +322,16 @@ export type CampaignFeed = {
   discover: Campaign[];
 };
 
+export type CampaignNotice = {
+  id: string;
+  campaign_id: string;
+  campaign_name: string;
+  reward_title: string;
+  business_name: string;
+  business_logo_url: string | null;
+  created_at: string;
+};
+
 // Discover-list filter for the feed (campaigns-restructure design §6).
 export type CampaignFeedFilter = "all" | "group" | "neighborhood" | "ended";
 

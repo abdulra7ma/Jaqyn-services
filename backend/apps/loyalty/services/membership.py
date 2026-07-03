@@ -36,6 +36,8 @@ class LoyaltyCardView:
     visits_count: int
     required_count: int | None
     points_balance: int
+    # Owner-configured minimum balance required before cashback redemption.
+    min_redeem_points: int | None
     points_per_som: Decimal | None
     cashback_per_point: Decimal | None
     pct_back: Decimal | None
@@ -93,6 +95,7 @@ class LoyaltyMembershipService:
             visits_count=membership.visits_count if membership else 0,
             required_count=program.required_count,
             points_balance=membership.points_balance if membership else 0,
+            min_redeem_points=program.min_redeem_points,
             points_per_som=program.points_per_som,
             cashback_per_point=program.cashback_per_point,
             pct_back=pct_back,

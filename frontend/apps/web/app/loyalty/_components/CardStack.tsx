@@ -11,11 +11,11 @@ import { WalletCard } from "./WalletCard";
  * The ±58px drag threshold (open up / dismiss down) matches the demo exactly.
  */
 const RENDER = {
-  offsetY: 20, // px each card behind peeks above the one in front of it
-  scaleStep: 0.05, // scale falloff per depth (back cards sit narrower)
-  visible: 4, // cards drawn before the rest fade out
+  offsetY: 46, // reveals each rear card's logo, name, and status pill like a physical wallet
+  scaleStep: 0.05, // pronounced wallet perspective: every card narrows toward the back
+  visible: 5, // a full wallet fan, matching the reference stack
   threshold: 58, // px drag distance to trigger open (up) / send-to-back (down)
-  cardHeight: 240, // px fixed face height (stack needs a known box)
+  cardHeight: 210, // bank-card-like face; the exposed headers create the stack depth
 } as const;
 
 /**
@@ -33,7 +33,11 @@ export function CardStack({
 }) {
   const reduce = useReducedMotion();
   // Display order: order[0] is the top card. Indices into `cards`.
-  const [order, setOrder] = useState(() => cards.map((_, i) => i));
+  const [order, setOrder] = useState(() =>
+    cards
+      .map((_, i) => i)
+      .sort((a, b) => Number(cards[b]?.ready) - Number(cards[a]?.ready)),
+  );
 
   // ponytail: re-sync order if the card list length changes (refetch added/
   // removed a shop). Cheap reset; fine-grained diffing isn't worth it here.
@@ -57,7 +61,7 @@ export function CardStack({
   return (
     <div
       className="relative mx-auto w-full max-w-sm"
-      style={{ height: RENDER.cardHeight + maxDepth * RENDER.offsetY + 24 }}
+      style={{ height: RENDER.cardHeight + maxDepth * RENDER.offsetY + 16 }}
     >
       {order.map((cardIdx, pos) => {
         const card = cards[cardIdx]!;
@@ -69,13 +73,14 @@ export function CardStack({
             key={card.businessId}
             layout
             transition={spring}
-            className="absolute inset-x-0 top-0 origin-top"
+            className="absolute inset-x-0 top-0 origin-top rounded-modal shadow-modal"
             style={{ height: RENDER.cardHeight, zIndex: cards.length - pos }}
             animate={{
               y: (maxDepth - depth) * RENDER.offsetY,
               scale: 1 - depth * RENDER.scaleStep,
               opacity: hidden ? 0 : 1,
             }}
+            whileTap={reduce ? undefined : { scale: 0.985 }}
             drag={isTop ? "y" : false}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={0.6}

@@ -4,6 +4,7 @@ from apps.loyalty.views import (
     CustomerBusinessLoyaltyView,
     CustomerCardsView,
     CustomerCatalogView,
+    CustomerHomeSummaryView,
     CustomerJoinView,
     CustomerProgramView,
     CustomerRedeemPointsView,
@@ -12,6 +13,11 @@ from apps.loyalty.views import (
 )
 
 urlpatterns = [
+    path(
+        "home-summary/",
+        CustomerHomeSummaryView.as_view(),
+        name="customer-loyalty-home-summary",
+    ),
     path("cards/", CustomerCardsView.as_view(), name="customer-loyalty-cards"),
     path(
         "programs/<uuid:program_id>/",

@@ -1,12 +1,13 @@
 import { api } from "../client";
 import { adaptLoyaltyCard, adaptLoyaltyProgram, adaptLoyaltyVoucher, adaptLoyaltyWallet } from "./adapters";
-import type { BusinessLoyaltyProgramDetail, LoyaltyCatalogItem, LoyaltyProgramConfig, LoyaltyProgramDetail, LoyaltyProgramInput, LoyaltyVoucher, LoyaltyVoucherWallet, UnifiedStaffScan } from "./types";
+import type { BusinessLoyaltyProgramDetail, LoyaltyCatalogItem, LoyaltyHomeSummary, LoyaltyProgramConfig, LoyaltyProgramDetail, LoyaltyProgramInput, LoyaltyVoucher, LoyaltyVoucherWallet, UnifiedStaffScan } from "./types";
 
 type Page<T> = { results: T[] };
 type Raw = Record<string, unknown>;
 
 export const loyaltyApi = {
   cards: () => api.get<Page<Raw>>("/api/customer/loyalty/cards/").then((data) => data.results.map(adaptLoyaltyCard)),
+  homeSummary: (): Promise<LoyaltyHomeSummary> => api.get<LoyaltyHomeSummary>("/api/customer/loyalty/home-summary/"),
   businessProgramsForCustomer: (businessId: string) => api.get<Page<Raw>>(`/api/customer/loyalty/businesses/${businessId}/loyalty/`).then((data) => data.results.map(adaptLoyaltyCard)),
   customerProgram: (id: string) => api.get<Raw>(`/api/customer/loyalty/programs/${id}/`).then((raw) => ({ ...adaptLoyaltyCard(raw), history: Array.isArray(raw.history) ? raw.history : [] } as LoyaltyProgramDetail)),
   join: (id: string) => api.post<Raw>(`/api/customer/loyalty/programs/${id}/join/`).then(adaptLoyaltyCard),

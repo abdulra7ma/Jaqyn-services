@@ -24,7 +24,8 @@ def test_request_and_verify_otp_creates_customer(api_client):
     user = User.objects.get(phone=phone)
     assert user.is_phone_verified is True
     assert user.role == User.Role.CUSTOMER
-    assert CustomerProfile.objects.filter(user=user).exists()
+    profile = CustomerProfile.objects.get(user=user)
+    assert profile.marketing_opt_in is False
 
 
 def test_invalid_otp_fails(api_client):

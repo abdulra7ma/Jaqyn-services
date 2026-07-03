@@ -29,6 +29,7 @@ function card(over: Partial<LoyaltyCardView> = {}): LoyaltyCardView {
     visits_count: 0,
     required_count: 6,
     points_balance: 0,
+    min_redeem_points: null,
     points_per_som: null,
     cashback_per_point: null,
     pct_back: null,
@@ -56,6 +57,24 @@ describe("programReady", () => {
     expect(
       programReady(card({ type: "points", cashback_per_point: "1.00", points_balance: 0 })),
     ).toBe(false);
+  });
+  it("cashback respects the business redemption threshold", () => {
+    expect(
+      programReady(card({
+        type: "points",
+        cashback_per_point: "1.00",
+        points_balance: 40,
+        min_redeem_points: 50,
+      })),
+    ).toBe(false);
+    expect(
+      programReady(card({
+        type: "points",
+        cashback_per_point: "1.00",
+        points_balance: 50,
+        min_redeem_points: 50,
+      })),
+    ).toBe(true);
   });
   it("no target → not ready", () => {
     expect(programReady(card({ stamps_count: 99, required_count: null }))).toBe(false);

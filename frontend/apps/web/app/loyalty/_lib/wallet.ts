@@ -39,6 +39,28 @@ export type ProgressVisual =
   | { kind: "number"; value: number }
   | { kind: "bar"; pct: number };
 
+/** One redeemable choice shown inside a business wallet. Campaign and loyalty
+ * vouchers share the same staff-scannable presentation; cashback starts as a
+ * program action and becomes a loyalty voucher after selection. */
+export type WalletReward = {
+  id: string;
+  source: "campaign" | "loyalty" | "cashback";
+  businessId: string;
+  businessName: string;
+  businessLogoUrl: string | null;
+  title: string;
+  subtitle: string;
+  glyph: string;
+  qrToken: string | null;
+  code: string | null;
+  campaignId?: string;
+  programId?: string;
+  itemSelection?: "fixed" | "customer" | null;
+  catalogItemName?: string | null;
+  cashbackAmount?: number | null;
+  points?: number;
+};
+
 /** One shop's card in the wallet. `programs` is raw so the detail sheet can map
  * to the existing `BusinessLoyaltyCard` view; the face reads the derived fields. */
 export type WalletShopCard = {
@@ -46,6 +68,7 @@ export type WalletShopCard = {
   businessName: string;
   businessLogoUrl: string | null;
   programs: LoyaltyCardView[];
+  rewards: WalletReward[];
   accent: CardAccent;
   ready: boolean;
 };
@@ -71,15 +94,16 @@ export function isCashback(p: LoyaltyCardView): boolean {
  * "Ready" badge + glow ring.
  *
  * - `stamp` / `visit`: ready once the count reaches the required target.
- * - cashback (`points` with a cashback rate): ready when there's a spendable
- *   balance (`points_balance > 0`). The card view has no `min_redeem` field, so
- *   any positive balance counts. ponytail: threshold on balance>0; tighten to
- *   min_redeem if the API ever exposes it.
+ * - cashback (`points` with a cashback rate): ready once the business-configured
+ *   minimum redemption balance is reached. Without a configured threshold, any
+ *   positive balance counts.
  * - plain `points` (no cashback rate): always `false` — staff-operated accrual,
  *   never customer-claimable in the wallet.
  */
 export function programReady(p: LoyaltyCardView): boolean {
-  if (p.type === "points") return isCashback(p) && p.points_balance > 0;
+  if (p.type === "points") {
+    return isCashback(p) && p.points_balance >= (p.min_redeem_points ?? 1);
+  }
   return p.required_count != null && progressCount(p) >= p.required_count;
 }
 
@@ -144,6 +168,7 @@ export function buildWallet(cards: LoyaltyCardView[]): WalletShopCard[] {
         businessName: card.business_name,
         businessLogoUrl: card.business_logo_url,
         programs: [card],
+        rewards: [],
         accent: resolveAccent(card.business_id, card.business_card_accent),
         ready: programReady(card),
       });

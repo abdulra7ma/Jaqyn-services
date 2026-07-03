@@ -19,6 +19,7 @@ export function adaptLoyaltyCard(raw: Raw): LoyaltyCardView {
     name: text(raw.name), reward_summary: text(raw.reward_summary), reward_expiry_days: num(raw.reward_expiry_days, 30), joined: Boolean(raw.joined),
     stamps_count: num(raw.stamps_count), visits_count: num(raw.visits_count),
     required_count: raw.required_count == null ? null : num(raw.required_count), points_balance: num(raw.points_balance),
+    min_redeem_points: raw.min_redeem_points == null ? null : num(raw.min_redeem_points),
     points_per_som: nullableText(raw.points_per_som), cashback_per_point: nullableText(raw.cashback_per_point), pct_back: nullableText(raw.pct_back),
   };
 }

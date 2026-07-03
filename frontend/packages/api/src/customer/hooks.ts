@@ -22,6 +22,7 @@ export const qk = {
   // The {followed, discover} feed, keyed by the discover filter so each filter
   // caches independently (campaigns-restructure design §6).
   campaignFeed: (filter?: CampaignFeedFilter) => ["campaign-feed", filter ?? "all"] as const,
+  campaignNotices: ["campaign-notices"] as const,
   campaign: (id: string) => ["campaigns", id] as const,
   campaignWallet: ["campaign-wallet"] as const,
   campaignVoucher: (id: string) => ["campaign-vouchers", id] as const,
@@ -43,8 +44,12 @@ export const useMyQr = (enabled = true, opts?: { refetchInterval?: number }) =>
     refetchInterval: opts?.refetchInterval,
   });
 
-export const useNearby = (params?: NearbyParams) =>
-  useQuery({ queryKey: qk.nearby(params), queryFn: () => customerApi.listNearby(params) });
+export const useNearby = (params?: NearbyParams, opts?: { enabled?: boolean }) =>
+  useQuery({
+    queryKey: qk.nearby(params),
+    queryFn: () => customerApi.listNearby(params),
+    enabled: opts?.enabled ?? true,
+  });
 
 export const useCategories = () =>
   useQuery({
@@ -85,6 +90,26 @@ export const useCampaignFeed = (
     queryFn: () => customerApi.campaignFeed(filter),
     refetchInterval: opts?.refetchInterval,
   });
+
+export const useCampaignNotices = () =>
+  useQuery({
+    queryKey: qk.campaignNotices,
+    queryFn: () => customerApi.campaignNotices(),
+  });
+
+export const useMarkCampaignNoticesSeen = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => customerApi.markCampaignNoticesSeen(ids),
+    onSuccess: (_result, ids) => {
+      qc.setQueryData(
+        qk.campaignNotices,
+        (current: import("./types").CampaignNotice[] | undefined) =>
+          current?.filter((notice) => !ids.includes(notice.id)) ?? [],
+      );
+    },
+  });
+};
 
 export const useCampaign = (id: string, opts?: { refetchInterval?: number }) =>
   useQuery({

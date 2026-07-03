@@ -8,9 +8,27 @@ import { ACCENT_BG, isCashback, progViz } from "../_lib/wallet";
  * (Hanken). */
 function FaceProgress({ card }: { card: WalletShopCard }) {
   const t = useT();
+  const readyCashback = card.rewards.find(
+    (reward) => reward.cashbackAmount != null && reward.cashbackAmount > 0,
+  );
+  if (readyCashback?.cashbackAmount) {
+    return (
+      <p className="font-display text-[32px] font-extrabold leading-none text-white">
+        {readyCashback.cashbackAmount}{" "}
+        <span className="font-sans text-[13px] font-bold">{t("cmp.wallet.som")}</span>
+      </p>
+    );
+  }
   // The face summarises the shop's headline program (first one); the detail
   // sheet breaks out every program.
-  const head = card.programs[0]!;
+  const head = card.programs[0];
+  if (!head) {
+    return (
+      <p className="font-display text-[22px] font-extrabold text-white">
+        {t("cmp.wallet.rewardsReady").replace("{count}", String(card.rewards.length))}
+      </p>
+    );
+  }
   const viz = progViz(head);
   if (viz.kind === "number") {
     return (
@@ -64,15 +82,25 @@ function FaceProgress({ card }: { card: WalletShopCard }) {
  */
 export function WalletCard({ card }: { card: WalletShopCard }) {
   const t = useT();
-  const multi = card.programs.length > 1;
-  const cashback = isCashback(card.programs[0]!);
+  const head = card.programs[0];
+  const headlineReward = head?.reward_summary ?? card.rewards[0]?.title ?? "";
+  const multi = card.programs.length + card.rewards.length > 1;
+  const cashback = head ? isCashback(head) : false;
   const initials = card.businessName.trim().slice(0, 2).toUpperCase();
+  const itemCount = card.programs.length + card.rewards.length;
+  const statusLabel = card.ready
+    ? t("cmp.wallet.ready")
+    : multi
+      ? t("cmp.wallet.programs").replace("{count}", String(itemCount))
+      : head
+        ? t(`cmp.wallet.cardType.${head.type}` as Parameters<typeof t>[0])
+        : t("cmp.wallet.ready");
   return (
     <div
       className={cn(
-        "relative flex h-full w-full flex-col overflow-hidden rounded-modal p-5 text-white shadow-glow",
+        "relative flex h-full w-full flex-col overflow-hidden rounded-modal border border-white/30 p-4 text-white shadow-modal",
         ACCENT_BG[card.accent],
-        card.ready && "ring-2 ring-white/70",
+        card.ready && "ring-2 ring-white/80 shadow-sage",
       )}
     >
       {/* decorative translucent watermark circle bleed (§8) */}
@@ -95,43 +123,51 @@ export function WalletCard({ card }: { card: WalletShopCard }) {
           <img
             src={card.businessLogoUrl}
             alt=""
-            className="h-12 w-12 rounded-full object-cover ring-1 ring-white/30"
+            className="h-11 w-11 rounded-xl object-cover ring-1 ring-white/40"
           />
         ) : (
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 font-display text-[16px] font-bold ring-1 ring-white/30">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 font-display text-[16px] font-bold ring-1 ring-white/40 backdrop-blur-sm">
             {initials}
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-[19px] font-bold leading-tight">
+          <p className="truncate font-display text-[19px] font-bold leading-tight drop-shadow-sm">
             {card.businessName}
           </p>
           <p className="mt-0.5 truncate text-[13.5px] font-semibold text-white/85">
-            {card.programs[0]!.reward_summary}
+            {headlineReward}
           </p>
         </div>
-        {card.ready && (
-          <span className="flex-none animate-pulse rounded-pill bg-white/95 px-2.5 py-1 text-[11.5px] font-bold text-ink">
-            🎁 {t("cmp.wallet.ready")}
-          </span>
-        )}
+        <span
+          className={cn(
+            "flex-none rounded-pill px-2.5 py-1 text-[11.5px] font-bold backdrop-blur-sm",
+            card.ready ? "animate-pulse bg-sage-soft text-sage" : "bg-white/20 text-white/85",
+          )}
+        >
+          {card.ready && <span aria-hidden>✓ </span>}
+          {statusLabel}
+        </span>
       </div>
 
       <div className="relative mt-auto">
         <FaceProgress card={card} />
-        <div className="mt-3.5 flex items-center justify-between gap-2">
+        <div className="mt-3 flex items-center justify-between gap-2">
           {card.ready ? (
             <p className="text-[13.5px] font-bold text-white">
-              🎁 {t(cashback ? "cmp.wallet.cashbackReady" : "cmp.wallet.readyToUse")}
+              🎁 {t(card.rewards.length > 0 ? "cmp.wallet.chooseReward" : cashback ? "cmp.wallet.cashbackReady" : "cmp.wallet.readyToUse")}
             </p>
           ) : (
             <span />
           )}
-          {multi && (
+          {card.ready ? (
+            <span className="rounded-pill border border-white/30 bg-white/15 px-3 py-1.5 text-[11.5px] font-bold text-white backdrop-blur-sm">
+              {t("cmp.wallet.showMyQr")}
+            </span>
+          ) : multi ? (
             <p className="text-[12px] font-bold uppercase tracking-[0.04em] text-white/70">
-              {t("cmp.wallet.programs").replace("{count}", String(card.programs.length))}
+              {t("cmp.wallet.items").replace("{count}", String(itemCount))}
             </p>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

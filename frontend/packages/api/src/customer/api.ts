@@ -25,6 +25,7 @@ import type {
   CampaignCatalogItem,
   CampaignFeed,
   CampaignFeedFilter,
+  CampaignNotice,
   CategoryOption,
   CampaignListParams,
   CampaignVoucher,
@@ -67,6 +68,8 @@ export interface CustomerApi {
   // ---- campaigns (plan §3) ----
   listCampaigns(params?: CampaignListParams): Promise<Campaign[]>;
   campaignFeed(filter?: CampaignFeedFilter): Promise<CampaignFeed>;
+  campaignNotices(): Promise<CampaignNotice[]>;
+  markCampaignNoticesSeen(ids: string[]): Promise<{ seen: number }>;
   getCampaign(id: string): Promise<Campaign>;
   joinCampaign(id: string): Promise<Campaign>;
   campaignWallet(): Promise<CampaignWallet>;
@@ -241,6 +244,12 @@ export const customerApi: CustomerApi = {
     api
       .get<any>(`/api/customer/campaigns/feed/${queryString(filter ? { discover: filter } : undefined)}`)
       .then(adaptCampaignFeed),
+  campaignNotices: () =>
+    api
+      .get<Paginated<CampaignNotice>>("/api/notifications/campaign-notices/")
+      .then((data) => data.results),
+  markCampaignNoticesSeen: (ids) =>
+    api.post<{ seen: number }>("/api/notifications/campaign-notices/", { ids }),
   getCampaign: (id) => api.get<any>(`/api/customer/campaigns/${id}/`).then(adaptCampaign),
   // The join endpoint returns the participant/progress row, not a campaign. Re-read
   // the campaign detail (which carries my_progress) so the hook caches a real

@@ -282,6 +282,11 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
 
                     <WalletDetailSheet
                       card={loyaltyOpen ? shop : null}
+                      activeReward={null}
+                      pendingRewardId={null}
+                      onChooseReward={() => undefined}
+                      onRewardChange={() => undefined}
+                      onCloseReward={() => undefined}
                       onClose={() => setLoyaltyOpen(false)}
                     />
                   </>

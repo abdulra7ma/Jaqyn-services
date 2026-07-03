@@ -1,5 +1,5 @@
 import type { LoyaltyCardView } from "@jaqyn/api";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { buildWallet } from "../_lib/wallet";
 import { WalletDetailSheet } from "./WalletDetailSheet";
@@ -23,6 +23,7 @@ function card(over: Partial<LoyaltyCardView> = {}): LoyaltyCardView {
     visits_count: 0,
     required_count: 6,
     points_balance: 0,
+    min_redeem_points: null,
     points_per_som: null,
     cashback_per_point: null,
     pct_back: null,
@@ -31,6 +32,15 @@ function card(over: Partial<LoyaltyCardView> = {}): LoyaltyCardView {
 }
 
 describe("WalletDetailSheet", () => {
+  const handlers = {
+    activeReward: null,
+    pendingRewardId: null,
+    onChooseReward: vi.fn(),
+    onRewardChange: vi.fn(),
+    onCloseReward: vi.fn(),
+    onClose: vi.fn(),
+  };
+
   it("renders a row per program and the shop's info when a business runs several types", () => {
     const shop = buildWallet([
       card({ program_id: "p1", reward_summary: "Buy 6, get 1 free" }),
@@ -43,7 +53,7 @@ describe("WalletDetailSheet", () => {
       }),
     ])[0]!;
 
-    render(<WalletDetailSheet card={shop} onClose={vi.fn()} />);
+    render(<WalletDetailSheet card={shop} {...handlers} />);
 
     // Both programs listed (multi-type handling).
     expect(screen.getByText("Buy 6, get 1 free")).toBeInTheDocument();
@@ -52,11 +62,61 @@ describe("WalletDetailSheet", () => {
     expect(screen.getByText(/cmp\.wallet\.programs/)).toBeInTheDocument();
     expect(screen.getByText("Osh Bazaar")).toBeInTheDocument();
     expect(screen.getByText("07:00 – 21:00")).toBeInTheDocument();
-    expect(screen.getByText("cmp.wallet.showMyQr")).toBeInTheDocument();
+    expect(screen.getByText("cmp.wallet.earnMore")).toBeInTheDocument();
   });
 
   it("renders nothing when no card is selected", () => {
-    render(<WalletDetailSheet card={null} onClose={vi.fn()} />);
-    expect(screen.queryByText("cmp.wallet.showMyQr")).not.toBeInTheDocument();
+    render(<WalletDetailSheet card={null} {...handlers} />);
+    expect(screen.queryByText("cmp.wallet.earnMore")).not.toBeInTheDocument();
+  });
+
+  it("lets the customer choose a business reward", () => {
+    const onChooseReward = vi.fn();
+    const shop = buildWallet([card()])[0]!;
+    const reward = {
+      id: "v1",
+      source: "loyalty" as const,
+      businessId: "b1",
+      businessName: "Boorsok Bakery",
+      businessLogoUrl: null,
+      title: "Free pastry",
+      subtitle: "Bakery club",
+      glyph: "🎁",
+      qrToken: "qr-token",
+      code: "CODE",
+    };
+    shop.rewards.push(reward);
+
+    render(
+      <WalletDetailSheet
+        card={shop}
+        {...handlers}
+        onChooseReward={onChooseReward}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Free pastry/ }));
+    expect(onChooseReward).toHaveBeenCalledWith(reward);
+  });
+
+  it("shows the chosen reward QR for staff to scan", () => {
+    const shop = buildWallet([card()])[0]!;
+    const reward = {
+      id: "v1",
+      source: "loyalty" as const,
+      businessId: "b1",
+      businessName: "Boorsok Bakery",
+      businessLogoUrl: null,
+      title: "Free pastry",
+      subtitle: "Bakery club",
+      glyph: "🎁",
+      qrToken: "qr-token",
+      code: "CODE-123",
+    };
+
+    render(<WalletDetailSheet card={shop} {...handlers} activeReward={reward} />);
+
+    expect(screen.getAllByText("Free pastry")).toHaveLength(2);
+    expect(screen.getByText("CODE-123")).toBeInTheDocument();
+    expect(screen.getByText("cmp.voucher.showStaff")).toBeInTheDocument();
   });
 });

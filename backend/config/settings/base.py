@@ -23,9 +23,14 @@ def _env_bool(name: str, default: str = "false") -> bool:
     """Return the env var `name` parsed as a boolean against `_TRUTHY`."""
     return os.getenv(name, default).strip().lower() in _TRUTHY
 
+
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-dev-secret")
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
-ALLOWED_HOSTS = [host.strip() for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host.strip()]
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+    if host.strip()
+]
 
 INSTALLED_APPS = [
     # Unfold and its contrib modules MUST precede django.contrib.admin so their
@@ -52,6 +57,7 @@ INSTALLED_APPS = [
     "apps.reporting",
     "apps.notifications",
     "apps.system",
+    "apps.leads",
 ]
 
 # --- Django admin theming (django-unfold) ---
@@ -101,8 +107,16 @@ UNFOLD = {
             {
                 "title": _("Dashboard"),
                 "items": [
-                    {"title": _("Overview"), "icon": "dashboard", "link": reverse_lazy("admin:index")},
-                    {"title": _("Analytics"), "icon": "insights", "link": reverse_lazy("admin_analytics")},
+                    {
+                        "title": _("Overview"),
+                        "icon": "dashboard",
+                        "link": reverse_lazy("admin:index"),
+                    },
+                    {
+                        "title": _("Analytics"),
+                        "icon": "insights",
+                        "link": reverse_lazy("admin_analytics"),
+                    },
                 ],
             },
             {
@@ -115,38 +129,144 @@ UNFOLD = {
                         # Live count of businesses awaiting review, surfaced on the nav item.
                         "badge": "apps.reporting.dashboard.pending_businesses_badge",
                     },
-                    {"title": _("Onboarding notes"), "icon": "forum", "link": reverse_lazy("admin:businesses_businessnote_changelist")},
-                    {"title": _("Business types"), "icon": "category", "link": reverse_lazy("admin:businesses_businesstype_changelist")},
-                    {"title": _("Owner invites"), "icon": "mail", "link": reverse_lazy("admin:businesses_businessownerinvite_changelist")},
-                    {"title": _("Staff invites"), "icon": "group_add", "link": reverse_lazy("admin:businesses_staffinvite_changelist")},
-                    {"title": _("Catalog items"), "icon": "list_alt", "link": reverse_lazy("admin:businesses_catalogitem_changelist")},
+                    {
+                        "title": _("Onboarding notes"),
+                        "icon": "forum",
+                        "link": reverse_lazy(
+                            "admin:businesses_businessnote_changelist"
+                        ),
+                    },
+                    {
+                        "title": _("Business types"),
+                        "icon": "category",
+                        "link": reverse_lazy(
+                            "admin:businesses_businesstype_changelist"
+                        ),
+                    },
+                    {
+                        "title": _("Owner invites"),
+                        "icon": "mail",
+                        "link": reverse_lazy(
+                            "admin:businesses_businessownerinvite_changelist"
+                        ),
+                    },
+                    {
+                        "title": _("Staff invites"),
+                        "icon": "group_add",
+                        "link": reverse_lazy("admin:businesses_staffinvite_changelist"),
+                    },
+                    {
+                        "title": _("Catalog items"),
+                        "icon": "list_alt",
+                        "link": reverse_lazy("admin:businesses_catalogitem_changelist"),
+                    },
                 ],
             },
             {
                 "title": _("Customers & Staff"),
                 "items": [
-                    {"title": _("Users"), "icon": "person", "link": reverse_lazy("admin:accounts_user_changelist")},
-                    {"title": _("Customer profiles"), "icon": "badge", "link": reverse_lazy("admin:accounts_customerprofile_changelist")},
-                    {"title": _("Staff members"), "icon": "support_agent", "link": reverse_lazy("admin:staff_staffmember_changelist")},
+                    {
+                        "title": _("Users"),
+                        "icon": "person",
+                        "link": reverse_lazy("admin:accounts_user_changelist"),
+                    },
+                    {
+                        "title": _("Customer profiles"),
+                        "icon": "badge",
+                        "link": reverse_lazy(
+                            "admin:accounts_customerprofile_changelist"
+                        ),
+                    },
+                    {
+                        "title": _("Staff members"),
+                        "icon": "support_agent",
+                        "link": reverse_lazy("admin:staff_staffmember_changelist"),
+                    },
                 ],
             },
             {
                 "title": _("Campaigns"),
                 "items": [
-                    {"title": _("Campaigns"), "icon": "campaign", "link": reverse_lazy("admin:campaigns_campaign_changelist")},
-                    {"title": _("Participants"), "icon": "trending_up", "link": reverse_lazy("admin:campaigns_campaignparticipant_changelist")},
-                    {"title": _("Campaign vouchers"), "icon": "confirmation_number", "link": reverse_lazy("admin:campaigns_campaignrewardvoucher_changelist")},
-                    {"title": _("Groups"), "icon": "groups", "link": reverse_lazy("admin:campaigns_group_changelist")},
+                    {
+                        "title": _("Campaigns"),
+                        "icon": "campaign",
+                        "link": reverse_lazy("admin:campaigns_campaign_changelist"),
+                    },
+                    {
+                        "title": _("Participants"),
+                        "icon": "trending_up",
+                        "link": reverse_lazy(
+                            "admin:campaigns_campaignparticipant_changelist"
+                        ),
+                    },
+                    {
+                        "title": _("Campaign vouchers"),
+                        "icon": "confirmation_number",
+                        "link": reverse_lazy(
+                            "admin:campaigns_campaignrewardvoucher_changelist"
+                        ),
+                    },
+                    {
+                        "title": _("Groups"),
+                        "icon": "groups",
+                        "link": reverse_lazy("admin:campaigns_group_changelist"),
+                    },
                 ],
             },
             {
                 "title": _("QR, Notifications & Audit"),
                 "items": [
-                    {"title": _("QR tokens"), "icon": "qr_code_2", "link": reverse_lazy("admin:qr_qrcodetoken_changelist")},
-                    {"title": _("Scan log"), "icon": "barcode_scanner", "link": reverse_lazy("admin:qr_scanlog_changelist")},
-                    {"title": _("Notification log"), "icon": "notifications", "link": reverse_lazy("admin:notifications_notificationlog_changelist")},
-                    {"title": _("Admin audit log"), "icon": "history", "link": reverse_lazy("admin:reporting_adminauditlog_changelist")},
-                    {"title": _("System config"), "icon": "settings", "link": reverse_lazy("admin:system_systemconfiguration_changelist")},
+                    {
+                        "title": _("QR tokens"),
+                        "icon": "qr_code_2",
+                        "link": reverse_lazy("admin:qr_qrcodetoken_changelist"),
+                    },
+                    {
+                        "title": _("Scan log"),
+                        "icon": "barcode_scanner",
+                        "link": reverse_lazy("admin:qr_scanlog_changelist"),
+                    },
+                    {
+                        "title": _("Notification log"),
+                        "icon": "notifications",
+                        "link": reverse_lazy(
+                            "admin:notifications_notificationlog_changelist"
+                        ),
+                    },
+                    {
+                        "title": _("Admin audit log"),
+                        "icon": "history",
+                        "link": reverse_lazy(
+                            "admin:reporting_adminauditlog_changelist"
+                        ),
+                    },
+                    {
+                        "title": _("System config"),
+                        "icon": "settings",
+                        "link": reverse_lazy(
+                            "admin:system_systemconfiguration_changelist"
+                        ),
+                    },
+                ],
+            },
+            {
+                "title": _("Sales leads"),
+                "items": [
+                    {
+                        "title": _("Leads table"),
+                        "icon": "table_view",
+                        "link": reverse_lazy("leads_page"),
+                    },
+                    {
+                        "title": _("Lead columns"),
+                        "icon": "view_column",
+                        "link": reverse_lazy("admin:leads_leadcolumn_changelist"),
+                    },
+                    {
+                        "title": _("Lead statuses"),
+                        "icon": "flag",
+                        "link": reverse_lazy("admin:leads_leadstatus_changelist"),
+                    },
                 ],
             },
         ],
@@ -232,9 +352,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-    "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.IsAuthenticated",
-    ),
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardResultsSetPagination",
     "PAGE_SIZE": 25,
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
@@ -257,6 +375,7 @@ REST_FRAMEWORK = {
         "campaign_scan": "120/min",  # staff scan/confirm/redeem at the till
         "loyalty_write": "60/min",  # loyalty setup, join, award, and redemption writes
         "loyalty_scan": "120/min",  # unified till scanner is a high-throughput read
+        "notification_write": "60/min",  # customers acknowledge in-app notices
         # Business brand-asset uploads (logo + cover). Rare, heavy writes; bound
         # tightly so an owner can't hammer the compressor/storage.
         "business_image": "20/min",
@@ -307,22 +426,30 @@ if USE_S3:
     AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
     AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
     AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
-    AWS_S3_ENDPOINT_URL = os.getenv("AWS_S3_ENDPOINT_URL")  # R2: https://<acct>.r2.cloudflarestorage.com
-    AWS_S3_CUSTOM_DOMAIN = os.getenv("AWS_S3_CUSTOM_DOMAIN") or None  # public bucket / CDN host
+    AWS_S3_ENDPOINT_URL = os.getenv(
+        "AWS_S3_ENDPOINT_URL"
+    )  # R2: https://<acct>.r2.cloudflarestorage.com
+    AWS_S3_CUSTOM_DOMAIN = (
+        os.getenv("AWS_S3_CUSTOM_DOMAIN") or None
+    )  # public bucket / CDN host
     AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", "auto")
     AWS_DEFAULT_ACL = None
     AWS_QUERYSTRING_AUTH = False
     AWS_S3_FILE_OVERWRITE = False
     STORAGES = {
         "default": {"BACKEND": "storages.backends.s3.S3Storage"},
-        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
     }
     if AWS_S3_CUSTOM_DOMAIN:
         MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/"
 else:
     STORAGES = {
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
     }
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -339,7 +466,9 @@ CACHES = {
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/2")
-CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() == "true"
+CELERY_TASK_ALWAYS_EAGER = (
+    os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() == "true"
+)
 
 # Public base URL of the customer web app. QR codes encode frontend URLs so a
 # phone camera opens the web landing page (not the raw JSON API endpoint).
@@ -350,7 +479,9 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 # the terminal without requiring a running SMTP server. Set EMAIL_BACKEND to
 # django.core.mail.backends.smtp.EmailBackend + EMAIL_HOST=mailpit (port 1025)
 # in .env to get a clickable Mailpit UI instead.
-EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
+)
 EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "1025"))
 EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS")
@@ -364,10 +495,18 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "15"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Jaqyn <noreply@jaqyn.local>")
 
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 # Regex origins (dev): lets ephemeral tunnel hosts (e.g. *.trycloudflare.com) pass
 # without re-editing the exact list every time the tunnel URL changes.
-CORS_ALLOWED_ORIGIN_REGEXES = [r.strip() for r in os.getenv("DJANGO_CORS_ALLOWED_ORIGIN_REGEXES", "").split(",") if r.strip()]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r.strip()
+    for r in os.getenv("DJANGO_CORS_ALLOWED_ORIGIN_REGEXES", "").split(",")
+    if r.strip()
+]
 
 OTP_TTL_SECONDS = int(os.getenv("OTP_TTL_SECONDS", "300"))
 OTP_RATE_LIMIT_PER_PHONE = int(os.getenv("OTP_RATE_LIMIT_PER_PHONE", "5"))

@@ -1,0 +1,61 @@
+{% extends 'admin/base.html' %}
+{% load static i18n %}
+
+{% block title %}{% trans "Leads" %} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}{% include "unfold/helpers/site_branding.html" %}{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'leads/ag-grid.css' %}">
+<link rel="stylesheet" href="{% static 'leads/ag-theme-quartz.css' %}">
+
+<div style="display:flex; flex-direction:column; gap:14px;">
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    <h1 class="text-font-important-light dark:text-font-important-dark" style="margin:0; font-size:20px; font-weight:600;">{% trans "Leads" %}</h1>
+    <span id="row-count" style="font-size:12px; color:rgb(var(--color-base-500));"></span>
+
+    <input id="search" placeholder="{% trans 'Search all…' %}"
+           style="margin-left:auto; padding:9px 14px; min-width:220px; border:1.5px solid #EFE3D1; border-radius:12px; font-size:14px; background:#fff; color:#2E241D;">
+
+    <button id="add-row" type="button"
+            style="padding:9px 16px; border-radius:12px; border:0; color:#fff; font-weight:600; font-size:13px; background:#C25E3C; cursor:pointer;">+ {% trans "Row" %}</button>
+    <button id="add-column" type="button"
+            style="padding:9px 16px; border-radius:12px; border:1.5px solid #EFE3D1; background:#fff; color:#2E241D; font-weight:600; font-size:13px; cursor:pointer;">+ {% trans "Column" %}</button>
+    <button id="columns" type="button"
+            style="padding:9px 16px; border-radius:12px; border:1.5px solid #EFE3D1; background:#fff; color:#2E241D; font-weight:600; font-size:13px; cursor:pointer;">{% trans "Columns" %}</button>
+    <label style="padding:9px 16px; border-radius:12px; border:1.5px solid #EFE3D1; background:#fff; color:#2E241D; font-weight:600; font-size:13px; cursor:pointer;">
+      {% trans "Upload JSON" %}<input id="upload" type="file" accept="application/json" style="display:none;">
+    </label>
+  </div>
+
+  <div id="leads-table" class="ag-theme-quartz" style="width:100%; height:76vh;"></div>
+</div>
+
+{# Modal shell (design-system §10) — populated by grid.js for add-column / add-row. #}
+<div id="modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(46,36,29,.34); z-index:1000; align-items:center; justify-content:center; padding:20px;">
+  <div id="modal-card" role="dialog" aria-modal="true" style="background:#fff; border-radius:24px; box-shadow:0 30px 60px -24px rgba(20,16,11,.6); width:100%; max-width:460px; max-height:86vh; display:flex; flex-direction:column; overflow:hidden;">
+    <div style="padding:20px 24px 0;">
+      <h2 id="modal-title" style="margin:0; font-size:18px; font-weight:700; color:#2E241D;"></h2>
+    </div>
+    <div id="modal-body" style="padding:16px 24px; overflow-y:auto; display:flex; flex-direction:column; gap:14px;"></div>
+    <div style="padding:14px 24px; border-top:1px solid #EFE3D1; display:flex; justify-content:flex-end; gap:10px;">
+      <button id="modal-cancel" type="button" style="padding:11px 20px; border-radius:14px; border:1.5px solid #EFE3D1; background:#fff; color:#2E241D; font-weight:600; font-size:14px; cursor:pointer;">{% trans "Cancel" %}</button>
+      <button id="modal-save" type="button" style="padding:11px 22px; border-radius:14px; border:0; background:#C25E3C; color:#fff; font-weight:700; font-size:14px; cursor:pointer;">{% trans "Save" %}</button>
+    </div>
+  </div>
+</div>
+
+{% csrf_token %}
+<script src="{% static 'leads/ag-grid-community.min.js' %}"></script>
+<script>
+  window.LEADS_URLS = {
+    table: "{% url 'leads_api_table' %}",
+    upload: "{% url 'leads_api_upload' %}",
+    rows: "{% url 'leads_api_rows' %}",
+    row: (id) => `{% url 'leads_api_row' 0 %}`.replace('0', id),
+    columns: "{% url 'leads_api_columns' %}",
+    column: (id) => `{% url 'leads_api_column' 0 %}`.replace('0', id),
+  };
+</script>
+<script src="{% static 'leads/grid.js' %}"></script>
+{% endblock %}

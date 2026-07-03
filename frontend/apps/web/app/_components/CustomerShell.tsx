@@ -62,7 +62,7 @@ export function CustomerShell({
         {/* header — mobile (and any non-authed page). For guests it's the top nav bar. */}
         <header
           className={`sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-3 ${
-            bleed && sidebar ? "hidden" : ""
+            (bleed && sidebar) || (sidebar && hideChromeTitle && !back) ? "hidden" : ""
           } ${sidebar ? "bg-cream lg:hidden" : "border-b border-line bg-cream/95 backdrop-blur"}`}
         >
           <div className="flex min-w-0 items-center gap-2">

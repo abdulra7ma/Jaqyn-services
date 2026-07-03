@@ -12,8 +12,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from dataclasses import field as dc_field
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from django.db import models, transaction
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework import status
 
@@ -44,6 +46,14 @@ class CustomerProgressContext:
 
     participants: dict[str, CampaignParticipant] = dc_field(default_factory=dict)
     active_voucher_ids: dict[str, str] = dc_field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CustomerRewardMetrics:
+    """Campaign reward totals exposed to customer-profile summaries."""
+
+    rewards_earned: int
+    som_saved: Decimal
 
 
 class CampaignService:
@@ -561,6 +571,72 @@ class CampaignService:
             )
         discover = [c for c in discover_qs if c.id not in followed_ids]
         return followed, discover
+
+    @classmethod
+    def home_priority_ids(
+        cls,
+        customer,
+        now: datetime | None = None,
+        limit: int = 3,
+    ) -> list[str]:
+        """Return joined campaign ids ranked for the customer home carousel.
+
+        Campaigns with the fewest verified actions remaining come first. This
+        ranking is owned by the campaign service so every client applies the same
+        campaign-before-standing-loyalty rule. Campaigns without a visit target
+        follow progress campaigns in most-recently-updated order. The result is
+        bounded to three ids because home is a compact recommendation surface.
+        """
+
+        now = now or timezone.now()
+        followed = cls.discover_for_customer(
+            customer,
+            now=now,
+            joined_only=True,
+        )
+        participants = {
+            participant.campaign_id: participant
+            for participant in CampaignParticipant.objects.filter(
+                customer=customer,
+                campaign_id__in=followed.values("id"),
+                status__in=cls._JOINED_FILTER_STATUSES,
+            ).select_related("campaign__rule")
+        }
+
+        def priority(campaign: Campaign) -> tuple[int, int, float]:
+            participant = participants.get(campaign.id)
+            required = getattr(campaign.rule, "required_count", None)
+            if participant is not None and required is not None:
+                remaining = max(required - participant.progress_count, 0)
+                return (0, remaining, -campaign.updated_at.timestamp())
+            return (1, 0, -campaign.updated_at.timestamp())
+
+        ranked = sorted(list(followed), key=priority)
+        return [str(campaign.id) for campaign in ranked[:limit]]
+
+    @staticmethod
+    def customer_reward_metrics(customer) -> CustomerRewardMetrics:
+        """Return issued campaign rewards and redeemed estimated savings.
+
+        Cancelled vouchers do not count as earned. Savings are recognized only
+        when a voucher is redeemed and use the business-provided estimated cost;
+        rewards without an estimated cost contribute zero.
+        """
+
+        totals = CampaignRewardVoucher.objects.filter(customer=customer).aggregate(
+            rewards_earned=Count(
+                "id",
+                filter=~Q(status=CampaignRewardVoucher.Status.CANCELLED),
+            ),
+            som_saved=Sum(
+                "reward__estimated_cost",
+                filter=Q(status=CampaignRewardVoucher.Status.REDEEMED),
+            ),
+        )
+        return CustomerRewardMetrics(
+            rewards_earned=totals["rewards_earned"],
+            som_saved=totals["som_saved"] or Decimal("0"),
+        )
 
     @staticmethod
     def progress_context_for(customer, campaigns) -> CustomerProgressContext:

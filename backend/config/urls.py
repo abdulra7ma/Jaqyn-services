@@ -18,6 +18,10 @@ urlpatterns = [
         admin.site.admin_view(analytics_view),
         name="admin_analytics",
     ),
+    # Custom leads admin tool — must precede admin.site.urls. admin_view gates page
+    # access to staff and renders inside the admin shell; the api_* views enforce
+    # is_staff themselves (they return JSON 403, not an HTML login redirect).
+    path("admin/leads/", include("apps.leads.urls")),
     path("admin/", admin.site.urls),
     path("api/health/", HealthView.as_view(), name="health"),
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),

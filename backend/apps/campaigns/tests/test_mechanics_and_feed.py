@@ -24,6 +24,7 @@ from apps.campaigns.models import (
 from apps.campaigns.services import (
     CampaignAnalyticsService,
     CampaignProgressService,
+    CampaignService,
 )
 from apps.campaigns.tests.helpers import (
     make_business,
@@ -352,6 +353,30 @@ def test_customer_feed_splits_followed_and_discover():
     assert str(followed.id) in followed_ids
     # No campaign appears in both lists.
     assert followed_ids.isdisjoint(discover_ids)
+
+
+def test_home_priority_ranks_campaign_nearest_completion_first():
+    business = make_business()
+    customer = make_customer()
+    farther = make_campaign(business, required_count=8)
+    nearer = make_campaign(business, required_count=5)
+    CampaignParticipant.objects.create(
+        campaign=farther,
+        customer=customer,
+        status=CampaignParticipant.Status.IN_PROGRESS,
+        progress_count=2,
+    )
+    CampaignParticipant.objects.create(
+        campaign=nearer,
+        customer=customer,
+        status=CampaignParticipant.Status.IN_PROGRESS,
+        progress_count=4,
+    )
+
+    assert CampaignService.home_priority_ids(customer)[:2] == [
+        str(nearer.id),
+        str(farther.id),
+    ]
 
 
 def test_followed_keeps_all_joined_once_campaigns():
