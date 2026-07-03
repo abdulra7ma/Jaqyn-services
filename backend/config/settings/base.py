@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.system",
     "apps.leads",
+    "apps.patches",
 ]
 
 # --- Django admin theming (django-unfold) ---
@@ -375,6 +376,9 @@ REST_FRAMEWORK = {
         "campaign_scan": "120/min",  # staff scan/confirm/redeem at the till
         "loyalty_write": "60/min",  # loyalty setup, join, award, and redemption writes
         "loyalty_scan": "120/min",  # unified till scanner is a high-throughput read
+        # Patches write endpoints (mark-seen, board-seen). Infrequent per-session
+        # actions; 30/min is generous for UI-driven calls. Source: spec §A writes.
+        "patches_write": "30/min",
         "notification_write": "60/min",  # customers acknowledge in-app notices
         # Business brand-asset uploads (logo + cover). Rare, heavy writes; bound
         # tightly so an owner can't hammer the compressor/storage.

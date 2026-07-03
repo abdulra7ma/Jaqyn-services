@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WalletShopCard } from "../_lib/wallet";
 import { WalletCard } from "./WalletCard";
 
@@ -16,6 +16,7 @@ const RENDER = {
   visible: 5, // a full wallet fan, matching the reference stack
   threshold: 58, // px drag distance to trigger open (up) / send-to-back (down)
   cardHeight: 210, // bank-card-like face; the exposed headers create the stack depth
+  snapSettleMs: 180, // lets dragSnapToOrigin finish before the stack spring changes targets
 } as const;
 
 /**
@@ -38,6 +39,16 @@ export function CardStack({
       .map((_, i) => i)
       .sort((a, b) => Number(cards[b]?.ready) - Number(cards[a]?.ready)),
   );
+  const [rotating, setRotating] = useState(false);
+  const rotateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didDrag = useRef(false);
+
+  useEffect(
+    () => () => {
+      if (rotateTimer.current) clearTimeout(rotateTimer.current);
+    },
+    [],
+  );
 
   // ponytail: re-sync order if the card list length changes (refetch added/
   // removed a shop). Cheap reset; fine-grained diffing isn't worth it here.
@@ -50,6 +61,18 @@ export function CardStack({
     : { type: "spring" as const, stiffness: 520, damping: 38 };
 
   const sendToBack = (): void => setOrder((o) => [...o.slice(1), o[0]!]);
+  const settleThenSendToBack = (): void => {
+    if (reduce) {
+      sendToBack();
+      return;
+    }
+    setRotating(true);
+    rotateTimer.current = setTimeout(() => {
+      sendToBack();
+      setRotating(false);
+      rotateTimer.current = null;
+    }, RENDER.snapSettleMs);
+  };
   const bringToFront = (pos: number): void =>
     setOrder((o) => [o[pos]!, ...o.slice(0, pos), ...o.slice(pos + 1)]);
 
@@ -71,7 +94,6 @@ export function CardStack({
         return (
           <motion.div
             key={card.businessId}
-            layout
             transition={spring}
             className="absolute inset-x-0 top-0 origin-top rounded-modal shadow-modal"
             style={{ height: RENDER.cardHeight, zIndex: cards.length - pos }}
@@ -80,16 +102,24 @@ export function CardStack({
               scale: 1 - depth * RENDER.scaleStep,
               opacity: hidden ? 0 : 1,
             }}
-            whileTap={reduce ? undefined : { scale: 0.985 }}
-            drag={isTop ? "y" : false}
+            whileTap={reduce || rotating ? undefined : { scale: 0.985 }}
+            drag={isTop && !rotating ? "y" : false}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={0.6}
             dragSnapToOrigin
+            dragMomentum={false}
+            onDragStart={() => {
+              didDrag.current = true;
+            }}
             onDragEnd={(_, info) => {
               if (info.offset.y < -RENDER.threshold) onOpen(card);
-              else if (info.offset.y > RENDER.threshold) sendToBack();
+              else if (info.offset.y > RENDER.threshold) settleThenSendToBack();
+              setTimeout(() => {
+                didDrag.current = false;
+              }, 0);
             }}
             onClick={() => {
+              if (didDrag.current || rotating) return;
               if (isTop) onOpen(card);
               else bringToFront(pos);
             }}

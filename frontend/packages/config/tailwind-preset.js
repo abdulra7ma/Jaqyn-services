@@ -23,6 +23,8 @@ module.exports = {
         // semantic
         sage: { DEFAULT: "#3F7355", soft: "#E4F0E7", deep: "#5E8B6A" },
         amber: { DEFAULT: "#E7A23E", deep: "#B07A1E" },
+        // group/social accent (design-system §1 voucher-welcome indigo) — text + soft chip fill
+        indigo: { DEFAULT: "#4E6B9D", soft: "#E8EEF6" },
         ok: "#3F7355",
         danger: "#B42318",
         // icon-tile backgrounds (design-system §1 --tile; §8 icon tiles, §10 empty-state)
@@ -61,6 +63,104 @@ module.exports = {
         "wallet-sage": "linear-gradient(150deg, #5E8B6A, #3F7355)", // §1 --sage / sage success fg
         "wallet-plum": "linear-gradient(150deg, #9D4E7C, #743A5C)", // §1 voucher birthday fg, deepened
         "wallet-indigo": "linear-gradient(150deg, #4E6B9D, #394F75)", // §1 voucher welcome fg, deepened
+        // Kraft board canvas — warm diagonal weave (patch board + share artboard).
+        // Two repeating diagonal gradients create a crosshatch texture over a warm base.
+        "patch-board":
+          "linear-gradient(160deg, #E7DCC9 0%, #D9CCB3 100%), " +
+          "repeating-linear-gradient(45deg, rgba(0,0,0,.025) 0px, rgba(0,0,0,.025) 1px, transparent 1px, transparent 8px), " +
+          "repeating-linear-gradient(-45deg, rgba(0,0,0,.025) 0px, rgba(0,0,0,.025) 1px, transparent 1px, transparent 8px)",
+        // Share artboard — same weave, slightly deeper contrast for export legibility.
+        "patch-share-board":
+          "linear-gradient(160deg, #E7DCC9 0%, #D9CCB3 100%), " +
+          "repeating-linear-gradient(45deg, rgba(0,0,0,.03) 0px, rgba(0,0,0,.03) 1px, transparent 1px, transparent 8px), " +
+          "repeating-linear-gradient(-45deg, rgba(0,0,0,.03) 0px, rgba(0,0,0,.03) 1px, transparent 1px, transparent 8px)",
+      },
+      // ---- Motion tokens (campaigns redesign — mockup-spec.md "Animations") ----
+      // All gated by useReducedMotion() in consuming components. Do not add
+      // `animation` classes directly to layout elements — only interactive /
+      // moment components use these.
+      keyframes: {
+        // Streak flame (campaigns tab header chip).
+        // 0/100%: resting; 50%: peak wobble. Source: mockup-spec.md §Animations.
+        "jq-flame": {
+          "0%, 100%": { transform: "scale(1) rotate(-3deg)" },
+          "50%": { transform: "scale(1.14) rotate(3deg)" },
+        },
+        // CTA attention pulse — white ring grows + fades. Used on primary QR CTAs.
+        "jq-ask": {
+          "0%, 100%": {
+            boxShadow: "0 0 0 0 rgba(255,255,255,0.5)",
+            transform: "scale(1)",
+          },
+          "50%": {
+            boxShadow: "0 0 0 10px rgba(255,255,255,0)",
+            transform: "scale(1.1)",
+          },
+        },
+        // Invite button pulse — terracotta ring. Spread 7px per spec.
+        "jq-ask-d": {
+          "0%, 100%": {
+            boxShadow: "0 0 0 0 rgba(194,94,60,0.45)",
+            transform: "scale(1)",
+          },
+          "50%": {
+            boxShadow: "0 0 0 7px rgba(194,94,60,0)",
+            transform: "scale(1.1)",
+          },
+        },
+        // Win-moment card enters from below. One-shot .32s.
+        "jq-card-up": {
+          "0%": { transform: "translateY(34px)", opacity: "0.3" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+        // Confetti piece falls + spins. Duration/delay applied per-piece inline
+        // (1.1–2.2s / 0–.9s). `fill-mode: forwards` for win overlay,
+        // `iteration: infinite` for earn-moment overlay.
+        "jq-confetti": {
+          "0%": { transform: "translateY(0) rotate(0deg)", opacity: "1" },
+          "100%": { transform: "translateY(760px) rotate(720deg)", opacity: "0" },
+        },
+        // Patch pop into earned sheet. 3-step spring.
+        "jq-patch-in": {
+          "0%": { transform: "scale(0.4) rotate(-7deg)", opacity: "0" },
+          "60%": { transform: "scale(1.07) rotate(2deg)", opacity: "1" },
+          "100%": { transform: "scale(1) rotate(0deg)", opacity: "1" },
+        },
+        // Earn-moment patch pop. More dramatic than patch-in.
+        "jq-pop": {
+          "0%": { transform: "scale(0.3)", opacity: "0" },
+          "55%": { transform: "scale(1.18)", opacity: "1" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
+        // Sheet / overlay rise-in. Lightweight.
+        "jq-rise": {
+          "0%": { transform: "translateY(20px)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+      },
+      animation: {
+        // Streak flame: 2.4s ease-in-out loop.
+        "jq-flame": "jq-flame 2.4s ease-in-out infinite",
+        // QR CTA pulse: white ring, 1.8s loop.
+        "jq-ask": "jq-ask 1.8s ease-in-out infinite",
+        // Invite button pulse: terracotta ring, 1.8s loop.
+        "jq-ask-d": "jq-ask-d 1.8s ease-in-out infinite",
+        // Win card enter: .32s spring.
+        "jq-card-up": "jq-card-up 0.32s cubic-bezier(.22,1,.36,1) both",
+        // Confetti (win overlay — forwards, no loop): applied per-piece via
+        // inline style for duration/delay variation. Use `animate-jq-confetti`.
+        "jq-confetti": "jq-confetti 1.6s ease-in forwards",
+        // Confetti (earn moment — infinite loop): a separate utility so both
+        // modes work from the same keyframe.
+        "jq-confetti-loop": "jq-confetti 1.6s ease-in infinite",
+        // Patch pop into sheet: .5s ease.
+        "jq-patch-in": "jq-patch-in 0.5s ease both",
+        // Earn-moment patch pop: .55s/.6s (use .55s standard, .6s for emphasis).
+        "jq-pop": "jq-pop 0.55s ease both",
+        // Sheet / overlay rise: .3s ease.
+        "jq-rise": "jq-rise 0.3s ease both",
+        // Slower rise variant (.4s) for overlays that enter after content.
+        "jq-rise-slow": "jq-rise 0.4s ease both",
       },
     },
   },

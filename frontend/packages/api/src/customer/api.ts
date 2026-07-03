@@ -16,6 +16,7 @@ import {
   adaptCatalogItem,
   adaptGroupSession,
   adaptMyGroup,
+  adaptPatchesSummary,
 } from "./adapters";
 import { session } from "./session";
 import { tokenStore } from "../tokens";
@@ -25,6 +26,7 @@ import type {
   CampaignCatalogItem,
   CampaignFeed,
   CampaignFeedFilter,
+  CampaignFeedParams,
   CampaignNotice,
   CategoryOption,
   CampaignListParams,
@@ -34,6 +36,7 @@ import type {
   GroupSession,
   Me,
   MyGroup,
+  PatchesSummary,
   ProfilePatch,
   PasswordLoginResult,
   ResetPasswordResult,
@@ -67,7 +70,7 @@ export interface CustomerApi {
   getBusiness(id: string, params?: Pick<NearbyParams, "lat" | "lng">): Promise<Business>;
   // ---- campaigns (plan §3) ----
   listCampaigns(params?: CampaignListParams): Promise<Campaign[]>;
-  campaignFeed(filter?: CampaignFeedFilter): Promise<CampaignFeed>;
+  campaignFeed(filter?: CampaignFeedFilter, params?: CampaignFeedParams): Promise<CampaignFeed>;
   campaignNotices(): Promise<CampaignNotice[]>;
   markCampaignNoticesSeen(ids: string[]): Promise<{ seen: number }>;
   getCampaign(id: string): Promise<Campaign>;
@@ -90,6 +93,14 @@ export interface CustomerApi {
   demoFillGroup(id: string): Promise<GroupSession>;
   // The customer's own groups; used to find the active group for a campaign.
   listMyGroups(): Promise<MyGroup[]>;
+  // ---- patches (campaigns redesign §A) ----
+  // GET /api/customer/patches/ — full summary: earned count, next track, unseen,
+  // all patch rows. Paginated defaults fine (≤ 24 rows).
+  patches(): Promise<PatchesSummary>;
+  // POST /api/customer/patches/seen/ — mark earn-moment shown for given slugs.
+  markPatchesSeen(slugs: string[]): Promise<{ marked: number }>;
+  // POST /api/customer/patches/board-seen/ — creates PatchBoardVisit (dismiss NEW pill).
+  markPatchBoardSeen(): Promise<{ ok: boolean }>;
 }
 
 // ----------------------------------------------------------------------------
@@ -238,11 +249,15 @@ export const customerApi: CustomerApi = {
     api
       .get<Paginated<any>>(`/api/customer/campaigns/${queryString(params)}`)
       .then((d) => d.results.map(adaptCampaign)),
-  // The feed endpoint returns {followed, discover} directly (not paginated) —
-  // campaigns-restructure design §6. `discover` filters the discover list only.
-  campaignFeed: (filter) =>
+  // The feed endpoint returns {followed, discover, sections} (not paginated) —
+  // campaigns-restructure design §6 + campaigns redesign B (q/category/sections).
+  // `discover` filters the discover list; q/category narrow discover + sections.
+  campaignFeed: (filter, params) =>
     api
-      .get<any>(`/api/customer/campaigns/feed/${queryString(filter ? { discover: filter } : undefined)}`)
+      .get<any>(`/api/customer/campaigns/feed/${queryString({
+        ...(filter && filter !== "all" ? { discover: filter } : {}),
+        ...params,
+      })}`)
       .then(adaptCampaignFeed),
   campaignNotices: () =>
     api
@@ -292,4 +307,11 @@ export const customerApi: CustomerApi = {
     api
       .get<Paginated<any>>("/api/customer/campaign-groups/")
       .then((d) => d.results.map(adaptMyGroup)),
+  // Patches — campaigns redesign §A. GET returns the full summary (not paginated).
+  patches: () =>
+    api.get<any>("/api/customer/patches/").then(adaptPatchesSummary),
+  markPatchesSeen: (slugs) =>
+    api.post<{ marked: number }>("/api/customer/patches/seen/", { slugs }),
+  markPatchBoardSeen: () =>
+    api.post<{ ok: boolean }>("/api/customer/patches/board-seen/", {}),
 };

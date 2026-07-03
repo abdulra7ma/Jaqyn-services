@@ -12,6 +12,8 @@ import {
   type GroupSessionMember,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
+import { formatDistanceKm, haversineKm } from "../_lib/distance";
+import type { UserLocation } from "../_lib/useUserLocation";
 import { Badge, cn } from "@jaqyn/ui";
 import Link from "next/link";
 import { useState } from "react";
@@ -719,6 +721,96 @@ export function VoucherItemSheet({
         ))}
       </ul>
     </section>
+  );
+}
+
+/**
+ * Compact discover row — [logo/glyph tile ~44 px] [name bold + reward line in
+ * brand color with optional "· {distance}" suffix] [filled brand CTA pill].
+ *
+ * The whole row is a next/Link (a11y primary affordance). The CTA text is a
+ * visual <span>, not a nested interactive element — interactive-in-interactive
+ * would be invalid HTML.
+ *
+ * CTA semantics:
+ *   group campaigns            → t("cmp.card.view")        (always "Открыть")
+ *   others not yet joined      → t("cmp.card.join")        ("Участвовать")
+ *   others with progress       → t("cmp.card.continue")    ("Продолжить")
+ *
+ * Distance label only renders when BOTH userLoc and business_lat/lng are
+ * present; it is omitted gracefully otherwise.
+ */
+export function DiscoverRow({
+  campaign,
+  userLoc,
+}: {
+  campaign: Campaign;
+  userLoc: UserLocation | null;
+}) {
+  const t = useT();
+  const type = campaign.campaign_type;
+  const p = campaign.my_progress;
+
+  const hasProgress = type === "individual" && !!p?.joined && !p?.completed;
+  const cta =
+    type === "group"
+      ? t("cmp.card.view")
+      : hasProgress
+        ? t("cmp.card.continue")
+        : t("cmp.card.join");
+
+  // Reward summary line (plain-language offer description).
+  const rewardLine = campaign.blurb || campaign.reward.title;
+
+  // Distance suffix — only when both user location and business geo are present.
+  const distanceSuffix =
+    userLoc != null &&
+    campaign.business_lat != null &&
+    campaign.business_lng != null
+      ? ` · ${formatDistanceKm(
+          haversineKm(userLoc, { lat: campaign.business_lat, lng: campaign.business_lng }),
+          t,
+        )}`
+      : "";
+
+  // All discover rows link to the campaign detail page — same as CampaignCard.
+  // The detail page routes the user into the group flow from there. Sending an
+  // unjoined user straight to /group (the in-progress session view) is wrong.
+  const href = `/campaigns/${campaign.id}`;
+  const isGroup = type === "group";
+
+  // Pixel spec (design "Discover" rows): row bg #fff / border line / radius 18 /
+  // padding 13 / gap 13, no shadow; 44px tile radius 13 on --tile; name 14/700
+  // (body font); reward line 12/700 brand, wraps to 2 lines; Group chip indigo;
+  // Join pill 11.5/800 white-on-brand, padding 8×15, fully rounded.
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-[13px] rounded-[18px] border border-line bg-card p-[13px] transition active:scale-[.99]"
+    >
+      <GlyphTile glyph={campaign.glyph} size={44} image={campaign.business.logo_url} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-[7px]">
+          <span className="truncate text-[14px] font-bold text-ink">{campaign.business.name}</span>
+          {isGroup && (
+            <span className="flex-none rounded-pill bg-indigo-soft px-[7px] py-0.5 text-[9px] font-extrabold uppercase tracking-[0.04em] text-indigo">
+              {t("cmp.card.groupTag")}
+            </span>
+          )}
+        </div>
+        <p className="mt-[3px] text-[12px] font-bold leading-snug text-brand">
+          {rewardLine}
+          {distanceSuffix}
+        </p>
+      </div>
+      {/* CTA pill — visual only; the row link is the real affordance */}
+      <span
+        className="flex-none rounded-pill bg-brand px-[15px] py-2 text-[11.5px] font-extrabold text-brand-fg"
+        aria-hidden
+      >
+        {cta}
+      </span>
+    </Link>
   );
 }
 

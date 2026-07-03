@@ -280,6 +280,27 @@ class CampaignGroupService:
                 session.status = Group.Status.FULL
                 session.save(update_fields=["status", "updated_at"])
 
+            # Collect notification targets before the transaction commits so we
+            # have stable ids. Notifying outside the block via on_commit.
+            # Source: spec §C "group_seat_filled: in join_group_session → notify
+            # leader + existing members"; backend.md on_commit rule.
+            seats_left = max(0, session.required_size - (member_count + 1))
+            leader_obj = session.group_leader
+            existing_member_objs = [
+                m.customer
+                for m in GroupMember.objects.filter(group=session)
+                .exclude(customer=customer)
+                .select_related("customer")
+            ]
+            joiner_name = getattr(customer, "name", "") or "Someone"
+            group_id_str = str(session.id)
+
+            transaction.on_commit(
+                lambda: _send_group_seat_filled(
+                    group_id_str, joiner_name, seats_left, leader_obj, existing_member_objs
+                )
+            )
+
         emit_event(
             "campaign_group_joined",
             business_id=str(session.campaign.business_id),
@@ -410,8 +431,15 @@ class CampaignGroupService:
 
             customer_id = str(leader.id)
             voucher_id = str(voucher.id)
+            campaign_id = str(campaign.id)
             transaction.on_commit(
                 lambda: _schedule_reward_notification(customer_id, voucher_id)
+            )
+            # Enqueue patch evaluation for group_led event after the confirmation
+            # transaction commits. Source: spec §A "group confirmed with leader ==
+            # user → group_led"; backend.md Celery rule.
+            transaction.on_commit(
+                lambda: _enqueue_patch_evaluation_for_group_led(customer_id, campaign_id)
             )
 
         emit_event(
@@ -695,3 +723,33 @@ class CampaignGroupService:
 
         session.refresh_from_db()
         return session
+
+
+def _send_group_seat_filled(
+    group_id: str,
+    joiner_name: str,
+    seats_left: int,
+    leader: object,
+    members: list,
+) -> None:
+    """Send group_seat_filled notices (on_commit callback). Source: spec §C."""
+    from apps.notifications.services import CampaignNoticeService
+
+    CampaignNoticeService.send_group_seat_filled(
+        group_id=group_id,
+        joiner_name=joiner_name,
+        seats_left=seats_left,
+        leader=leader,
+        members=members,
+    )
+
+
+def _enqueue_patch_evaluation_for_group_led(customer_id: str, campaign_id: str) -> None:
+    """Enqueue evaluate_patches for the group_led event (on_commit callback).
+
+    Called only from transaction.on_commit. Source: spec §A "group confirmed
+    with leader == user → group_led"; backend.md Celery rule (on_commit).
+    """
+    from apps.patches.tasks import evaluate_patches
+
+    evaluate_patches.delay(customer_id, "group_led", {"campaign_id": campaign_id})

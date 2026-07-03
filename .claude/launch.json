@@ -59,6 +59,27 @@
       }
     },
     {
+      "name": "campaigns-live",
+      "cwd": "frontend",
+      "runtimeExecutable": "corepack",
+      "runtimeArgs": [
+        "pnpm",
+        "--filter",
+        "web",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3500"
+      ],
+      "port": 3500,
+      "autoPort": true,
+      "env": {
+        "API_PROXY_TARGET": "http://127.0.0.1:8000",
+        "NEXT_DIST_DIR": ".next-campaigns"
+      }
+    },
+    {
       "name": "web-settings-preview",
       "cwd": "frontend",
       "runtimeExecutable": "corepack",

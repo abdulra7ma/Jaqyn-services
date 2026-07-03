@@ -59,6 +59,8 @@ function loyaltyCard(over: Partial<LoyaltyCardView> = {}): LoyaltyCardView {
     business_category: "cafe",
     business_area: "Center",
     business_hours: {},
+    business_lat: null,
+    business_lng: null,
     type: "stamp",
     name: "Stamps",
     reward_summary: "Free coffee",
@@ -80,6 +82,8 @@ function campaign(over: Partial<Campaign> = {}): Campaign {
   return {
     id: "c1",
     business: { id: "b1", name: "Cafe D", category: "cafe", logo_url: null, area: "Center", address: "" },
+    business_lat: null,
+    business_lng: null,
     glyph: "🎯",
     name: "Visit Challenge",
     description: "",

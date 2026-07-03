@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Optional
 
 from django.db.models import QuerySet
 
@@ -41,6 +42,11 @@ class LoyaltyCardView:
     points_per_som: Decimal | None
     cashback_per_point: Decimal | None
     pct_back: Decimal | None
+    # Business geo-coordinates, exposed so the client (which owns geolocation
+    # permission) can compute distance labels like "120 m". Nullable — many
+    # businesses are not yet geo-tagged. Source: spec §B lat/lng exposure.
+    business_lat: Optional[Decimal]
+    business_lng: Optional[Decimal]
 
 
 class LoyaltyMembershipService:
@@ -99,6 +105,8 @@ class LoyaltyMembershipService:
             points_per_som=program.points_per_som,
             cashback_per_point=program.cashback_per_point,
             pct_back=pct_back,
+            business_lat=program.business.latitude,
+            business_lng=program.business.longitude,
         )
 
     @staticmethod

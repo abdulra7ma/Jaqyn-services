@@ -35,6 +35,7 @@ class, not the hex. Mapping from the tokens below:
 | `--accent-deep` | `#A2492A` | `brand-deep` |
 | `--amber` | `#E7A23E` | `amber` (`amber-deep` = `#B07A1E`) |
 | `--sage` | `#5E8B6A` | `sage-deep`; `sage` = `#3F7355` (success fg), `sage-soft` = `#E4F0E7` |
+| `--indigo` | `#4E6B9D` | `indigo` (text) / `indigo-soft` = `#E8EEF6` (chip fill) — group/social accent, e.g. the discover-row "Group" tag |
 | radius `pill` | `99px` | `rounded-pill` |
 | radius `card` | `14px` | `rounded-xl` |
 | radius `modal` | `24px` | `rounded-modal` (centered modal / dialog) |
@@ -228,6 +229,12 @@ Filled state is terracotta; empty is the tile tone.
 
 ## Animations
 
+All motion tokens live in `tailwind-preset.js` keyframes/animation. Every consuming
+component must gate motion behind `useReducedMotion()` (framer-motion) — when true,
+skip the animation class entirely.
+
+### Legacy tokens (pre-campaigns-redesign)
+
 | Keyframe | Effect |
 |---|---|
 | `jqIn` | Subtle 10px rise on screen enter |
@@ -235,6 +242,33 @@ Filled state is terracotta; empty is the tile tone.
 | `jqToast` | Fade + 12px slide-up |
 | `jqCardIn` | 16px rise + slight scale for detail cards |
 | `jqPing` | Expanding ring (map "you" pin) |
+
+### Campaigns-redesign tokens (F1 — mockup-spec.md "Animations")
+
+| Tailwind class | Keyframe | Curve / duration | Use |
+|---|---|---|---|
+| `animate-jq-flame` | `jq-flame` | ease-in-out 2.4s ∞ | Streak chip 🔥 emoji |
+| `animate-jq-ask` | `jq-ask` | ease-in-out 1.8s ∞ | Primary QR CTA pulse (white ring) |
+| `animate-jq-ask-d` | `jq-ask-d` | ease-in-out 1.8s ∞ | Invite button pulse (terracotta ring, 7px spread) |
+| `animate-jq-card-up` | `jq-card-up` | cubic-bezier(.22,1,.36,1) 0.32s | Win-moment card enters from below |
+| `animate-jq-confetti` | `jq-confetti` | ease-in 1.6s forwards | Win overlay — each of 34 pieces gets inline duration/delay override |
+| `animate-jq-confetti-loop` | `jq-confetti` | ease-in 1.6s ∞ | Earn-moment overlay (loops) |
+| `animate-jq-patch-in` | `jq-patch-in` | ease 0.5s | Patch art pops into earned bottom sheet |
+| `animate-jq-pop` | `jq-pop` | ease 0.55s | Earn-moment patch centre pop |
+| `animate-jq-rise` | `jq-rise` | ease 0.3s | Sheet / overlay rise-in |
+| `animate-jq-rise-slow` | `jq-rise` | ease 0.4s | Delayed overlay content |
+
+**Vessel fill** (loyalty/campaign progress bar height): not a keyframe — use Tailwind
+`transition-[height]` with arbitrary duration and easing:
+```
+transition-[height] duration-[800ms] [transition-timing-function:cubic-bezier(.22,1,.36,1)]
+```
+Or apply inline `style` for the easing since Tailwind's JIT doesn't accept
+arbitrary cubic-bezier in `ease-*` utilities.
+
+**Confetti pieces** (34 deterministic pieces): absolutely positioned `<span>`s, each
+with an inline `style` for `animationDuration` (1.1–2.2s) and `animationDelay`
+(0–0.9s) derived from the piece index. No confetti library — pure CSS.
 
 ---
 

@@ -206,6 +206,8 @@ describe("WalletPeekRail", () => {
     business_category: "cafe",
     business_area: "Center",
     business_hours: {},
+    business_lat: null as null,
+    business_lng: null as null,
     type: "stamp" as const,
     name: "Stamps",
     reward_summary: "Free coffee",

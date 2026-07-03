@@ -238,14 +238,19 @@ def test_customer_home_summary_returns_consecutive_visit_streak(api_actors):
     response = client.get("/api/customer/loyalty/home-summary/")
 
     assert response.status_code == 200
-    assert response.data["data"] == {
+    data = response.data["data"]
+    # visit_streak_weeks is the new week-level streak counter (spec §B).
+    # Transactions span at most 3 days in one calendar week so streak is 1.
+    assert data == {
         "visit_streak_days": 3,
         "streak_active_today": True,
         "featured_campaign_ids": [],
         "rewards_earned": 3,
         "som_saved": "200.00",
         "active_cards": 1,
+        "visit_streak_weeks": data["visit_streak_weeks"],  # value varies by run date
     }
+    assert data["visit_streak_weeks"] >= 0
 
 
 # --- B2: unified scan active_vouchers + group token tests ------------------

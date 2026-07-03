@@ -62,6 +62,8 @@ function program(over: Partial<LoyaltyCardView>): LoyaltyCardView {
     business_category: "",
     business_area: "",
     business_hours: {},
+    business_lat: null,
+    business_lng: null,
     type: "visit",
     name: "Program",
     reward_summary: "",

@@ -432,7 +432,10 @@ def test_customer_feed_query_count_bounded(django_assert_num_queries):
     for i in range(4):
         make_campaign(business, required_count=3)
     client = _auth(customer)
-    with django_assert_num_queries(5):
+    # Queries: 1 user auth + 1 followed + 1 discover + 1 sections-featured/trending
+    # (annotated) + 1 sections-fresh + 1 participant progress + 1 voucher progress = 7.
+    # The 2 extra vs the original 5 are the new sections feature (spec §B feed sections).
+    with django_assert_num_queries(7):
         resp = client.get("/api/customer/campaigns/feed/")
     assert resp.status_code == 200
 

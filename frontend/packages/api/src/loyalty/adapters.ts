@@ -4,6 +4,11 @@ type Raw = Record<string, unknown>;
 const text = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
 const num = (value: unknown, fallback = 0) => typeof value === "number" ? value : Number(value ?? fallback) || fallback;
 const nullableText = (value: unknown) => value == null ? null : text(value);
+const nullableNum = (value: unknown): number | null => {
+  if (value == null) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isNaN(n) ? null : n;
+};
 
 export function adaptLoyaltyCard(raw: Raw): LoyaltyCardView {
   const type = text(raw.type);
@@ -14,6 +19,9 @@ export function adaptLoyaltyCard(raw: Raw): LoyaltyCardView {
   return {
     program_id: text(raw.program_id), business_id: text(raw.business_id), business_name: text(raw.business_name),
     business_logo_url: nullableText(raw.business_logo_url), business_card_accent: text(raw.business_card_accent),
+    // Geo coords added in campaigns redesign B (business_lat/business_lng from backend).
+    business_lat: nullableNum(raw.business_lat),
+    business_lng: nullableNum(raw.business_lng),
     type: type === "points" || type === "visit" ? type : "stamp",
     business_category: text(raw.business_category), business_area: text(raw.business_area), business_hours: hours,
     name: text(raw.name), reward_summary: text(raw.reward_summary), reward_expiry_days: num(raw.reward_expiry_days, 30), joined: Boolean(raw.joined),
