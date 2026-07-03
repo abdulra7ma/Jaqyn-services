@@ -272,3 +272,73 @@ test("adaptMyGroup exposes campaign_id for the per-campaign active-group lookup"
   assert.equal(g.joined_count, 2);
   assert.equal(g.status, "forming");
 });
+
+// toLatLng coercion — backend emits decimals as strings; null/empty must not
+// silently become 0 (which would produce a bogus "on the equator" distance).
+test("adaptCampaign coerces business_lat/lng decimal strings to number", () => {
+  const c = adaptCampaign({
+    id: "c-geo",
+    business: "b-1",
+    name: "Geo campaign",
+    campaign_type: "individual",
+    status: "active",
+    rule: {},
+    reward: { title: "Prize" },
+    my_progress: null,
+    business_lat: "42.8746",
+    business_lng: "74.5698",
+  });
+  assert.equal(c.business_lat, 42.8746);
+  assert.equal(c.business_lng, 74.5698);
+});
+
+test("adaptCampaign maps null business_lat/lng to null (not 0)", () => {
+  const c = adaptCampaign({
+    id: "c-no-geo",
+    business: "b-1",
+    name: "No geo",
+    campaign_type: "individual",
+    status: "active",
+    rule: {},
+    reward: { title: "Prize" },
+    my_progress: null,
+    business_lat: null,
+    business_lng: null,
+  });
+  assert.equal(c.business_lat, null);
+  assert.equal(c.business_lng, null);
+});
+
+test("adaptCampaign maps missing business_lat/lng to null (field absent)", () => {
+  // Field omitted entirely — must be null, not undefined or 0.
+  const c = adaptCampaign({
+    id: "c-absent-geo",
+    business: "b-1",
+    name: "Absent geo",
+    campaign_type: "individual",
+    status: "active",
+    rule: {},
+    reward: { title: "Prize" },
+    my_progress: null,
+  });
+  assert.equal(c.business_lat, null);
+  assert.equal(c.business_lng, null);
+});
+
+test("adaptCampaign maps empty-string business_lat/lng to null (not 0)", () => {
+  // Backend may emit "" for unset decimal fields.
+  const c = adaptCampaign({
+    id: "c-empty-geo",
+    business: "b-1",
+    name: "Empty geo",
+    campaign_type: "individual",
+    status: "active",
+    rule: {},
+    reward: { title: "Prize" },
+    my_progress: null,
+    business_lat: "",
+    business_lng: "",
+  });
+  assert.equal(c.business_lat, null);
+  assert.equal(c.business_lng, null);
+});

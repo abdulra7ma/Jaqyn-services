@@ -66,13 +66,15 @@ class CampaignDiscoverView(APIView):
 
 
 class CampaignFeedView(APIView):
-    """The customer campaigns feed: ``{followed, discover}`` (design §6).
+    """The customer campaigns feed: ``{followed, discover, sections}`` (spec §B).
 
     ``followed`` is the customer's in-progress campaigns ("From places you go"
     row); ``discover`` is the discoverable set, filterable via ``?discover=``
-    (``all``/``group``/``neighborhood``/``ended``). Both lists carry each row's
+    (``all``/``group``/``neighborhood``/``ended``), ``?q=`` (search), and
+    ``?category=`` (business category slug). Both lists carry each row's
     ``my_progress`` via a shared prefetched progress context so the whole response
-    is N+1-free. Not paginated — the feed is a small curated set surfaced together.
+    is N+1-free. ``sections`` carries ``{featured, trending, fresh}`` for the
+    Discover screen. Not paginated — the feed is a curated set surfaced together.
     """
 
     permission_classes = [IsCustomer]
@@ -81,19 +83,26 @@ class CampaignFeedView(APIView):
     def get(self, request):
         params = CampaignFeedQuerySerializer(data=request.query_params)
         params.is_valid(raise_exception=True)
-        followed, discover = CampaignService.feed_for_customer(
+        followed, discover, sections = CampaignService.feed_for_customer(
             request.user,
             discover_filter=params.validated_data.get("discover", "all"),
+            q=params.validated_data.get("q"),
+            category=params.validated_data.get("category"),
         )
-        # One progress context over both lists keeps my_progress off the N+1 path.
+        # One progress context over all lists keeps my_progress off the N+1 path.
+        all_campaigns = followed + discover + sum(sections.values(), [])
         progress_context = CampaignService.progress_context_for(
-            request.user, followed + discover
+            request.user, all_campaigns
         )
         ctx = {"progress_context": progress_context}
         return success_response(
             {
                 "followed": CampaignSerializer(followed, many=True, context=ctx).data,
                 "discover": CampaignSerializer(discover, many=True, context=ctx).data,
+                "sections": {
+                    key: CampaignSerializer(clist, many=True, context=ctx).data
+                    for key, clist in sections.items()
+                },
             }
         )
 

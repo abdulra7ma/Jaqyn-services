@@ -1,10 +1,14 @@
 "use client";
 
-import type { Campaign } from "@jaqyn/api";
+import { useMyGroups, type Campaign, type GroupSession } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { useRouter } from "next/navigation";
 
 type Translate = ReturnType<typeof useT>;
+
+// Groups still in motion (not completed / expired / cancelled) — the member is
+// "in" the campaign's group. Mirrors the group session page's resolver.
+const ACTIVE_STATUSES: GroupSession["status"][] = ["forming", "full", "checking_in", "checked_in"];
 
 /** "Valid" cell value: a day label + the active-hours window. Empty active_days
  * is treated as every day → "Daily". */
@@ -41,6 +45,13 @@ function InfoCell({ label, value }: { label: string; value: string }) {
 export function GroupCampaignDetail({ campaign: c }: { campaign: Campaign }) {
   const t = useT();
   const router = useRouter();
+  const myGroups = useMyGroups();
+
+  // Already in an active group for this campaign → the CTA opens it ("View your
+  // group") rather than mislabelling the same route as "Create Group".
+  const inGroup = !!myGroups.data?.some(
+    (g) => g.campaign_id === c.id && ACTIVE_STATUSES.includes(g.status),
+  );
 
   const size = c.rule.required_group_size ?? 0;
   // Business meta line: name · category · area/address.
@@ -108,7 +119,7 @@ export function GroupCampaignDetail({ campaign: c }: { campaign: Campaign }) {
           onClick={() => router.push(`/campaigns/${c.id}/group`)}
           className="w-full rounded-2xl bg-brand-gradient py-4 text-base font-bold text-white shadow-glow transition active:scale-[.99]"
         >
-          {t("cmp.group.detail.create")}
+          {t(inGroup ? "cmp.group.detail.view" : "cmp.group.detail.create")}
         </button>
       </div>
     </>

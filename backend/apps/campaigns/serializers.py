@@ -122,6 +122,16 @@ class CampaignSerializer(serializers.ModelSerializer):
     # Relative (/media/..) logo url of the owning business, so campaign cards can
     # show the brand mark instead of a bare glyph. None when the business has no logo.
     business_logo_url = serializers.SerializerMethodField()
+    # Business geo-coordinates for client-side distance calculation (spec §B).
+    # Nullable — businesses may not have set their location yet.
+    business_lat = serializers.DecimalField(
+        source="business.latitude", max_digits=9, decimal_places=6,
+        read_only=True, allow_null=True
+    )
+    business_lng = serializers.DecimalField(
+        source="business.longitude", max_digits=9, decimal_places=6,
+        read_only=True, allow_null=True
+    )
     rule = CampaignRuleSerializer(read_only=True)
     reward = CampaignRewardSerializer(read_only=True)
     required_count = serializers.SerializerMethodField()
@@ -151,6 +161,8 @@ class CampaignSerializer(serializers.ModelSerializer):
             "business",
             "business_name",
             "business_logo_url",
+            "business_lat",
+            "business_lng",
             "created_by",
             "name",
             "description",
@@ -427,14 +439,20 @@ class CampaignDiscoverQuerySerializer(serializers.Serializer):
 
 
 class CampaignFeedQuerySerializer(serializers.Serializer):
-    """Query params for the customer campaigns feed (campaigns-restructure §6).
+    """Query params for the customer campaigns feed (campaigns-redesign spec §B).
 
     ``discover`` selects the discover-list filter
     (``all``/``group``/``neighborhood``/``ended``); the service degrades an
     unknown value to ``all``. Shape-only validation here.
+
+    ``q`` (optional): case-insensitive search over campaign name + business name.
+    ``category`` (optional): filter by business category slug.
+    Source: spec §B "add ?q= and ?category= filters".
     """
 
     discover = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    q = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    category = serializers.CharField(required=False, allow_blank=True, max_length=64)
 
 
 class CampaignListQuerySerializer(serializers.Serializer):

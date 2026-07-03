@@ -20,7 +20,14 @@ from django.utils import timezone
 from rest_framework import status
 
 from apps.businesses.models import Business
-from apps.campaigns.constants import CAMPAIGN_ENDING_WARNING_HOURS
+from apps.campaigns.constants import (
+    CAMPAIGN_ENDING_WARNING_HOURS,
+    FEED_FRESH_WINDOW_DAYS,
+    FEED_SECTION_MAX_FEATURED,
+    FEED_SECTION_MAX_FRESH,
+    FEED_SECTION_MAX_TRENDING,
+    FEED_TRENDING_WINDOW_DAYS,
+)
 from apps.campaigns.models import (
     Campaign,
     CampaignParticipant,
@@ -535,8 +542,10 @@ class CampaignService:
         customer,
         discover_filter: str = "all",
         now: datetime | None = None,
-    ) -> tuple[list[Campaign], list[Campaign]]:
-        """Return the ``(followed, discover)`` split for the customer feed (§6).
+        q: str | None = None,
+        category: str | None = None,
+    ) -> tuple[list[Campaign], list[Campaign], dict[str, list[Campaign]]]:
+        """Return the ``(followed, discover, sections)`` triple for the customer feed.
 
         ``followed`` is the customer's in-progress campaigns (JOINED/IN_PROGRESS
         participant) — the "From places you go" row. ``discover`` is the
@@ -549,8 +558,20 @@ class CampaignService:
         * ``all`` / unknown — the full active discover set.
 
         ``discover`` excludes campaigns already in ``followed`` so a row never
-        appears twice. Both are materialised lists (the view paginates/serialises
-        them) with rule/reward/business selected to avoid N+1.
+        appears twice. Both are materialised lists with rule/reward/business
+        selected to avoid N+1.
+
+        ``q`` (optional): case-insensitive filter on campaign name OR business name.
+        ``category`` (optional): filter by business.category slug.
+        Source: spec §B "add ?q= and ?category= filters".
+
+        ``sections`` carries three curated lists for the Discover screen:
+          - ``featured``: top 1–3 ACTIVE campaigns by participants joined in the
+            last FEED_TRENDING_WINDOW_DAYS days.
+          - ``trending``: next by same metric (positions 4–6).
+          - ``fresh``: published within FEED_FRESH_WINDOW_DAYS days.
+        One annotated queryset produces featured+trending (ranked by recent joins).
+        Source: spec §B sections definition.
         """
         now = now or timezone.now()
         followed = list(cls.discover_for_customer(customer, now=now, joined_only=True))
@@ -569,8 +590,69 @@ class CampaignService:
             discover_qs = cls.discover_for_customer(
                 customer, now=now, campaign_type=campaign_type
             )
+
+        # Apply optional search and category filters (spec §B).
+        if q and q.strip():
+            q_clean = q.strip()
+            discover_qs = discover_qs.filter(
+                Q(name__icontains=q_clean) | Q(business__name__icontains=q_clean)
+            )
+        if category and category.strip():
+            discover_qs = discover_qs.filter(business__category=category.strip())
+
         discover = [c for c in discover_qs if c.id not in followed_ids]
-        return followed, discover
+
+        sections = cls._build_sections(now)
+        return followed, discover, sections
+
+    @classmethod
+    def _build_sections(
+        cls, now: datetime | None = None
+    ) -> dict[str, list[Campaign]]:
+        """Build the sections dict for the discover screen (spec §B).
+
+        One annotated queryset ranks ACTIVE campaigns by participant joins in the
+        last FEED_TRENDING_WINDOW_DAYS days (recent momentum). The top 1–3 become
+        featured; the next 3 become trending. Fresh is a separate queryset of
+        campaigns published within FEED_FRESH_WINDOW_DAYS days.
+
+        All queries select rule/reward/business to remain N+1-free. The three
+        sections are built from two queries total, not three.
+        """
+        now = now or timezone.now()
+        trending_cutoff = now - timedelta(days=FEED_TRENDING_WINDOW_DAYS)
+        fresh_cutoff = now - timedelta(days=FEED_FRESH_WINDOW_DAYS)
+
+        # One annotated query for featured + trending.
+        # ``recent_joins`` counts participants who joined in the last
+        # FEED_TRENDING_WINDOW_DAYS days; higher is more popular / trending.
+        ranked = list(
+            Campaign.objects.filter(status=Campaign.Status.ACTIVE)
+            .select_related("rule", "reward", "business")
+            .annotate(
+                recent_joins=Count(
+                    "participants",
+                    filter=Q(participants__joined_at__gte=trending_cutoff),
+                )
+            )
+            .order_by("-recent_joins", "-created_at")
+            .prefetch_related()
+            [: FEED_SECTION_MAX_FEATURED + FEED_SECTION_MAX_TRENDING]
+        )
+        featured = ranked[:FEED_SECTION_MAX_FEATURED]
+        trending = ranked[FEED_SECTION_MAX_FEATURED:]
+
+        fresh = list(
+            Campaign.objects.filter(
+                status=Campaign.Status.ACTIVE,
+                start_at__gte=fresh_cutoff,
+            )
+            .select_related("rule", "reward", "business")
+            .order_by("-start_at", "-created_at")
+            [:FEED_SECTION_MAX_FRESH]
+        )
+
+        return {"featured": featured, "trending": trending, "fresh": fresh}
 
     @classmethod
     def home_priority_ids(

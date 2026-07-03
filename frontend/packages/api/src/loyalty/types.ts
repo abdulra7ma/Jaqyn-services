@@ -12,6 +12,10 @@ export type LoyaltyCardView = {
   business_area: string;
   /** Day-of-week → [open, close] (e.g. {"mon":["07:00","21:00"]}); may be empty. */
   business_hours: Record<string, [string, string]>;
+  // Geo coords for distance labels (campaigns redesign B — LoyaltyCardSerializer ext).
+  // Null until the backend exposes Business.latitude/longitude on cards.
+  business_lat: number | null;
+  business_lng: number | null;
   type: LoyaltyType;
   name: string;
   reward_summary: string;
@@ -69,6 +73,8 @@ export type LoyaltyVoucherWallet = {
 
 export type LoyaltyHomeSummary = {
   visit_streak_days: number;
+  // Consecutive ISO-weeks with ≥1 visit (campaigns redesign B — home-summary ext).
+  visit_streak_weeks: number;
   streak_active_today: boolean;
   featured_campaign_ids: string[];
   rewards_earned: number;

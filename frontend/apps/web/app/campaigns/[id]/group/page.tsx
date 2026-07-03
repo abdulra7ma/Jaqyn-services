@@ -17,7 +17,14 @@ import { useMemo, useState } from "react";
 import QRCode from "react-qr-code";
 import { CustomerShell } from "../../../_components/CustomerShell";
 import { GlyphTile, GroupMemberRow } from "../../../_components/campaigns";
-import { AvatarSlots, buildVisitSlots, hhmm, inviteUrl, useCopy } from "../../../_components/groups";
+import {
+  AvatarSlots,
+  buildVisitSlots,
+  GroupInvitePanel,
+  hhmm,
+  inviteUrl,
+  useCopy,
+} from "../../../_components/groups";
 import { useRequireAuth } from "../../../_lib/auth";
 
 // Groups still in motion (not completed / expired / cancelled). Matches the feed.
@@ -157,64 +164,22 @@ function CreateGroupForm({ campaign }: { campaign: Campaign }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Share row used inside InviteSheetContent (mirrors the standalone invite page).
-// ---------------------------------------------------------------------------
-function ShareRow({
-  label,
-  href,
-  onClick,
-}: {
-  label: string;
-  href?: string;
-  onClick?: () => void;
-}) {
-  const cls =
-    "flex w-full items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3.5 text-[14px] font-semibold text-ink transition active:scale-[.99]";
-  if (href) {
-    return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className={cls}>
-        <span aria-hidden>📤</span>
-        {label}
-      </a>
-    );
-  }
-  return (
-    <button type="button" onClick={onClick} className={cls}>
-      <span aria-hidden>📤</span>
-      {label}
-    </button>
-  );
-}
-
 /**
- * Share content for the invite Sheet. Identical logic to the standalone
- * /invite page but rendered inside the Sheet so the group screen stays behind it.
- * The full-page /invite route remains as the deep-link fallback.
+ * Share content for the invite Sheet. Wraps the shared GroupInvitePanel (editable
+ * message + dynamic link + platform share rows) with the sheet's heading and a
+ * close CTA. The full-page /invite route reuses the same panel.
  */
 function InviteSheetContent({
   session,
   rewardTitle,
   onClose,
 }: {
-  session: import("@jaqyn/api").GroupSession;
+  session: GroupSession;
   rewardTitle: string;
   onClose: () => void;
 }) {
   const t = useT();
-  const { copied, copy } = useCopy();
-
   const remaining = Math.max(0, session.required_size - session.joined_count);
-  const link = inviteUrl(session.invite_code);
-  const message = t("cmp.invite.message")
-    .replace("{business}", session.business_name)
-    .replace("{count}", String(remaining))
-    .replace("{reward}", rewardTitle)
-    .replace("{time}", hhmm(session.visit_time));
-
-  const shareText = `${message} ${link}`;
-  const waHref = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-  const tgHref = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(message)}`;
 
   return (
     <>
@@ -223,39 +188,7 @@ function InviteSheetContent({
         {t("cmp.invite.subtitle").replace("{count}", String(remaining))}
       </p>
 
-      {/* pre-written message */}
-      <div className="mt-5 rounded-2xl border border-line bg-card p-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-subtle">
-          {t("cmp.invite.prewritten")}
-        </p>
-        <p className="mt-2 text-[14px] leading-relaxed text-ink">{message}</p>
-      </div>
-
-      {/* invite link + copy */}
-      <div className="mt-3.5 flex items-center gap-2.5 rounded-2xl border border-dashed border-line bg-cream px-4 py-3.5">
-        <span aria-hidden>🔗</span>
-        <span className="flex-1 truncate font-mono text-[13px] font-semibold text-subtle">{link}</span>
-        <button
-          onClick={() => copy(link)}
-          className="flex-none rounded-lg bg-brand-muted px-3 py-1.5 text-xs font-bold text-brand"
-        >
-          {copied ? t("common.copied") : t("common.copy")}
-        </button>
-      </div>
-
-      {/* share rows */}
-      <div className="mt-4 flex flex-col gap-2.5">
-        <ShareRow label={t("cmp.invite.whatsapp")} href={waHref} />
-        <ShareRow label={t("cmp.invite.telegram")} href={tgHref} />
-        {/* Instagram has no web share-with-text intent — copy the message and open IG. */}
-        <ShareRow
-          label={t("cmp.invite.instagram")}
-          onClick={() => {
-            copy(shareText);
-            window.open("https://instagram.com", "_blank", "noopener,noreferrer");
-          }}
-        />
-      </div>
+      <GroupInvitePanel session={session} rewardTitle={rewardTitle} />
 
       {/* close / back to group */}
       <div className="sticky bottom-0 -mx-[22px] mt-6 bg-gradient-to-t from-card from-[26%] to-transparent px-[22px] pb-[calc(16px+env(safe-area-inset-bottom))] pt-3.5">
@@ -302,9 +235,8 @@ function GroupSessionView({
   const remaining = Math.max(0, session.required_size - session.joined_count);
   const isFull = session.status === "full" || session.joined_count >= session.required_size;
   const isDone = session.status === "completed";
-  // Display the branded short link (prototype "jaqyn.kg/g/<code>"); the real
-  // deep link resolves it. Matches SCREEN 4/5 of the prototype.
-  const link = inviteUrl(session.invite_code);
+  // The real, origin-aware invite deep link (`<frontend>/q/<token>`).
+  const link = inviteUrl(session.invite_code, session.invite_url);
 
   return (
     <>
@@ -477,11 +409,25 @@ function GroupBody({ campaignId }: { campaignId: string }) {
 
 export default function GroupSessionPage() {
   const t = useT();
+  const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const { isAuthenticated } = useRequireAuth();
 
+  // Return to wherever the user came from (the tab's active-group banner, an
+  // in-progress row, discover, an invite link…) rather than a fixed parent. The
+  // campaign detail is the "create/join" screen — sending an already-joined member
+  // there on back is the loop we're avoiding. Fall back to the tab on a cold deep
+  // link with no in-app history.
+  const goBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/campaigns");
+    }
+  };
+
   return (
-    <CustomerShell title={t("cmp.nav.group")} back={`/campaigns/${id}`} showNav={false} hideChromeTitle>
+    <CustomerShell title={t("cmp.nav.group")} backFn={goBack} showNav={false} hideChromeTitle>
       {!isAuthenticated ? null : <GroupBody campaignId={id} />}
     </CustomerShell>
   );

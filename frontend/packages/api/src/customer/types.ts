@@ -285,6 +285,11 @@ export type CampaignProgress = {
 export type Campaign = {
   id: string;
   business: Pick<Business, "id" | "name" | "category" | "logo_url" | "area" | "address">;
+  // Business coordinates — nullable decimals coerced from backend string fields
+  // business_lat / business_lng. Null when the business has no geo set.
+  // Used for haversine distance display on discover rows.
+  business_lat: number | null;
+  business_lng: number | null;
   glyph: string;
   name: string;
   description: string;
@@ -314,12 +319,23 @@ export type Campaign = {
   auto_join_link?: string | null;
 };
 
+// Discover sections served by the extended feed endpoint (campaigns redesign B).
+// featured = most participants in last 7d (top 1–3); trending = next by same metric;
+// fresh = published within 14 days. All use the same Campaign serializer.
+export type CampaignFeedSections = {
+  featured: Campaign[];
+  trending: Campaign[];
+  fresh: Campaign[];
+};
+
 // The customer campaigns feed (campaigns-restructure design §6). `followed` is the
 // "From places you go" row (in-progress campaigns); `discover` is the filterable
-// "Discover more" list. Cards in both route into the existing detail/group screens.
+// "Discover more" list. `sections` carries the discover page hero/trending/fresh
+// rows (campaigns redesign B — feed q/category/sections extension).
 export type CampaignFeed = {
   followed: Campaign[];
   discover: Campaign[];
+  sections: CampaignFeedSections;
 };
 
 export type CampaignNotice = {
@@ -334,6 +350,14 @@ export type CampaignNotice = {
 
 // Discover-list filter for the feed (campaigns-restructure design §6).
 export type CampaignFeedFilter = "all" | "group" | "neighborhood" | "ended";
+
+// Extended feed params (campaigns redesign B): search + category filter for
+// /campaigns/discover. Kept separate from CampaignFeedFilter (which drives the
+// followed/discover split); these params are discover-only.
+export type CampaignFeedParams = {
+  q?: string;
+  category?: string;
+};
 
 export type CampaignVoucherStatus = "active" | "redeemed" | "expired" | "cancelled";
 
@@ -488,3 +512,56 @@ export type ProfilePatch = Partial<{
   onboarding_completed: boolean;
   avatar_emoji: string;
 }>;
+
+// ---- Patches (apps.patches — campaigns redesign §A) -------------------------
+// Account-level achievements auto-earned from events across all shops.
+// Backend docs: campaigns-redesign-plan.md §A.
+
+export type PatchShape = "circle" | "shield" | "hexagon" | "banner";
+
+// A single patch definition + the viewer's state for it.
+// Mirrors PatchOut from /api/customer/patches/ (plan §A).
+export type PatchOut = {
+  slug: string;
+  name: string;
+  shape: PatchShape;
+  // SVG icon key (maps to icon registry in PatchBadge component).
+  icon: string;
+  // Brand hex values — used as inline data colors (not theme tokens) since they
+  // come from backend patch defs, not the design-system palette.
+  color: string;
+  light: string;
+  deep: string;
+  // Human-readable earn description (server canonical; @jaqyn/i18n key = patch.def.{slug}.how).
+  how: string;
+  earned: boolean;
+  earned_at: string | null;
+  progress_current: number;
+  progress_target: number;
+};
+
+// Next-patch preview shown in the campaigns tab patches row.
+export type PatchNext = {
+  slug: string;
+  name: string;
+  shape: PatchShape;
+  icon: string;
+  color: string;
+  light: string;
+  deep: string;
+  current: number;
+  target: number;
+  remaining_label: string;
+} | null;
+
+// Full patches summary returned by GET /api/customer/patches/.
+export type PatchesSummary = {
+  earned_count: number;
+  total: number;
+  // False until the customer first visits the patches board — drives NEW pill dismiss.
+  board_seen: boolean;
+  next: PatchNext;
+  // Patches earned but not yet seen (earn-moment not shown). Cleared by POST /seen/.
+  unseen_earned: PatchOut[];
+  patches: PatchOut[];
+};

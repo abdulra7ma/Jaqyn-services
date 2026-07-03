@@ -112,6 +112,14 @@ class LoyaltyCardSerializer(serializers.Serializer):
     pct_back = serializers.DecimalField(
         max_digits=12, decimal_places=2, allow_null=True
     )
+    # Business geo-coordinates for client-side distance calculation (spec §B).
+    # Nullable — businesses may not have set their location yet.
+    business_lat = serializers.DecimalField(
+        max_digits=9, decimal_places=6, allow_null=True
+    )
+    business_lng = serializers.DecimalField(
+        max_digits=9, decimal_places=6, allow_null=True
+    )
 
 
 class LoyaltyHomeSummarySerializer(serializers.Serializer):
@@ -121,6 +129,8 @@ class LoyaltyHomeSummarySerializer(serializers.Serializer):
     rewards_earned = serializers.IntegerField(min_value=0)
     som_saved = serializers.DecimalField(max_digits=14, decimal_places=2)
     active_cards = serializers.IntegerField(min_value=0)
+    # Consecutive ISO-weeks ending now with ≥1 visit. Source: spec §B extension.
+    visit_streak_weeks = serializers.IntegerField(min_value=0)
 
 
 class LoyaltyTransactionSerializer(serializers.ModelSerializer):

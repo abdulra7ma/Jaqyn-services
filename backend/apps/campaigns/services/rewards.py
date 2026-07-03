@@ -123,6 +123,18 @@ class CampaignRewardService:
             campaign_id=str(campaign.id),
             voucher_id=str(voucher.id),
         )
+        # Enqueue patch evaluation for the card_completed event. Must run outside
+        # the caller's atomic block via on_commit. Source: spec §A "loyalty/campaign
+        # voucher issued → card_completed"; backend.md Celery rule.
+        customer_id_str = str(customer.id)
+        business_category = campaign.business.category if campaign.business else ""
+        from django.db import transaction as _tx
+
+        _tx.on_commit(
+            lambda: _enqueue_card_completed_patch(
+                customer_id_str, str(campaign.business_id), business_category
+            )
+        )
         return voucher
 
     @classmethod
@@ -419,6 +431,12 @@ class CampaignRewardService:
             staff_id=str(staff.id),
             voucher_id=str(voucher.id),
         )
+        # Enqueue patch evaluation for the reward_redeemed event after the
+        # redemption transaction commits. Source: spec §A hook; backend.md rule.
+        _enqueue_patch_evaluation_for_redeem(
+            str(voucher.customer_id),
+            {"business_id": str(voucher.business_id)},
+        )
         return voucher
 
     # Voucher statuses surfaced as the customer wallet "active" group. Source:
@@ -647,3 +665,34 @@ def _schedule_reward_notification(customer_id: str, voucher_id: str) -> None:
     from apps.campaigns.tasks import notify_reward_unlocked
 
     notify_reward_unlocked.delay(customer_id, voucher_id)
+
+
+def _enqueue_card_completed_patch(
+    customer_id: str, business_id: str, category: str
+) -> None:
+    """Enqueue evaluate_patches for card_completed (campaign voucher issued).
+
+    Called only from on_commit. Source: spec §A hooks; backend.md Celery rule.
+    """
+    from apps.patches.tasks import evaluate_patches
+
+    evaluate_patches.delay(
+        customer_id,
+        "card_completed",
+        {"business_id": business_id, "category": category},
+    )
+
+
+def _enqueue_patch_evaluation_for_redeem(customer_id: str, meta: dict) -> None:
+    """Enqueue evaluate_patches for the reward_redeemed event (on_commit callback).
+
+    Called only outside the atomic block to honour the Celery-with-Postgres rule.
+    Source: spec §A "voucher redeemed → reward_redeemed"; backend.md Celery rule.
+    """
+    from django.db import transaction
+
+    from apps.patches.tasks import evaluate_patches
+
+    transaction.on_commit(
+        lambda: evaluate_patches.delay(customer_id, "reward_redeemed", meta)
+    )

@@ -19,6 +19,7 @@ import { QrSheetProvider } from "./QrSheet";
 export function CustomerShell({
   title,
   back,
+  backFn,
   showNav = true,
   hideChromeTitle = false,
   bleed = false,
@@ -26,6 +27,13 @@ export function CustomerShell({
 }: {
   title: string;
   back?: string;
+  /**
+   * History-aware back affordance. When set, the back arrow is a button that runs
+   * this handler instead of navigating to a fixed `back` href — use it when the
+   * previous screen isn't a fixed parent (e.g. a group session reachable from the
+   * tab, a banner, or a deep link). Takes precedence over `back`.
+   */
+  backFn?: () => void;
   showNav?: boolean;
   /** When the page renders its own hero title, suppress the chrome title to avoid duplication. */
   hideChromeTitle?: boolean;
@@ -44,8 +52,10 @@ export function CustomerShell({
   // pages). `showNav` only governs the MOBILE bottom nav — the mobile back-arrow pattern.
   const sidebar = ready && isAuthenticated;
   const mobileNav = showNav && sidebar;
+  // A back affordance is present when either a fixed href or a history handler is set.
+  const hasBack = !!back || !!backFn;
   // Desktop header is rendered when there's something to show: a title or a back affordance.
-  const showDesktopHeader = sidebar && (!hideChromeTitle || !!back);
+  const showDesktopHeader = sidebar && (!hideChromeTitle || hasBack);
   // Guests get no sidebar/bottom-nav, so the top header doubles as their nav bar: brand
   // logo (→ home) on the left, sign-in / sign-up on the right. Return to the current page
   // after auth.
@@ -62,14 +72,25 @@ export function CustomerShell({
         {/* header — mobile (and any non-authed page). For guests it's the top nav bar. */}
         <header
           className={`sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-3 ${
-            (bleed && sidebar) || (sidebar && hideChromeTitle && !back) ? "hidden" : ""
+            (bleed && sidebar) || (sidebar && hideChromeTitle && !hasBack) ? "hidden" : ""
           } ${sidebar ? "bg-cream lg:hidden" : "border-b border-line bg-cream/95 backdrop-blur"}`}
         >
           <div className="flex min-w-0 items-center gap-2">
-            {back && (
-              <Link href={back} aria-label="back" className="text-subtle hover:text-brand">
+            {backFn ? (
+              <button
+                type="button"
+                onClick={backFn}
+                aria-label="back"
+                className="text-subtle hover:text-brand"
+              >
                 ←
-              </Link>
+              </button>
+            ) : (
+              back && (
+                <Link href={back} aria-label="back" className="text-subtle hover:text-brand">
+                  ←
+                </Link>
+              )
             )}
             {guest ? (
               <Link href="/" aria-label="Jaqyn — home" className="flex items-center gap-2">
@@ -103,14 +124,25 @@ export function CustomerShell({
         {/* header — desktop */}
         {showDesktopHeader && (
           <header className="hidden items-center gap-3 border-b border-line bg-cream px-8 py-5 lg:flex">
-            {back && (
-              <Link
-                href={back}
+            {backFn ? (
+              <button
+                type="button"
+                onClick={backFn}
                 aria-label="back"
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-card text-subtle transition hover:border-brand hover:text-brand"
               >
                 ←
-              </Link>
+              </button>
+            ) : (
+              back && (
+                <Link
+                  href={back}
+                  aria-label="back"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-card text-subtle transition hover:border-brand hover:text-brand"
+                >
+                  ←
+                </Link>
+              )
             )}
             {!hideChromeTitle && <h1 className="font-display text-[22px] font-bold text-ink">{title}</h1>}
           </header>

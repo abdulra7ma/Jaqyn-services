@@ -107,8 +107,81 @@ class LoyaltyEarningService:
             staff=staff,
             metadata={"voucher_id": str(voucher.id)} if voucher else {},
         )
-        # Notification delivery is intentionally deferred until the award commits.
-        transaction.on_commit(lambda: None)
+        # one_away: if target-current == 1 after this award, send a one-away notice.
+        # Idempotent per completion cycle via cycle_key in CampaignNoticeService.
+        # Source: spec §C "one_away ... idempotent per cycle"; backend.md on_commit rule.
+        if voucher is None:  # not yet completed this cycle
+            if program.type == LoyaltyProgram.Type.STAMP:
+                remaining = (program.required_count or 1) - membership.stamps_count
+            elif program.type == LoyaltyProgram.Type.VISIT:
+                remaining = (program.required_count or 1) - membership.visits_count
+            else:
+                remaining = None  # points programs don't have a discrete target here
+            if remaining == 1:
+                _ck = f"loyalty:{program.id}:{membership.cycle}"
+                _c = customer
+                _pn = program.name
+
+                def _do_one_away(ck: str = _ck, pn: str = _pn, c: object = _c) -> None:
+                    _send_one_away(c, ck, pn)
+
+                transaction.on_commit(_do_one_away)
+
+        # Enqueue patch evaluation after the award commits so the Celery worker
+        # never picks up an id before the outer transaction commits.
+        # Source: backend.md Celery rule; spec §A "loyalty stamp/visit/points
+        # recorded → events stamp_scanned / spend_recorded".
+        customer_id = str(customer.id)
+        business_id = str(program.business_id)
+        category = program.business.category
+        if stamps_delta:
+            transaction.on_commit(
+                lambda: _enqueue_patch_evaluation(
+                    customer_id,
+                    "stamp_scanned",
+                    {"business_id": business_id, "category": category},
+                )
+            )
+        if bill_amount and bill_amount > 0:
+            transaction.on_commit(
+                lambda: _enqueue_patch_evaluation(
+                    customer_id,
+                    "spend_recorded",
+                    {"bill_amount": str(bill_amount), "business_id": business_id},
+                )
+            )
+        if voucher is not None:
+            transaction.on_commit(
+                lambda: _enqueue_patch_evaluation(
+                    customer_id,
+                    "card_completed",
+                    {"business_id": business_id, "category": category},
+                )
+            )
         return LoyaltyEarnResult(
             membership=membership, voucher=voucher, points_awarded=points_awarded
         )
+
+
+def _send_one_away(customer: object, cycle_key: str, program_name: str) -> None:
+    """Send a one-away notice (on_commit callback). Source: spec §C; backend.md rule."""
+    from apps.notifications.services import CampaignNoticeService
+
+    CampaignNoticeService.send_one_away(
+        customer,
+        target_url=f"/loyalty/programs/{cycle_key.split(':')[1]}",
+        program_name=program_name,
+        cycle_key=cycle_key,
+    )
+
+
+def _enqueue_patch_evaluation(user_id: str, event: str, meta: dict) -> None:
+    """Enqueue the evaluate_patches Celery task (on_commit callback).
+
+    Called only from transaction.on_commit so the worker cannot pick up the id
+    before the outer award transaction commits. Lazy import avoids a circular
+    import at module load time. Source: backend.md Celery rule; spec §A hooks.
+    """
+    from apps.patches.tasks import evaluate_patches
+
+    evaluate_patches.delay(user_id, event, meta)

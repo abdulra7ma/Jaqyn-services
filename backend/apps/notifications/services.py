@@ -28,6 +28,12 @@ CAMPAIGN_EVENTS = {
     "campaign_reward_unlocked": "sms",
     "campaign_voucher_expiring": "sms",
     "campaign_ending": "sms",
+    # one_away: customer is one action from a reward (loyalty or campaign).
+    # Source: spec §C notification triggers.
+    "campaign_one_away": "sms",
+    # group_seat_filled: a member joined the customer's group session.
+    # Source: spec §C notification triggers.
+    "campaign_group_seat_filled": "sms",
 }
 
 
@@ -174,3 +180,84 @@ class CampaignNoticeService:
             id__in=notice_ids,
             seen_at__isnull=True,
         ).update(seen_at=timezone.now())
+
+    @staticmethod
+    def send_one_away(
+        customer: User,
+        target_url: str,
+        program_name: str,
+        cycle_key: str,
+    ) -> None:
+        """Fire a one-away notice if not already fired for this program/cycle.
+
+        Idempotent per completion cycle: the unique ``cycle_key`` (e.g.
+        ``"loyalty:{program_id}:{cycle}"`` or ``"campaign:{campaign_id}:{cycle}"``)
+        prevents repeat notices for the same cycle. A new cycle resets the key so
+        the customer gets notified again next time they are one-away.
+
+        Creates a CampaignNotice of kind ONE_AWAY (campaign=None) plus sends an
+        SMS via the Notifier, both only when not already issued for this cycle.
+        Source: spec §C "one_away ... idempotent per cycle (flag in metadata or
+        last_progress_at guard)".
+        Copy ≤ 90 chars, ru/en/ky: English copy below is the canonical fallback;
+        i18n is the frontend's concern.
+        """
+        # Use the cycle_key as a deduplicate field in the notice target_url.
+        # One notice per (recipient, ONE_AWAY, cycle_key) — target_url encodes it.
+        already_sent = CampaignNotice.objects.filter(
+            recipient=customer,
+            kind=CampaignNotice.Kind.ONE_AWAY,
+            target_url=cycle_key,
+        ).exists()
+        if already_sent:
+            return
+        CampaignNotice.objects.create(
+            recipient=customer,
+            campaign=None,
+            kind=CampaignNotice.Kind.ONE_AWAY,
+            target_url=cycle_key,
+        )
+        # SMS copy ≤ 90 chars per spec §C. English canonical fallback.
+        msg = f"Just 1 more step to earn your {program_name} reward!"[:90]
+        notifier.notify_campaign_event(
+            customer,
+            "campaign_one_away",
+            {"target_url": target_url, "message": msg},
+        )
+
+    @staticmethod
+    def send_group_seat_filled(
+        group_id: str,
+        joiner_name: str,
+        seats_left: int,
+        leader: User,
+        members: list,
+    ) -> None:
+        """Notify leader and existing members when a new member joins the group.
+
+        Fires an SMS (via notify_campaign_event) and creates a CampaignNotice of
+        kind GROUP_SEAT_FILLED for the leader and each member. Not idempotent
+        across members — called once per join event with the current seat count.
+        Source: spec §C "group_seat_filled: in join_group_session → notify leader
+        + existing members '{name} joined — {n} seat(s) left'".
+        Copy ≤ 90 chars.
+        """
+        msg = f"{joiner_name} joined — {seats_left} seat(s) left!"[:90]
+        recipients = [leader] + list(members)
+        for recipient in recipients:
+            CampaignNotice.objects.create(
+                recipient=recipient,
+                campaign=None,
+                kind=CampaignNotice.Kind.GROUP_SEAT_FILLED,
+                target_url=f"/campaigns/groups/{group_id}",
+            )
+            notifier.notify_campaign_event(
+                recipient,
+                "campaign_group_seat_filled",
+                {
+                    "group_id": group_id,
+                    "joiner_name": joiner_name,
+                    "seats_left": seats_left,
+                    "message": msg,
+                },
+            )

@@ -197,4 +197,27 @@ class LoyaltyRedemptionService:
         voucher.redeemed_at = timezone.now()
         voucher.redeemed_by_staff = staff
         voucher.save(update_fields=["status", "redeemed_at", "redeemed_by_staff"])
+        # Enqueue patch evaluation for the reward_redeemed event after the
+        # redemption transaction commits. Source: spec §A "voucher redeemed →
+        # reward_redeemed"; backend.md Celery rule (on_commit).
+        customer_id = str(voucher.customer_id)
+        business_id = str(voucher.business_id)
+        transaction.on_commit(
+            lambda: _enqueue_patch_evaluation_redeemed(customer_id, business_id)
+        )
         return voucher
+
+
+def _enqueue_patch_evaluation_redeemed(customer_id: str, business_id: str) -> None:
+    """Enqueue evaluate_patches for the reward_redeemed event (on_commit callback).
+
+    Called only from transaction.on_commit. Source: spec §A "voucher redeemed →
+    reward_redeemed"; backend.md Celery rule.
+    """
+    from apps.patches.tasks import evaluate_patches
+
+    evaluate_patches.delay(
+        customer_id,
+        "reward_redeemed",
+        {"business_id": business_id},
+    )

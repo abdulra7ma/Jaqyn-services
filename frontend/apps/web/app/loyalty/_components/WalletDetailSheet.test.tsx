@@ -14,6 +14,8 @@ function card(over: Partial<LoyaltyCardView> = {}): LoyaltyCardView {
     business_category: "bakery",
     business_area: "Osh Bazaar",
     business_hours: { mon: ["07:00", "21:00"] },
+    business_lat: null,
+    business_lng: null,
     type: "stamp",
     name: "Stamps",
     reward_summary: "Buy 6, get 1 free",

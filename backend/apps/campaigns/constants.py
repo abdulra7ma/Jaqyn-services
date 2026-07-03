@@ -48,13 +48,33 @@ STAFF_ABUSE_MAX_CONFIRMS: int = 30
 STAFF_ABUSE_WINDOW_MINUTES: int = 60
 
 # Lead time, in hours, before a voucher's `expires_at` at which the customer gets
-# the "expiring soon" nudge. 24h gives a full day to come in and redeem before a
-# (default 7-day) campaign voucher lapses. Source: plan §1.4 (notify expiring
-# soon) — window chosen so the warning is actionable but not premature.
-VOUCHER_EXPIRY_WARNING_HOURS: int = 24
+# the "expiring soon" nudge. 48h gives a weekend-spanning window so a customer
+# who earns a reward on Thursday still gets nudged before a Sunday expiry.
+# Source: spec §B "VOUCHER_EXPIRY_WARNING_HOURS: 24 → 48 (design spec,
+# survives-weekend nudge window)".
+VOUCHER_EXPIRY_WARNING_HOURS: int = 48
 
 # Lead time, in hours, before a campaign's `end_at` at which not-yet-finished
 # participants get the "campaign ending" nudge. 24h mirrors the voucher window so
 # a customer mid-challenge has a day's notice to make a final qualifying visit.
 # Source: plan §1.4 (notify campaign ending).
 CAMPAIGN_ENDING_WARNING_HOURS: int = 24
+
+# -- Feed sections (spec §B) --------------------------------------------------
+
+# Days window for counting "recently joined" participants. Used to rank featured
+# and trending sections: featured = top 1–3 by participants joined in this window;
+# trending = next by the same metric. 7 days covers the past full week of momentum.
+# Source: spec §B "featured/trending ranked by participants joined in last 7 days".
+FEED_TRENDING_WINDOW_DAYS: int = 7
+
+# Days window for the "fresh" section: newly published campaigns. 14 days gives a
+# fortnight of discovery freshness; new businesses launching campaigns appear here.
+# Source: spec §B "fresh = published within 14 days".
+FEED_FRESH_WINDOW_DAYS: int = 14
+
+# Maximum campaigns per section. 3 rows keeps the featured/trending strip compact.
+# Source: spec §B "top 1–3" for featured.
+FEED_SECTION_MAX_FEATURED: int = 3
+FEED_SECTION_MAX_TRENDING: int = 3
+FEED_SECTION_MAX_FRESH: int = 10

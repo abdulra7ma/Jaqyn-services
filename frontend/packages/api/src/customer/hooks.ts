@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customerApi } from "./api";
 import type {
   CampaignFeedFilter,
+  CampaignFeedParams,
   CampaignListParams,
   NearbyParams,
   ProfilePatch,
@@ -19,9 +20,13 @@ export const qk = {
   business: (id: string) => ["business", id] as const,
   qr: (token: string) => ["qr", token] as const,
   campaigns: (params?: CampaignListParams) => ["campaigns", params ?? {}] as const,
-  // The {followed, discover} feed, keyed by the discover filter so each filter
-  // caches independently (campaigns-restructure design §6).
-  campaignFeed: (filter?: CampaignFeedFilter) => ["campaign-feed", filter ?? "all"] as const,
+  // The {followed, discover, sections} feed. Keyed by filter + search params so
+  // each combination caches independently (campaigns-restructure §6 + redesign B).
+  campaignFeed: (filter?: CampaignFeedFilter, params?: CampaignFeedParams) =>
+    ["campaign-feed", filter ?? "all", params ?? {}] as const,
+  // Patches summary (campaigns redesign §A). Single key — no per-user variance
+  // beyond auth (auth is enforced by the API client).
+  patches: ["patches"] as const,
   campaignNotices: ["campaign-notices"] as const,
   campaign: (id: string) => ["campaigns", id] as const,
   campaignWallet: ["campaign-wallet"] as const,
@@ -79,15 +84,17 @@ export const useCampaigns = (
     refetchInterval: opts?.refetchInterval,
   });
 
-// The unified customer campaigns feed (campaigns-restructure design §6): the
-// "From places you go" (followed) row + the filterable "Discover more" list.
+// The unified customer campaigns feed (campaigns-restructure design §6 + redesign B).
+// `filter` drives the followed/discover split; `params` (q, category) narrow
+// discover results + sections for the discover page.
 export const useCampaignFeed = (
   filter?: CampaignFeedFilter,
+  params?: CampaignFeedParams,
   opts?: { refetchInterval?: number },
 ) =>
   useQuery({
-    queryKey: qk.campaignFeed(filter),
-    queryFn: () => customerApi.campaignFeed(filter),
+    queryKey: qk.campaignFeed(filter, params),
+    queryFn: () => customerApi.campaignFeed(filter, params),
     refetchInterval: opts?.refetchInterval,
   });
 
@@ -163,6 +170,37 @@ export const useMyGroups = (opts?: { refetchInterval?: number }) =>
     queryFn: () => customerApi.listMyGroups(),
     refetchInterval: opts?.refetchInterval,
   });
+
+// ---- patches (campaigns redesign §A) ----
+
+// Patches summary: earned count, next-patch track, unseen (earn-moment), all rows.
+// Refetched whenever the campaigns tab mounts so earn moments show promptly.
+export const usePatches = (opts?: { refetchInterval?: number }) =>
+  useQuery({
+    queryKey: qk.patches,
+    queryFn: () => customerApi.patches(),
+    refetchInterval: opts?.refetchInterval,
+  });
+
+// Mark earn-moment shown for the given patch slugs. Clears unseen_earned on the
+// server; invalidate patches to reflect the cleared list.
+export const useMarkPatchesSeen = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slugs: string[]) => customerApi.markPatchesSeen(slugs),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.patches }),
+  });
+};
+
+// Dismiss the NEW pill on the patches row by recording the first board visit.
+// Invalidate patches so board_seen flips true client-side without a reload.
+export const useMarkPatchBoardSeen = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => customerApi.markPatchBoardSeen(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.patches }),
+  });
+};
 
 // ---- campaign mutations ----
 export const useJoinCampaign = () => {

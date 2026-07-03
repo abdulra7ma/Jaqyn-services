@@ -27,6 +27,8 @@ function campaign(over: Partial<Campaign> = {}): Campaign {
   return {
     id: "camp-1",
     business: { id: "b", name: "Manas Coffee", category: "cafe", logo_url: null, area: "Center", address: "" },
+    business_lat: null,
+    business_lng: null,
     glyph: "",
     name: "Coffee Crew",
     description: "Bring friends.",

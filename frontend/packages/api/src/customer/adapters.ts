@@ -11,6 +11,7 @@ import type {
   Campaign,
   CampaignCatalogItem,
   CampaignFeed,
+  CampaignFeedSections,
   CampaignProgress,
   CampaignVoucher,
   CampaignWallet,
@@ -18,6 +19,10 @@ import type {
   GroupSessionMember,
   ItemSelection,
   MyGroup,
+  PatchesSummary,
+  PatchNext,
+  PatchOut,
+  PatchShape,
   RewardProgram,
 } from "./types";
 
@@ -188,6 +193,15 @@ function deriveActiveHours(
   return `${s} – ${e}`;
 }
 
+// Coerces a nullable decimal string (as emitted by the backend for lat/lng) to
+// a number or null. `Number(null)` and `Number("")` both return 0, which would
+// produce a garbage distance instead of omitting it, so we guard explicitly.
+function toLatLng(raw: unknown): number | null {
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function adaptCampaign(raw: Raw): Campaign {
   const biz = typeof raw.business === "object" ? raw.business : null;
   const rule = raw.rule ?? {};
@@ -202,6 +216,11 @@ export function adaptCampaign(raw: Raw): Campaign {
       area: raw.business_area ?? biz?.area ?? "",
       address: raw.business_address ?? biz?.address ?? "",
     },
+    // Backend feed serializer emits business_lat / business_lng as nullable
+    // decimal strings; coerce to number|null here so consumers never see raw
+    // strings or spurious 0 from Number(null).
+    business_lat: toLatLng(raw.business_lat ?? biz?.latitude),
+    business_lng: toLatLng(raw.business_lng ?? biz?.longitude),
     // No backend `glyph` field — fall through to empty string so GlyphTile
     // degrades to the logo/initial fallback without reading undefined.
     glyph: "",
@@ -267,12 +286,72 @@ export function adaptCampaign(raw: Raw): Campaign {
   };
 }
 
-// Maps the {followed, discover} feed payload (campaigns-restructure design §6) into
-// two adapted Campaign lists. Tolerates missing arrays so an empty feed is safe.
+// Maps the {followed, discover, sections} feed payload into adapted Campaign lists.
+// `sections` (featured/trending/fresh) added in campaigns redesign B; tolerates
+// absence so old endpoints degrade to empty sections without crashing.
 export function adaptCampaignFeed(raw: Raw): CampaignFeed {
+  const sections = raw.sections as Raw | null | undefined;
+  const adaptedSections: CampaignFeedSections = {
+    featured: ((sections?.featured ?? []) as Raw[]).map(adaptCampaign),
+    trending: ((sections?.trending ?? []) as Raw[]).map(adaptCampaign),
+    fresh: ((sections?.fresh ?? []) as Raw[]).map(adaptCampaign),
+  };
   return {
-    followed: (raw.followed ?? []).map(adaptCampaign),
-    discover: (raw.discover ?? []).map(adaptCampaign),
+    followed: (raw.followed ?? [] as Raw[]).map(adaptCampaign),
+    discover: (raw.discover ?? [] as Raw[]).map(adaptCampaign),
+    sections: adaptedSections,
+  };
+}
+
+// ---- Patches -----------------------------------------------------------------
+
+function normalizePatchShape(raw: unknown): PatchShape {
+  if (raw === "shield") return "shield";
+  if (raw === "hexagon") return "hexagon";
+  if (raw === "banner") return "banner";
+  return "circle";
+}
+
+export function adaptPatchOut(raw: Raw): PatchOut {
+  return {
+    slug: String(raw.slug ?? ""),
+    name: String(raw.name ?? ""),
+    shape: normalizePatchShape(raw.shape),
+    icon: String(raw.icon ?? ""),
+    color: String(raw.color ?? "#C25E3C"),
+    light: String(raw.light ?? "#FBEFD9"),
+    deep: String(raw.deep ?? "#A2492A"),
+    how: String(raw.how ?? ""),
+    earned: Boolean(raw.earned),
+    earned_at: raw.earned_at != null ? String(raw.earned_at) : null,
+    progress_current: typeof raw.progress_current === "number" ? raw.progress_current : Number(raw.progress_current ?? 0),
+    progress_target: typeof raw.progress_target === "number" ? raw.progress_target : Number(raw.progress_target ?? 1),
+  };
+}
+
+export function adaptPatchesSummary(raw: Raw): PatchesSummary {
+  const next = raw.next as Raw | null | undefined;
+  const adaptedNext: PatchNext = next
+    ? {
+        slug: String(next.slug ?? ""),
+        name: String(next.name ?? ""),
+        shape: normalizePatchShape(next.shape),
+        icon: String(next.icon ?? ""),
+        color: String(next.color ?? "#C25E3C"),
+        light: String(next.light ?? "#FBEFD9"),
+        deep: String(next.deep ?? "#A2492A"),
+        current: typeof next.current === "number" ? next.current : Number(next.current ?? 0),
+        target: typeof next.target === "number" ? next.target : Number(next.target ?? 1),
+        remaining_label: String(next.remaining_label ?? ""),
+      }
+    : null;
+  return {
+    earned_count: typeof raw.earned_count === "number" ? raw.earned_count : Number(raw.earned_count ?? 0),
+    total: typeof raw.total === "number" ? raw.total : Number(raw.total ?? 0),
+    board_seen: Boolean(raw.board_seen),
+    next: adaptedNext,
+    unseen_earned: ((raw.unseen_earned ?? []) as Raw[]).map(adaptPatchOut),
+    patches: ((raw.patches ?? []) as Raw[]).map(adaptPatchOut),
   };
 }
 
