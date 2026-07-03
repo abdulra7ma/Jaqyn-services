@@ -5,46 +5,121 @@
       "name": "web",
       "cwd": "frontend",
       "runtimeExecutable": "corepack",
-      "runtimeArgs": ["pnpm", "--filter", "web", "dev"],
+      "runtimeArgs": [
+        "pnpm",
+        "--filter",
+        "web",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": false,
-      "env": { "API_PROXY_TARGET": "http://127.0.0.1:8000", "NEXT_PUBLIC_DEMO_MODE": "1" }
+      "env": {
+        "API_PROXY_TARGET": "http://127.0.0.1:8000",
+        "NEXT_PUBLIC_DEMO_MODE": "1"
+      }
     },
     {
       "name": "web-preview",
       "cwd": "frontend",
       "runtimeExecutable": "corepack",
-      "runtimeArgs": ["pnpm", "--filter", "web", "exec", "next", "dev", "-p", "3100"],
+      "runtimeArgs": [
+        "pnpm",
+        "--filter",
+        "web",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3100"
+      ],
       "port": 3100,
       "autoPort": false,
-      "env": { "API_PROXY_TARGET": "http://127.0.0.1:8000" }
+      "env": {
+        "API_PROXY_TARGET": "http://127.0.0.1:8000"
+      }
     },
     {
       "name": "web-campaigns-preview",
       "cwd": "frontend",
       "runtimeExecutable": "corepack",
-      "runtimeArgs": ["pnpm", "--filter", "web", "exec", "next", "dev", "-p", "3200"],
+      "runtimeArgs": [
+        "pnpm",
+        "--filter",
+        "web",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3200"
+      ],
       "port": 3200,
       "autoPort": false,
-      "env": { "NEXT_PUBLIC_USE_MOCKS": "true" }
+      "env": {
+        "NEXT_PUBLIC_USE_MOCKS": "true"
+      }
     },
     {
       "name": "web-settings-preview",
       "cwd": "frontend",
       "runtimeExecutable": "corepack",
-      "runtimeArgs": ["pnpm", "--filter", "web", "exec", "next", "dev", "-p", "3400"],
+      "runtimeArgs": [
+        "pnpm",
+        "--filter",
+        "web",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3400"
+      ],
       "port": 3400,
       "autoPort": true,
-      "env": { "API_PROXY_TARGET": "http://127.0.0.1:8000", "NEXT_DIST_DIR": ".next-settings" }
+      "env": {
+        "API_PROXY_TARGET": "http://127.0.0.1:8000",
+        "NEXT_DIST_DIR": ".next-settings"
+      }
     },
     {
       "name": "landing",
       "cwd": "landing",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5173", "--strictPort"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
       "port": 5173,
       "autoPort": false,
-      "env": { "VITE_API_URL": "http://localhost:8000" }
+      "env": {
+        "VITE_API_URL": "http://localhost:8000"
+      }
+    },
+    {
+      "name": "loyalty-hook-backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/abdulrahmandawoud/handy/personal/Jaqyn-worktrees/loyalty-welcome-hook/backend && exec python manage.py runserver 127.0.0.1:8001"
+      ],
+      "port": 8001,
+      "autoPort": false
+    },
+    {
+      "name": "loyalty-hook-web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/abdulrahmandawoud/handy/personal/Jaqyn-worktrees/loyalty-welcome-hook/frontend && API_PROXY_TARGET=http://127.0.0.1:8001 NEXT_DIST_DIR=.next-loyalty exec corepack pnpm --filter web exec next dev -p 3300"
+      ],
+      "port": 3300,
+      "autoPort": false,
+      "env": {
+        "API_PROXY_TARGET": "http://127.0.0.1:8001",
+        "NEXT_DIST_DIR": ".next-loyalty"
+      }
     }
   ]
 }

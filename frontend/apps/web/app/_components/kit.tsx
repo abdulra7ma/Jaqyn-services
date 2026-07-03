@@ -30,11 +30,13 @@ export function BackButton({ href }: { href: string }) {
 export function UserAvatar({
   user,
   size = 56,
+  shape = "circle",
 }: {
   user: Pick<User, "avatar" | "avatar_emoji" | "name" | "phone">;
   size?: number;
+  shape?: "circle" | "rounded";
 }) {
-  const radius = Math.round(size * 0.5); // fully round
+  const radius = Math.round(size * (shape === "circle" ? 0.5 : 0.3));
   if (user.avatar) {
     return (
       // eslint-disable-next-line @next/next/no-img-element

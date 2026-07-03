@@ -1,10 +1,10 @@
-import type { LoyaltyCardView } from "@jaqyn/api";
+import type { CampaignVoucher, LoyaltyCardView } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Sheet, cn } from "@jaqyn/ui";
-import { GlyphTile } from "../../_components/campaigns";
+import { GlyphTile, VoucherItemSheet, VoucherQrBlock } from "../../_components/campaigns";
 import { ScanIcon } from "../../_components/icons";
 import { useQrSheet } from "../../_components/QrSheet";
-import type { WalletShopCard } from "../_lib/wallet";
+import type { WalletReward, WalletShopCard } from "../_lib/wallet";
 import { ACCENT_BG, isCashback } from "../_lib/wallet";
 
 type Translate = ReturnType<typeof useT>;
@@ -119,9 +119,19 @@ function InfoRow({ label, value }: { label: string; value: string }) {
  */
 export function WalletDetailSheet({
   card,
+  activeReward,
+  pendingRewardId,
+  onChooseReward,
+  onRewardChange,
+  onCloseReward,
   onClose,
 }: {
   card: WalletShopCard | null;
+  activeReward: WalletReward | null;
+  pendingRewardId: string | null;
+  onChooseReward: (reward: WalletReward) => void;
+  onRewardChange: (reward: WalletReward) => void;
+  onCloseReward: () => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -143,12 +153,12 @@ export function WalletDetailSheet({
     <Sheet
       open={card != null}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && card != null) onClose();
       }}
       ariaLabel={card?.businessName ?? t("nav.loyalty")}
       surface="cream"
     >
-      {card && head && (
+      {card && (
         <div className="flex flex-col gap-4 pb-2">
           {/* header */}
           <div className="flex items-center gap-3">
@@ -168,48 +178,136 @@ export function WalletDetailSheet({
               <div className="min-w-0">
                 <p className="truncate font-display text-[16px] font-bold">{card.businessName}</p>
                 <p className="text-[12.5px] font-semibold text-white/85">
-                  {t("cmp.wallet.detail.loyalty")} · {countLabel}
+                  {count > 0
+                    ? `${t("cmp.wallet.detail.loyalty")} · ${countLabel}`
+                    : t("cmp.wallet.rewardsReady").replace(
+                        "{count}",
+                        String(card.rewards.length),
+                      )}
                 </p>
               </div>
             </div>
-            <div className="divide-y divide-line px-4">
-              {card.programs.map((p) => (
-                <ProgramRow key={p.program_id} program={p} />
-              ))}
-            </div>
+            {card.programs.length > 0 && (
+              <div className="divide-y divide-line px-4">
+                {card.programs.map((p) => (
+                  <ProgramRow key={p.program_id} program={p} />
+                ))}
+              </div>
+            )}
           </div>
+
+          {card.rewards.length > 0 && (
+            <section aria-labelledby="wallet-ready-rewards">
+              <h3 id="wallet-ready-rewards" className="font-display text-[17px] font-bold text-ink">
+                {t("cmp.wallet.readyRewards")}
+              </h3>
+              <p className="mt-1 text-[13px] text-subtle">{t("cmp.wallet.chooseRewardHint")}</p>
+              <div className="mt-3 flex flex-col gap-2">
+                {card.rewards.map((reward) => (
+                  <button
+                    key={`${reward.source}-${reward.id}`}
+                    type="button"
+                    onClick={() => onChooseReward(reward)}
+                    disabled={pendingRewardId === reward.id}
+                    className="flex min-h-16 items-center gap-3 rounded-xl border border-line bg-card p-3 text-left shadow-card transition active:scale-[.99] disabled:opacity-60"
+                  >
+                    <GlyphTile glyph={reward.glyph} size={40} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold text-ink">{reward.title}</span>
+                      <span className="mt-0.5 block truncate text-xs text-subtle">
+                        {reward.cashbackAmount
+                          ? `${reward.cashbackAmount} ${t("cmp.wallet.som")} · ${reward.subtitle}`
+                          : reward.subtitle}
+                      </span>
+                    </span>
+                    <span className="flex items-center gap-1 text-xs font-bold text-brand">
+                      <ScanIcon className="h-4 w-4" />
+                      {t(pendingRewardId === reward.id ? "common.loading" : "cmp.wallet.useReward")}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* info card */}
-          <div className="divide-y divide-line rounded-2xl border border-line bg-card px-4 shadow-card">
-            <InfoRow
-              label={t("cmp.wallet.detail.expires")}
-              value={
-                cash
-                  ? t("cmp.wallet.detail.noExpiry")
-                  : t("cmp.wallet.detail.expiryDays").replace(
-                      "{count}",
-                      String(head.reward_expiry_days),
-                    )
-              }
-            />
-            <InfoRow label={t("cmp.wallet.detail.location")} value={area || "—"} />
-            <InfoRow label={t("cmp.wallet.detail.hours")} value={hours ?? "—"} />
-          </div>
+          {head && (
+            <div className="divide-y divide-line rounded-2xl border border-line bg-card px-4 shadow-card">
+              <InfoRow
+                label={t("cmp.wallet.detail.expires")}
+                value={
+                  cash
+                    ? t("cmp.wallet.detail.noExpiry")
+                    : t("cmp.wallet.detail.expiryDays").replace(
+                        "{count}",
+                        String(head.reward_expiry_days),
+                      )
+                }
+              />
+              <InfoRow label={t("cmp.wallet.detail.location")} value={area || "—"} />
+              <InfoRow label={t("cmp.wallet.detail.hours")} value={hours ?? "—"} />
+            </div>
+          )}
 
-          {/* action: show the customer's personal QR */}
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              openQr();
-            }}
-            className="mt-1 flex items-center justify-center gap-2 rounded-2xl bg-brand px-6 py-3.5 font-sans text-[15px] font-bold text-brand-fg shadow-glow transition active:scale-[.98]"
-          >
-            <ScanIcon className="h-5 w-5" />
-            {t("cmp.wallet.showMyQr")}
-          </button>
+          {head && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                openQr();
+              }}
+              className="mt-1 flex items-center justify-center gap-2 rounded-xl border border-line bg-card px-6 py-3.5 font-sans text-[15px] font-bold text-ink shadow-card transition active:scale-[.98]"
+            >
+              <ScanIcon className="h-5 w-5" />
+              {t("cmp.wallet.earnMore")}
+            </button>
+          )}
         </div>
       )}
+
+      <Sheet
+        open={activeReward != null}
+        onOpenChange={(open) => {
+          if (!open) onCloseReward();
+        }}
+        ariaLabel={activeReward?.title ?? t("cmp.wallet.readyRewards")}
+        variant="modal"
+        nested
+      >
+        {activeReward &&
+        activeReward.source === "campaign" &&
+        activeReward.itemSelection === "customer" &&
+        !activeReward.catalogItemName &&
+        activeReward.campaignId ? (
+          <VoucherItemSheet
+            campaignId={activeReward.campaignId}
+            voucherId={activeReward.id}
+            onSelected={(voucher: CampaignVoucher) =>
+              onRewardChange({
+                ...activeReward,
+                qrToken: voucher.qr_token,
+                code: voucher.code,
+                catalogItemName: voucher.catalog_item?.name ?? null,
+              })
+            }
+          />
+        ) : activeReward?.qrToken && activeReward.code ? (
+          <div className="pb-3 pt-1">
+            <VoucherQrBlock
+              glyph={activeReward.glyph}
+              rewardTitle={activeReward.title}
+              businessName={activeReward.businessName}
+              qrToken={activeReward.qrToken}
+              code={activeReward.code}
+            />
+            <p className="mx-auto mt-3 max-w-[280px] text-center text-sm text-subtle">
+              {t("cmp.voucher.showStaff")}
+            </p>
+          </div>
+        ) : activeReward ? (
+          <p className="py-8 text-center text-sm text-subtle">{t("cmp.wallet.qrUnavailable")}</p>
+        ) : null}
+      </Sheet>
     </Sheet>
   );
 }

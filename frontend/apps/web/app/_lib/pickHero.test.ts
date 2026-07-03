@@ -1,6 +1,6 @@
-import type { Campaign, CampaignVoucher, LoyaltyCardView, LoyaltyVoucher } from "@jaqyn/api";
+import type { Business, Campaign, CampaignVoucher, LoyaltyCardView, LoyaltyVoucher } from "@jaqyn/api";
 import { describe, expect, it } from "vitest";
-import { pickHero } from "./pickHero";
+import { pickHero, pickHomeHeroes } from "./pickHero";
 
 // --- minimal fixture builders ---
 
@@ -68,6 +68,7 @@ function loyaltyCard(over: Partial<LoyaltyCardView> = {}): LoyaltyCardView {
     visits_count: 0,
     required_count: 6,
     points_balance: 0,
+    min_redeem_points: null,
     points_per_som: null,
     cashback_per_point: null,
     pct_back: null,
@@ -118,6 +119,24 @@ function campaign(over: Partial<Campaign> = {}): Campaign {
 
 const NOW = new Date("2026-07-03T12:00:00Z");
 const empty = { campaignVouchers: [], loyaltyVouchers: [], loyaltyCards: [], followed: [] };
+
+function nearbyBusiness(index: number): Business {
+  return {
+    id: `b${index}`,
+    name: `Cafe ${index}`,
+    category: "cafe",
+    description: null,
+    address: "Bishkek",
+    area: "Center",
+    phone: "",
+    instagram_url: null,
+    logo_url: null,
+    cover_url: null,
+    working_hours: {},
+    distance_km: index / 10,
+    reward: "Free coffee",
+  };
+}
 
 describe("pickHero — priority 1: expiring voucher", () => {
   it("campaign voucher with expiring_soon beats everything", () => {
@@ -215,7 +234,7 @@ describe("pickHero — priority 2: closest to reward", () => {
     expect(result.kind).toBe("progress");
     if (result.kind === "progress") {
       expect(result.remaining).toBe(1);
-      expect(result.href).toBe("/loyalty/p2");
+      expect(result.href).toBe("/loyalty?business=b1");
     }
   });
 
@@ -245,7 +264,7 @@ describe("pickHero — priority 2: closest to reward", () => {
     expect(result.kind).toBe("new-user");
   });
 
-  it("loyalty card wins tie over campaign", () => {
+  it("joined campaign wins a tie over standing loyalty", () => {
     const result = pickHero(
       {
         campaignVouchers: [],
@@ -257,11 +276,11 @@ describe("pickHero — priority 2: closest to reward", () => {
     );
     expect(result.kind).toBe("progress");
     if (result.kind === "progress") {
-      expect(result.source).toBe("loyalty");
+      expect(result.source).toBe("campaign");
     }
   });
 
-  it("campaign is picked when loyalty card has more steps remaining", () => {
+  it("joined campaign is featured before standing loyalty", () => {
     const result = pickHero(
       {
         campaignVouchers: [],
@@ -346,5 +365,75 @@ describe("pickHero — priority 3: new user", () => {
       NOW,
     );
     expect(result.kind).toBe("new-user");
+  });
+});
+
+describe("pickHomeHeroes", () => {
+  it("returns three ranked rewards followed by map discovery", () => {
+    const heroes = pickHomeHeroes(
+      {
+        campaignVouchers: [campaignVoucher({ expiring_soon: true })],
+        loyaltyVouchers: [],
+        loyaltyCards: [
+          loyaltyCard({ program_id: "near", stamps_count: 5, required_count: 6 }),
+          loyaltyCard({ program_id: "far", stamps_count: 2, required_count: 6 }),
+        ],
+        followed: [],
+      },
+      NOW,
+    );
+
+    expect(heroes).toHaveLength(4);
+    expect(heroes.map((hero) => hero.kind)).toEqual(["voucher", "progress", "progress", "map"]);
+    expect(heroes[1]).toMatchObject({ kind: "progress", remaining: 1 });
+  });
+
+  it("places ready cashback after stamp momentum and deep-links to its wallet card", () => {
+    const heroes = pickHomeHeroes(
+      {
+        campaignVouchers: [],
+        loyaltyVouchers: [],
+        loyaltyCards: [
+          loyaltyCard({ business_id: "tea", stamps_count: 5, required_count: 6 }),
+          loyaltyCard({
+            business_id: "cash",
+            type: "points",
+            required_count: null,
+            points_balance: 180,
+            min_redeem_points: 250,
+            cashback_per_point: "1.00",
+            reward_summary: "5% cashback",
+          }),
+        ],
+        followed: [],
+      },
+      NOW,
+    );
+
+    expect(heroes[1]).toMatchObject({
+      kind: "cashback",
+      amount: 180,
+      progressPct: 72,
+      rewardLabel: "5% cashback",
+      ready: false,
+      href: "/loyalty?business=cash",
+    });
+  });
+
+  it("promotes a populated map after the first reward when more than ten places are nearby", () => {
+    const businesses = Array.from({ length: 11 }, (_, index) => nearbyBusiness(index));
+    const heroes = pickHomeHeroes(
+      {
+        campaignVouchers: [],
+        loyaltyVouchers: [],
+        loyaltyCards: [loyaltyCard({ stamps_count: 5, required_count: 6 })],
+        followed: [],
+        nearbyBusinesses: businesses,
+        promoteMap: true,
+      },
+      NOW,
+    );
+
+    expect(heroes[1]).toMatchObject({ kind: "map", businesses });
   });
 });

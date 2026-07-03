@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
-import { FlagIcon, GiftIcon, HomeIcon, PinIcon, ScanIcon, UserIcon } from "./icons";
+import { FlagIcon, HomeIcon, PinIcon, ScanIcon, UserIcon, WalletIcon } from "./icons";
 import { useQrSheet } from "./QrSheet";
 
 export type NavItem = {
@@ -24,7 +24,7 @@ export const CUSTOMER_NAV: NavItem[] = [
   {
     href: "/loyalty",
     key: "nav.loyalty",
-    Icon: GiftIcon,
+    Icon: WalletIcon,
     match: (p) => p.startsWith("/loyalty"),
   },
   {

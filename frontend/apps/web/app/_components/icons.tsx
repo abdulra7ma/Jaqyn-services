@@ -34,6 +34,18 @@ export function GiftIcon(p: Props) {
   );
 }
 
+/** Shared wallet glyph for every entry point into the customer's loyalty wallet. */
+export function WalletIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className} data-icon="wallet">
+      <path d="M5 6.5h12.5A2.5 2.5 0 0 1 20 9v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2Z" />
+      <path d="M5.5 6.5V5.7A1.7 1.7 0 0 1 7.2 4h9.3" />
+      <path d="M15 11h6v5h-6a2.5 2.5 0 0 1 0-5Z" />
+      <circle cx="16.5" cy="13.5" r="0.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function ImageIcon(p: Props) {
   return (
     <svg {...base} className={p.className}>

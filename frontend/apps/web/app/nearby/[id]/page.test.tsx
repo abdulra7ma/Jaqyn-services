@@ -71,6 +71,7 @@ function program(over: Partial<LoyaltyCardView>): LoyaltyCardView {
     visits_count: 0,
     required_count: 0,
     points_balance: 0,
+    min_redeem_points: null,
     points_per_som: null,
     cashback_per_point: null,
     pct_back: null,
@@ -133,7 +134,7 @@ describe("Business page — loyalty wallet card opens the detail sheet", () => {
     expect(screen.getAllByText("1 сом per point").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Free latte").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/cmp\.wallet\.programs/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("cmp.wallet.showMyQr")).toBeInTheDocument();
+    expect(screen.getByText("cmp.wallet.earnMore")).toBeInTheDocument();
   });
 
   it("opens the sheet for a single-program business", () => {

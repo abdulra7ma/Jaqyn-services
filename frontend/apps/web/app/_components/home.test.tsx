@@ -3,13 +3,18 @@
  * Tests call pickHero() directly and render individual components so they don't
  * need to mock the five data hooks.
  */
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import {
+  CollectingList,
+  carouselIndex,
   dedupeBusinesses,
   DiscoverRail,
   ExpiringStrip,
+  ExploreHub,
   HeroCard,
+  HomeHeroCarousel,
+  WalletSummary,
   WalletPeekRail,
 } from "./home";
 
@@ -23,6 +28,14 @@ describe("HeroCard — new-user variant", () => {
     expect(screen.getByText("home.startEarningSub")).toBeInTheDocument();
     const link = screen.getByRole("link");
     expect(link).toHaveAttribute("href", "/scan");
+  });
+});
+
+describe("ExploreHub", () => {
+  it("uses the shared wallet icon for the wallet destination", () => {
+    render(<ExploreHub />);
+    const wallet = screen.getByRole("link", { name: "home.wallet" });
+    expect(wallet.querySelector('[data-icon="wallet"]')).toBeInTheDocument();
   });
 });
 
@@ -64,7 +77,7 @@ describe("HeroCard — voucher variant", () => {
 });
 
 describe("HeroCard — progress variant", () => {
-  it("shows reward title, business, and steps-left copy", () => {
+  it("shows reward title, business, stamp progress, and wallet link", () => {
     render(
       <HeroCard
         hero={{
@@ -76,15 +89,110 @@ describe("HeroCard — progress variant", () => {
           remaining: 2,
           total: 6,
           current: 4,
+          mechanic: "stamp",
           accentClass: "bg-wallet-terracotta",
         }}
       />,
     );
     expect(screen.getByText("Free coffee")).toBeInTheDocument();
-    expect(screen.getByText("Cafe C")).toBeInTheDocument();
-    // stepsLeft key is returned as identity by the mock, then .replace("{count}", "2")
-    expect(screen.getByText("home.stepsLeft".replace("{count}", "2"))).toBeInTheDocument();
-    expect(screen.getByRole("link")).toHaveAttribute("href", "/loyalty/p1");
+    expect(screen.getByLabelText("4 / 6")).toBeInTheDocument();
+    expect(screen.getByText(/home\.openCard/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Free coffee — Cafe C" })).toHaveAttribute(
+      "href",
+      "/loyalty/p1",
+    );
+  });
+});
+
+describe("HeroCard — cashback variant", () => {
+  it("renders the ready balance treatment and wallet deep link", () => {
+    render(
+      <HeroCard
+        hero={{
+          kind: "cashback",
+          source: "loyalty",
+          href: "/loyalty?business=b1",
+          business: "Bakery",
+          businessId: "b1",
+          amount: 180,
+          progressPct: 100,
+          rewardLabel: "5% cashback",
+          ready: true,
+          accentClass: "bg-wallet-amber",
+        }}
+      />,
+    );
+    expect(screen.getByText("180")).toBeInTheDocument();
+    expect(screen.getByText("5% cashback")).toBeInTheDocument();
+    expect(screen.queryByText("home.bonusProgress")).not.toBeInTheDocument();
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/loyalty?business=b1");
+  });
+});
+
+describe("HeroCard — map variant", () => {
+  it("shows real nearby business data and routes to the map", () => {
+    render(
+      <HeroCard
+        hero={{
+          kind: "map",
+          businesses: [
+            {
+              id: "b1",
+              name: "Manas Coffee",
+              category: "cafe",
+              description: null,
+              address: "Bishkek",
+              area: "Center",
+              phone: "",
+              instagram_url: null,
+              logo_url: null,
+              cover_url: null,
+              working_hours: {},
+              reward: "Free cappuccino",
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText("Manas Coffee")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "home.exploreMap" })).toHaveAttribute(
+      "href",
+      "/nearby",
+    );
+  });
+});
+
+describe("HomeHeroCarousel", () => {
+  it("renders one standalone pager dot per slide", () => {
+    render(
+      <HomeHeroCarousel
+        heroes={[{ kind: "new-user" }, { kind: "new-user" }, { kind: "new-user" }]}
+      />,
+    );
+    expect(screen.getByRole("tablist", { name: "home.carouselPagination" })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+  });
+
+  it("smoothly moves to the card represented by an inactive dot", () => {
+    render(
+      <HomeHeroCarousel
+        heroes={[{ kind: "new-user" }, { kind: "new-user" }, { kind: "new-user" }]}
+      />,
+    );
+    const rail = screen.getByRole("list");
+    const scrollTo = vi.fn();
+    Object.defineProperty(rail, "clientWidth", { configurable: true, value: 300 });
+    Object.defineProperty(rail, "scrollTo", { configurable: true, value: scrollTo });
+
+    fireEvent.click(screen.getAllByRole("tab")[1]!);
+
+    expect(scrollTo).toHaveBeenCalledWith({ left: 312, behavior: "smooth" });
+    expect(screen.getAllByRole("tab")[1]).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("calculates the next snap position including the card gap", () => {
+    expect(carouselIndex(320, 300, 3)).toBe(1);
+    expect(carouselIndex(640, 300, 3)).toBe(2);
   });
 });
 
@@ -107,6 +215,7 @@ describe("WalletPeekRail", () => {
     visits_count: 0,
     required_count: 6,
     points_balance: 0,
+    min_redeem_points: null,
     points_per_som: null,
     cashback_per_point: null,
     pct_back: null,
@@ -131,6 +240,32 @@ describe("WalletPeekRail", () => {
   it("excludes unjoined cards", () => {
     const { container } = render(<WalletPeekRail cards={[{ ...baseCard, joined: false }]} />);
     expect(container.firstChild).toBeNull();
+  });
+
+  it("excludes the program already featured in the hero", () => {
+    const { container } = render(<CollectingList cards={[baseCard]} excludeProgramId="p1" />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("opens the matching business card through the wallet deep link", () => {
+    render(<CollectingList cards={[baseCard]} />);
+    const cardLink = screen
+      .getAllByRole("link")
+      .find((link) => link.getAttribute("href") === "/loyalty?business=b1");
+    expect(cardLink).toBeDefined();
+    expect(screen.getByRole("img", { name: "3 / 6" })).toBeInTheDocument();
+    expect(screen.queryByText("3 / 6")).not.toBeInTheDocument();
+  });
+
+  it("uses business logos in the wallet summary and collecting list", () => {
+    const card = { ...baseCard, business_logo_url: "/media/cafe-a.jpg" };
+    render(
+      <>
+        <WalletSummary cards={[card]} readyVouchers={0} />
+        <CollectingList cards={[card]} />
+      </>,
+    );
+    expect(screen.getAllByAltText("Cafe A")).toHaveLength(2);
   });
 });
 

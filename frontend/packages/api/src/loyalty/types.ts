@@ -21,6 +21,7 @@ export type LoyaltyCardView = {
   visits_count: number;
   required_count: number | null;
   points_balance: number;
+  min_redeem_points: number | null;
   points_per_som: string | null;
   cashback_per_point: string | null;
   pct_back: string | null;
@@ -64,6 +65,15 @@ export type LoyaltyVoucherWallet = {
   active: LoyaltyVoucher[];
   used: LoyaltyVoucher[];
   expired: LoyaltyVoucher[];
+};
+
+export type LoyaltyHomeSummary = {
+  visit_streak_days: number;
+  streak_active_today: boolean;
+  featured_campaign_ids: string[];
+  rewards_earned: number;
+  som_saved: string;
+  active_cards: number;
 };
 
 export type LoyaltyScanRow = {

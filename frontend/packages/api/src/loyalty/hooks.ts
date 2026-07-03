@@ -7,6 +7,7 @@ import type { LoyaltyProgramInput } from "./types";
 export const loyaltyKeys = {
   all: ["loyalty"] as const,
   cards: ["loyalty", "cards"] as const,
+  homeSummary: ["loyalty", "home-summary"] as const,
   business: (id: string) => ["loyalty", "business", id] as const,
   program: (id: string) => ["loyalty", "program", id] as const,
   catalog: (id: string) => ["loyalty", "catalog", id] as const,
@@ -16,6 +17,7 @@ export const loyaltyKeys = {
 };
 
 export const useLoyaltyCards = () => useQuery({ queryKey: loyaltyKeys.cards, queryFn: loyaltyApi.cards });
+export const useLoyaltyHomeSummary = () => useQuery({ queryKey: loyaltyKeys.homeSummary, queryFn: loyaltyApi.homeSummary });
 export const useBusinessLoyalty = (id: string) => useQuery({ queryKey: loyaltyKeys.business(id), queryFn: () => loyaltyApi.businessProgramsForCustomer(id), enabled: !!id });
 export const useLoyaltyProgram = (id: string) => useQuery({ queryKey: loyaltyKeys.program(id), queryFn: () => loyaltyApi.customerProgram(id), enabled: !!id });
 export const useLoyaltyCatalog = (id: string, enabled = true) => useQuery({ queryKey: loyaltyKeys.catalog(id), queryFn: () => loyaltyApi.catalog(id), enabled: enabled && !!id });

@@ -1,10 +1,13 @@
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.businesses.models import Business
+from apps.campaigns.models import Campaign, CampaignReward, CampaignRewardVoucher
 from apps.loyalty.models import (
     LoyaltyMembership,
     LoyaltyProgram,
@@ -63,6 +66,7 @@ def test_owner_create_and_customer_cards(api_actors):
     cards = client.get("/api/customer/loyalty/cards/")
     assert cards.status_code == 200
     assert cards.data["data"]["results"][0]["points_balance"] == 25
+    assert cards.data["data"]["results"][0]["min_redeem_points"] == 10
     assert str(cards.data["data"]["results"][0]["business_id"]) == str(business.id)
 
 
@@ -156,16 +160,100 @@ def test_loyalty_endpoints_enforce_roles(api_actors):
     owner, customer, _, _ = api_actors
     client = APIClient()
     assert client.get("/api/customer/loyalty/cards/").status_code == 401
+    assert client.get("/api/customer/loyalty/home-summary/").status_code == 401
     client.force_authenticate(customer)
     assert client.get("/api/business/loyalty/programs/").status_code == 403
     client.force_authenticate(owner)
     assert client.get("/api/customer/loyalty/cards/").status_code == 403
+    assert client.get("/api/customer/loyalty/home-summary/").status_code == 403
+
+
+@pytest.mark.django_db
+def test_customer_home_summary_returns_consecutive_visit_streak(api_actors):
+    _, customer, staff, business = api_actors
+    program = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Stamp card",
+        required_count=6,
+    )
+    membership = LoyaltyMembership.objects.create(program=program, customer=customer)
+    LoyaltyVoucher.objects.create(
+        membership=membership,
+        program=program,
+        customer=customer,
+        business=business,
+        voucher_code="PROFILE-CASHBACK",
+        status=LoyaltyVoucher.Status.REDEEMED,
+        reward_type=LoyaltyProgram.RewardType.CASHBACK,
+        reward_title="Cashback",
+        cashback_amount=Decimal("125.00"),
+    )
+    LoyaltyVoucher.objects.create(
+        membership=membership,
+        program=program,
+        customer=customer,
+        business=business,
+        voucher_code="PROFILE-ACTIVE",
+        status=LoyaltyVoucher.Status.ACTIVE,
+        reward_type=LoyaltyProgram.RewardType.FREE_ITEM,
+        reward_title="Free coffee",
+    )
+    campaign = Campaign.objects.create(
+        business=business,
+        created_by=api_actors[0],
+        name="Profile reward campaign",
+        campaign_type=Campaign.CampaignType.INDIVIDUAL,
+    )
+    campaign_reward = CampaignReward.objects.create(
+        campaign=campaign,
+        reward_type=CampaignReward.RewardType.FREE_ITEM,
+        title="Campaign coffee",
+        estimated_cost=Decimal("75.00"),
+    )
+    CampaignRewardVoucher.objects.create(
+        campaign=campaign,
+        customer=customer,
+        business=business,
+        reward=campaign_reward,
+        voucher_code="PROFILE-CAMPAIGN",
+        status=CampaignRewardVoucher.Status.REDEEMED,
+    )
+    for days_ago in (0, 1, 2, 4):
+        transaction = LoyaltyTransaction.objects.create(
+            membership=membership,
+            program=program,
+            customer=customer,
+            business=business,
+            kind=LoyaltyTransaction.Kind.EARN,
+            stamps_delta=1,
+            staff=staff,
+        )
+        LoyaltyTransaction.objects.filter(id=transaction.id).update(
+            created_at=timezone.now() - timedelta(days=days_ago)
+        )
+
+    client = APIClient()
+    client.force_authenticate(customer)
+    response = client.get("/api/customer/loyalty/home-summary/")
+
+    assert response.status_code == 200
+    assert response.data["data"] == {
+        "visit_streak_days": 3,
+        "streak_active_today": True,
+        "featured_campaign_ids": [],
+        "rewards_earned": 3,
+        "som_saved": "200.00",
+        "active_cards": 1,
+    }
 
 
 # --- B2: unified scan active_vouchers + group token tests ------------------
 
 
-def _make_loyalty_voucher(program, customer, business, voucher_code, reward_title="Free coffee"):
+def _make_loyalty_voucher(
+    program, customer, business, voucher_code, reward_title="Free coffee"
+):
     """Helper: create a LoyaltyMembership + ACTIVE LoyaltyVoucher."""
     membership, _ = LoyaltyMembership.objects.get_or_create(
         program=program, customer=customer
@@ -230,7 +318,9 @@ def test_unified_scan_customer_excludes_other_business_vouchers(api_actors):
     """active_vouchers must not include vouchers from a different business."""
     _, customer, staff, business = api_actors
 
-    other_owner = User.objects.create_user(phone="+996700099001", role=User.Role.BUSINESS_OWNER)
+    other_owner = User.objects.create_user(
+        phone="+996700099001", role=User.Role.BUSINESS_OWNER
+    )
     other_biz = Business.objects.create(
         owner=other_owner, name="Other Cafe", status=Business.Status.APPROVED
     )
@@ -241,7 +331,9 @@ def test_unified_scan_customer_excludes_other_business_vouchers(api_actors):
         required_count=5,
         reward_title="Other reward",
     )
-    _make_loyalty_voucher(other_program, customer, other_biz, "OTHERVOUCHER", "Other reward")
+    _make_loyalty_voucher(
+        other_program, customer, other_biz, "OTHERVOUCHER", "Other reward"
+    )
     token = get_or_create_customer_profile_token(customer)
     client = APIClient()
     client.force_authenticate(staff.user)
@@ -282,7 +374,9 @@ def test_redeem_loyalty_voucher_by_id_wrong_business_rejected(api_actors):
     """Redeeming a loyalty voucher_id from another business returns WRONG_BUSINESS."""
     _, customer, staff, business = api_actors
 
-    other_owner = User.objects.create_user(phone="+996700099002", role=User.Role.BUSINESS_OWNER)
+    other_owner = User.objects.create_user(
+        phone="+996700099002", role=User.Role.BUSINESS_OWNER
+    )
     other_biz = Business.objects.create(
         owner=other_owner, name="Wrong Cafe", status=Business.Status.APPROVED
     )
@@ -293,7 +387,9 @@ def test_redeem_loyalty_voucher_by_id_wrong_business_rejected(api_actors):
         required_count=5,
         reward_title="Other reward",
     )
-    voucher = _make_loyalty_voucher(other_program, customer, other_biz, "WRONGBIZ001", "Other reward")
+    voucher = _make_loyalty_voucher(
+        other_program, customer, other_biz, "WRONGBIZ001", "Other reward"
+    )
     client = APIClient()
     client.force_authenticate(staff.user)
 
@@ -325,7 +421,12 @@ def test_unified_scan_group_token_returns_group_info():
     from django.utils import timezone
 
     from apps.campaigns.models import Campaign, Group, GroupMember
-    from apps.campaigns.tests.helpers import make_business, make_campaign, make_customer, make_staff
+    from apps.campaigns.tests.helpers import (
+        make_business,
+        make_campaign,
+        make_customer,
+        make_staff,
+    )
     from apps.qr.models import QRCodeToken
     from apps.qr.services import create_token
 
@@ -381,7 +482,12 @@ def test_unified_scan_group_token_returns_group_info():
 def test_unified_scan_excludes_group_campaigns_from_customer_rows():
     """When scanning a customer QR, GROUP campaigns must not appear in campaigns list."""
     from apps.campaigns.models import Campaign
-    from apps.campaigns.tests.helpers import make_business, make_campaign, make_customer, make_staff
+    from apps.campaigns.tests.helpers import (
+        make_business,
+        make_campaign,
+        make_customer,
+        make_staff,
+    )
     from apps.qr.services import get_or_create_customer_profile_token
 
     business = make_business("ue01")

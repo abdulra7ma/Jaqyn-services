@@ -534,7 +534,7 @@ function GoogleMapBody({
           center: userLocation ?? pinCenter(pins) ?? BISHKEK,
           zoom: pins.length > 1 ? 13 : 15,
           disableDefaultUI: true,
-          zoomControl: true,
+          zoomControl: !bare,
           clickableIcons: false,
           gestureHandling: "greedy",
           styles: WARM_MAP_STYLE,
@@ -547,7 +547,7 @@ function GoogleMapBody({
       cancelled = true;
       (window as any).gm_authFailure = previousAuthFailure;
     };
-  }, [onError, pins, userLocation]);
+  }, [bare, onError, pins, userLocation]);
 
   useEffect(() => {
     const currentMap = map.current;

@@ -3,6 +3,8 @@ from __future__ import annotations
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
@@ -11,6 +13,7 @@ from apps.loyalty.models import LoyaltyProgram, LoyaltyTransaction, LoyaltyVouch
 from apps.loyalty.serializers import (
     AwardSerializer,
     LoyaltyCardSerializer,
+    LoyaltyHomeSummarySerializer,
     LoyaltyProgramSerializer,
     LoyaltyProgramWriteSerializer,
     LoyaltyTransactionSerializer,
@@ -20,6 +23,7 @@ from apps.loyalty.serializers import (
     SelectItemSerializer,
 )
 from apps.loyalty.services import (
+    LoyaltyHomeService,
     LoyaltyAnalyticsService,
     LoyaltyEarningService,
     LoyaltyMembershipService,
@@ -233,6 +237,15 @@ class CustomerCardsView(APIView):
         return success_response(
             {"results": LoyaltyCardSerializer(cards, many=True).data}
         )
+
+
+class CustomerHomeSummaryView(APIView):
+    permission_classes = [IsCustomer]
+    serializer_class = LoyaltyHomeSummarySerializer
+
+    def get(self, request: Request) -> Response:
+        summary = LoyaltyHomeService.summary_for_customer(request.user)
+        return success_response(self.serializer_class(summary).data)
 
 
 class CustomerProgramView(APIView):

@@ -1,4 +1,4 @@
-import type { CampaignVoucher, Campaign, LoyaltyCardView, LoyaltyVoucher } from "@jaqyn/api";
+import type { Business, CampaignVoucher, Campaign, LoyaltyCardView, LoyaltyVoucher } from "@jaqyn/api";
 import { resolveAccent } from "../loyalty/_lib/wallet";
 
 /**
@@ -34,9 +34,26 @@ export type HeroResult =
       remaining: number;
       total: number;
       current: number;
+      mechanic?: "stamp" | "visit" | "campaign";
+      businessId?: string;
+      businessArea?: string;
+      businessHours?: Record<string, [string, string]>;
       /** wallet gradient accent class for the hero card background */
       accentClass: string;
     }
+  | {
+      kind: "cashback";
+      source: "loyalty";
+      href: string;
+      business: string;
+      businessId: string;
+      amount: number;
+      progressPct: number | null;
+      rewardLabel: string;
+      ready: boolean;
+      accentClass: string;
+    }
+  | { kind: "map"; businesses: Business[] }
   | { kind: "new-user" };
 
 export interface PickHeroInputs {
@@ -45,72 +62,97 @@ export interface PickHeroInputs {
   /** Only joined cards are considered. Filter before passing or pass all — we filter internally. */
   loyaltyCards: LoyaltyCardView[];
   followed: Campaign[];
+  /** Backend-ranked joined campaigns; earlier ids must appear first. */
+  featuredCampaignIds?: string[];
+  nearbyBusinesses?: Business[];
+  promoteMap?: boolean;
 }
 
 export function pickHero(inputs: PickHeroInputs, now: Date = new Date()): HeroResult {
-  const { campaignVouchers, loyaltyVouchers, loyaltyCards, followed } = inputs;
+  return pickHomeHeroes(inputs, now)[0] ?? { kind: "new-user" };
+}
+
+/** Return the ranked home carousel instead of only its first card. */
+export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): HeroResult[] {
+  const {
+    campaignVouchers,
+    loyaltyVouchers,
+    loyaltyCards,
+    followed,
+    featuredCampaignIds = [],
+    nearbyBusinesses = [],
+    promoteMap = false,
+  } = inputs;
+
+  const heroes: HeroResult[] = [];
 
   // --- Priority 1: expiring voucher ---
 
   // Campaign vouchers: backend sets `expiring_soon` flag directly.
-  const expiringCampaign = campaignVouchers.find((v) => v.expiring_soon);
-  if (expiringCampaign) {
-    return {
+  for (const expiringCampaign of campaignVouchers.filter((v) => v.expiring_soon)) {
+    heroes.push({
       kind: "voucher",
       source: "campaign",
       href: "/campaign-wallet",
       title: expiringCampaign.reward_title,
       business: expiringCampaign.business.name,
       urgencyLabel: expiringCampaign.expires_label,
-    };
+    });
   }
 
   // Loyalty vouchers: compute the 3-day window ourselves (no `expiring_soon` field).
   const nowMs = now.getTime();
-  const expiringLoyalty = loyaltyVouchers.find((v) => {
+  const expiringLoyalty = loyaltyVouchers.filter((v) => {
     if (!v.expires_at) return false;
     const diff = new Date(v.expires_at).getTime() - nowMs;
     return diff >= 0 && diff <= EXPIRY_WINDOW_MS;
   });
-  if (expiringLoyalty) {
-    return {
+  for (const voucher of expiringLoyalty) {
+    heroes.push({
       kind: "voucher",
       source: "loyalty",
       href: "/rewards",
-      title: expiringLoyalty.reward_title,
-      business: expiringLoyalty.business_name,
+      title: voucher.reward_title,
+      business: voucher.business_name,
       // Raw ISO date portion; HeroCard formats it locale-aware (pure fn stays
       // locale-free).
-      urgencyLabel: expiringLoyalty.expires_at!.slice(0, 10),
-    };
+      urgencyLabel: voucher.expires_at!.slice(0, 10),
+    });
   }
 
   // --- Priority 2: closest to reward ---
 
   type Candidate =
-    | { source: "loyalty"; remaining: number; total: number; current: number; href: string; title: string; business: string; accentClass: string }
-    | { source: "campaign"; remaining: number; total: number; current: number; href: string; title: string; business: string; accentClass: string };
+    | { source: "loyalty"; remaining: number; total: number; current: number; href: string; title: string; business: string; businessId: string; businessArea: string; businessHours: Record<string, [string, string]>; accentClass: string; mechanic: "stamp" | "visit" }
+    | { source: "campaign"; remaining: number; total: number; current: number; href: string; title: string; business: string; accentClass: string; mechanic: "campaign" };
 
   const candidates: Candidate[] = [];
+  const secondaryCandidates: Candidate[] = [];
 
   // Joined stamp/visit cards only (points cards excluded — no required_count goal).
   for (const card of loyaltyCards) {
     if (!card.joined) continue;
-    if (card.required_count == null) continue; // points type — skip
+    if (card.type !== "stamp" && card.type !== "visit") continue;
+    if (card.required_count == null) continue;
     const current = card.type === "stamp" ? card.stamps_count : card.visits_count;
     const remaining = card.required_count - current;
     if (remaining < 1) continue; // already at goal or over
-    candidates.push({
+    const candidate: Candidate = {
       source: "loyalty",
       remaining,
       total: card.required_count,
       current,
-      href: `/loyalty/${card.program_id}`,
+      mechanic: card.type,
+      href: `/loyalty?business=${encodeURIComponent(card.business_id)}`,
       title: card.reward_summary,
       business: card.business_name,
+      businessId: card.business_id,
+      businessArea: card.business_area,
+      businessHours: card.business_hours,
       // Use the card accent for the hero gradient.
       accentClass: `bg-wallet-${resolveAccent(card.business_id, card.business_card_accent)}`,
-    });
+    };
+    (card.type === "stamp" ? candidates : secondaryCandidates).push(candidate);
   }
 
   // Followed campaigns with progress.
@@ -124,6 +166,7 @@ export function pickHero(inputs: PickHeroInputs, now: Date = new Date()): HeroRe
       remaining,
       total: p.target_count,
       current: p.current_count,
+      mechanic: "campaign",
       href: `/campaigns/${campaign.id}`,
       title: campaign.reward.title,
       business: campaign.business.name,
@@ -132,29 +175,100 @@ export function pickHero(inputs: PickHeroInputs, now: Date = new Date()): HeroRe
   }
 
   if (candidates.length > 0) {
-    // Sort: fewest remaining first; ties → loyalty before campaign.
+    // Backend-ranked campaigns come first, then standing loyalty by proximity.
     candidates.sort((a, b) => {
+      if (a.source === "campaign" && b.source !== "campaign") return -1;
+      if (b.source === "campaign" && a.source !== "campaign") return 1;
+      if (a.source === "campaign" && b.source === "campaign") {
+        const aId = a.href.split("/").pop() ?? "";
+        const bId = b.href.split("/").pop() ?? "";
+        const aRank = featuredCampaignIds.indexOf(aId);
+        const bRank = featuredCampaignIds.indexOf(bId);
+        if (aRank !== bRank) {
+          if (aRank < 0) return 1;
+          if (bRank < 0) return -1;
+          return aRank - bRank;
+        }
+      }
       if (a.remaining !== b.remaining) return a.remaining - b.remaining;
-      // Tie-break: loyalty wins.
-      if (a.source === "loyalty" && b.source !== "loyalty") return -1;
-      if (b.source === "loyalty" && a.source !== "loyalty") return 1;
       return 0;
     });
-    const best = candidates[0]!;
-    return {
-      kind: "progress",
-      source: best.source,
-      href: best.href,
-      title: best.title,
-      business: best.business,
-      remaining: best.remaining,
-      total: best.total,
-      current: best.current,
-      accentClass: best.accentClass,
-    };
+    heroes.push(
+      ...candidates.map((candidate) => ({
+        kind: "progress" as const,
+        source: candidate.source,
+        href: candidate.href,
+        title: candidate.title,
+        business: candidate.business,
+        remaining: candidate.remaining,
+        total: candidate.total,
+        current: candidate.current,
+        mechanic: candidate.mechanic,
+        ...(candidate.source === "loyalty"
+          ? {
+              businessId: candidate.businessId,
+              businessArea: candidate.businessArea,
+              businessHours: candidate.businessHours,
+            }
+          : {}),
+        accentClass: candidate.accentClass,
+      })),
+    );
   }
 
-  // --- Priority 3: new user ---
-  return { kind: "new-user" };
-}
+  for (const card of loyaltyCards) {
+    if (!card.joined || card.type !== "points" || card.points_balance <= 0) continue;
+    if (card.cashback_per_point == null && card.pct_back == null) continue;
+    const amount = card.cashback_per_point
+      ? Math.round(Number(card.cashback_per_point) * card.points_balance)
+      : card.points_balance;
+    heroes.push({
+      kind: "cashback",
+      source: "loyalty",
+      href: `/loyalty?business=${encodeURIComponent(card.business_id)}`,
+      business: card.business_name,
+      businessId: card.business_id,
+      amount,
+      progressPct:
+        card.min_redeem_points != null && card.min_redeem_points > 0
+          ? Math.min(100, Math.round((card.points_balance / card.min_redeem_points) * 100))
+          : null,
+      rewardLabel: card.reward_summary,
+      ready:
+        card.min_redeem_points == null ||
+        card.points_balance >= card.min_redeem_points,
+      accentClass: "bg-wallet-amber",
+    });
+  }
 
+  secondaryCandidates.sort((a, b) => a.remaining - b.remaining);
+  heroes.push(
+    ...secondaryCandidates.map((candidate) => ({
+      kind: "progress" as const,
+      source: candidate.source,
+      href: candidate.href,
+      title: candidate.title,
+      business: candidate.business,
+      remaining: candidate.remaining,
+      total: candidate.total,
+      current: candidate.current,
+      mechanic: candidate.mechanic,
+      ...(candidate.source === "loyalty"
+        ? {
+            businessId: candidate.businessId,
+            businessArea: candidate.businessArea,
+            businessHours: candidate.businessHours,
+          }
+        : {}),
+      accentClass: candidate.accentClass,
+    })),
+  );
+
+  if (heroes.length === 0) return [{ kind: "new-user" }];
+
+  const ranked: HeroResult[] = heroes.slice(0, 3);
+  const mapHero: HeroResult = { kind: "map", businesses: nearbyBusinesses };
+  if (promoteMap) ranked.splice(Math.min(1, ranked.length), 0, mapHero);
+  else ranked.push(mapHero);
+  return ranked;
+}

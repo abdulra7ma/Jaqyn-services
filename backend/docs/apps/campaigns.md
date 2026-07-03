@@ -17,6 +17,8 @@ scanner.
 
 **Key services** (`services/` package, split by responsibility):
 - `campaign.py` — CRUD + lifecycle (publish/pause/resume/end/cancel/duplicate).
+  It also owns `home_priority_ids`, which ranks joined campaigns by actions
+  remaining for the customer-home carousel.
 - `eligibility.py` — join/eligibility checks (active window, caps, completion limit).
 - `progress.py` — record actions, advance participant progress, mint vouchers.
 - `rewards.py` — voucher issue / present / redeem / cancel / item selection.
