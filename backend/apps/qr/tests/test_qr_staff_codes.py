@@ -39,6 +39,10 @@ def test_business_qr_creates_unguessable_token_and_resolve_logs(api_client):
     assert len(token) >= 22
     assert qr_response.data["data"]["png"].startswith("data:image/png;base64,")
     assert resolve_response.data["data"]["type"] == QRCodeToken.Type.MERCHANT_COLLECT
+    # The first-scan card needs the business icon: resolve exposes logo_url
+    # (None when unset) so the frontend can render the real logo, not an initial.
+    assert "logo_url" in resolve_response.data["data"]["business"]
+    assert resolve_response.data["data"]["business"]["logo_url"] is None
     assert ScanLog.objects.filter(token_value=token, status=ScanLog.Status.SUCCESS, action="resolve").exists()
 
 

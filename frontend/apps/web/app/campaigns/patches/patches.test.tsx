@@ -98,6 +98,7 @@ vi.mock("@jaqyn/api", () => ({
   }),
   useMarkPatchBoardSeen: () => ({ mutate: mockMutate }),
   useMarkPatchesSeen: () => ({ mutate: mockMutate }),
+  useMe: () => ({ data: { user: { name: "Test", avatar: null, avatar_emoji: "", phone: "+996700000000" } } }),
 }));
 
 import PatchesPage from "./page";

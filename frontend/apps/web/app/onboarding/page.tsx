@@ -3,9 +3,11 @@
 import { useUpdateProfile } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Button } from "@jaqyn/ui";
+import useEmblaCarousel from "embla-carousel-react";
+import { useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { GiftIcon, PinIcon, ScanIcon, UserIcon, UsersIcon } from "../_components/icons";
 
 type SlideKey = "welcome" | "show_qr" | "track" | "discover" | "groups" | "done";
@@ -66,19 +68,68 @@ const SLIDE_BODIES: Record<SlideKey, string> = {
   done: "Manage your details and language anytime in Profile. Let's collect your first reward!",
 };
 
+/** One tour slide: icon tile, title, body, and (on the final slide) the first-stamp task. */
+function Slide({ def, body, showTask }: { def: SlideDef; body: string; showTask: boolean }): JSX.Element {
+  const t = useT();
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center text-center">
+      <div className={`flex h-20 w-20 items-center justify-center rounded-[26px] shadow-card ${def.tint}`}>
+        <def.Icon className="h-9 w-9" />
+      </div>
+      <h1 className="mt-7 font-display text-[26px] font-bold text-ink sm:text-[29px]">{def.titleStatic}</h1>
+      <p className="mt-3 max-w-[340px] text-[15px] leading-relaxed text-subtle">{body}</p>
+
+      {showTask && (
+        <div className="mt-6 w-full rounded-2xl border border-line bg-card px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-lg text-subtle">○</span>
+              <span className="text-sm font-semibold text-ink">{t("onboarding.taskCollectStamp")}</span>
+            </div>
+            <Link
+              href="/collect"
+              className="rounded-pill bg-brand-gradient px-3 py-1.5 text-xs font-bold text-brand-fg shadow-glow"
+            >
+              {t("collect.title")}
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OnboardingFlow() {
   const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const returnTo = params.get("return") || "/";
   const updateProfile = useUpdateProfile();
+  const reduce = useReducedMotion();
 
+  // Swipeable slide track. `duration` is Embla's scroll speed; 0 under reduced-motion
+  // (Embla doesn't honor prefers-reduced-motion on its own — the codebase gates every
+  // animation on useReducedMotion). watchDrag stays on so touch/mouse swipe works.
+  const [emblaRef, embla] = useEmblaCarousel({ align: "start", containScroll: "trimSnaps", duration: reduce ? 0 : 24 });
   const [i, setI] = useState(0);
   const isLast = i === SLIDE_DEFS.length - 1;
-  const def = SLIDE_DEFS[i]!;
+
+  // Embla owns the source of truth for the current slide; mirror it into React state so
+  // the dots and Next/Back labels stay in sync whether the user swipes or taps.
+  useEffect(() => {
+    if (!embla) return;
+    const onSelect = (): void => setI(embla.selectedScrollSnap());
+    embla.on("select", onSelect);
+    onSelect();
+    return () => {
+      embla.off("select", onSelect);
+    };
+  }, [embla]);
+
+  const back = useCallback((): void => embla?.scrollPrev(), [embla]);
 
   // Mark the tour seen, then send the user where they were headed.
-  const finish = () =>
+  const finish = useCallback((): void => {
     updateProfile.mutate(
       { onboarding_completed: true },
       {
@@ -86,12 +137,17 @@ function OnboardingFlow() {
         onError: () => router.replace(returnTo), // never trap the user on the tour
       },
     );
+  }, [updateProfile, router, returnTo]);
 
-  const next = () => (isLast ? finish() : setI((n) => n + 1));
-  const back = () => setI((n) => Math.max(0, n - 1));
+  const next = useCallback((): void => {
+    if (isLast) finish();
+    else embla?.scrollNext();
+  }, [isLast, finish, embla]);
 
-  const rawBody = SLIDE_BODIES[def.key];
-  const slideBody = rawBody === "__i18n__" ? t("onboarding.welcomeSlide2") : rawBody;
+  const bodyFor = (key: SlideKey): string => {
+    const raw = SLIDE_BODIES[key];
+    return raw === "__i18n__" ? t("onboarding.welcomeSlide2") : raw;
+  };
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-cream px-4 py-10 font-sans text-ink sm:px-6">
@@ -112,11 +168,15 @@ function OnboardingFlow() {
       </div>
 
       <div className="relative z-10 mx-auto flex w-full max-w-[420px] flex-1 flex-col">
-        {/* progress dots */}
+        {/* progress dots — tap to jump to a slide */}
         <div className="flex items-center justify-center gap-2 pt-2">
-          {SLIDE_DEFS.map((_, idx) => (
-            <span
-              key={idx}
+          {SLIDE_DEFS.map((s, idx) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => embla?.scrollTo(idx)}
+              aria-label={s.titleStatic}
+              aria-current={idx === i}
               className={`h-1.5 rounded-full transition-all duration-300 ${
                 idx === i ? "w-6 bg-brand" : "w-1.5 bg-line"
               }`}
@@ -124,35 +184,17 @@ function OnboardingFlow() {
           ))}
         </div>
 
-        {/* slide */}
-        <div key={i} className="flex flex-1 flex-col items-center justify-center text-center animate-[jqIn_.4s_ease]">
-          <div className={`flex h-20 w-20 items-center justify-center rounded-[26px] shadow-card ${def.tint}`}>
-            <def.Icon className="h-9 w-9" />
-          </div>
-          <h1 className="mt-7 font-display text-[26px] font-bold text-ink sm:text-[29px]">
-            {def.titleStatic}
-          </h1>
-          <p className="mt-3 max-w-[340px] text-[15px] leading-relaxed text-subtle">{slideBody}</p>
-
-          {/* "Collect your first stamp" task on last slide */}
-          {isLast && (
-            <div className="mt-6 w-full rounded-2xl border border-line bg-card px-4 py-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-lg text-subtle">○</span>
-                  <span className="text-sm font-semibold text-ink">
-                    {t("onboarding.taskCollectStamp")}
-                  </span>
-                </div>
-                <Link
-                  href="/collect"
-                  className="rounded-pill bg-brand-gradient px-3 py-1.5 text-xs font-bold text-brand-fg shadow-glow"
-                >
-                  {t("collect.title")}
-                </Link>
+        {/* swipeable slide track (Embla viewport → container → slides). The viewport is a
+            block box so the flex container inherits its width; making the viewport itself
+            a flex row lets the container's min-width:auto overflow and double-measure slides. */}
+        <div className="flex-1 overflow-hidden" ref={emblaRef}>
+          <div className="flex h-full touch-pan-y">
+            {SLIDE_DEFS.map((s) => (
+              <div key={s.key} className="flex min-w-0 flex-[0_0_100%] flex-col">
+                <Slide def={s} body={bodyFor(s.key)} showTask={s.key === "done"} />
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
 
         {/* controls */}

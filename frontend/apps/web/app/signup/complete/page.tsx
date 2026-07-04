@@ -9,7 +9,7 @@ import { useState } from "react";
 import { useRequireAuth } from "../../_lib/auth";
 import { useErrMessage } from "../../_lib/useErrMessage";
 
-const LANGS: Language[] = ["ru", "en", "ky"];
+const LANGS: Language[] = ["ru", "en"];
 
 export default function CompleteProfilePage() {
   const t = useT();

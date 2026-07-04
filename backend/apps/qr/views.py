@@ -71,16 +71,29 @@ class QRResolveView(APIView):
             if campaign:
                 rule = getattr(campaign, "rule", None)
                 reward = getattr(campaign, "reward", None)
+                # Pill label is the loyalty *mechanic* the customer collects by
+                # (e.g. "visit"), not the campaign category. INDIVIDUAL campaigns
+                # carry a rule.mechanic; GROUP/SOCIAL have none, so fall back to
+                # the campaign type (the frontend keys qr.loyalty.<type> for all).
+                mechanic = getattr(rule, "mechanic", None) if rule is not None else None
                 active_reward = {
                     "id": str(campaign.id),
-                    "type": campaign.campaign_type,
+                    "type": mechanic or campaign.campaign_type,
                     "title": campaign.name,
                     "required_count": rule.required_count if rule is not None else None,
                     "reward_description": reward.description if reward is not None else "",
                 }
         return success_response({
             "type": qr_token.type,
-            "business": {"id": str(qr_token.business.id), "name": qr_token.business.name, "status": qr_token.business.status} if qr_token.business else None,
+            "business": {
+                "id": str(qr_token.business.id),
+                "name": qr_token.business.name,
+                "status": qr_token.business.status,
+                # Relative /media/... url (via MEDIA_URL) so it passes through the
+                # frontend proxy; None when no logo is set. Lets the first-scan
+                # card show the real business icon, not just its initial.
+                "logo_url": qr_token.business.logo.url if qr_token.business.logo else None,
+            } if qr_token.business else None,
             "context": {"active_reward": active_reward},
         })
 

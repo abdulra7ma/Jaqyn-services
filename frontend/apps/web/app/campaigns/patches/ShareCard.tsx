@@ -16,11 +16,12 @@
  * Caller gates on patch.earned — only earned patches have share.
  */
 
-import type { PatchOut } from "@jaqyn/api";
+import type { PatchOut, User } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { useReducedMotion } from "framer-motion";
 import { useCallback, useRef, useState } from "react";
 import { Confetti } from "../_components/Confetti";
+import { UserAvatar } from "../../_components/kit";
 import { PatchBadge } from "./PatchBadge";
 
 // Artboard rendered at 360×640 CSS px; pixelRatio=3 produces 1080×1920 PNG.
@@ -31,9 +32,12 @@ const PIXEL_RATIO = 3; // ARTBOARD_W × 3 = 1080, ARTBOARD_H × 3 = 1920
 interface ShareCardProps {
   patch: PatchOut;
   onClose: () => void;
+  // Owner identity stamped on the artboard (photo + name). Optional so the card
+  // still renders when the caller has no user context.
+  user?: Pick<User, "avatar" | "avatar_emoji" | "name" | "phone">;
 }
 
-export function ShareCard({ patch, onClose }: ShareCardProps): JSX.Element {
+export function ShareCard({ patch, onClose, user }: ShareCardProps): JSX.Element {
   const t = useT();
   const reduced = useReducedMotion();
   const artboardRef = useRef<HTMLDivElement | null>(null);
@@ -141,6 +145,30 @@ export function ShareCard({ patch, onClose }: ShareCardProps): JSX.Element {
             <Confetti loop={false} />
           </div>
         )}
+
+        {/* Top bar — Jaqyn wordmark tile (left) + owner name & avatar (right).
+            Note: the avatar <img> must be same-origin (dev /media rewrite) or
+            served with CORS for html-to-image to inline it into the PNG. */}
+        <div className="absolute left-5 right-5 top-5 flex items-center justify-between">
+          <div
+            className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-brand font-display text-lg font-bold text-white"
+            aria-label="Jaqyn"
+          >
+            J
+          </div>
+          {user ? (
+            <div className="flex min-w-0 items-center justify-end gap-2">
+              {user.name && (
+                <span className="truncate font-display text-sm font-bold text-ink">
+                  {user.name}
+                </span>
+              )}
+              <UserAvatar user={user} size={36} />
+            </div>
+          ) : (
+            <span />
+          )}
+        </div>
 
         {/* Patch badge — flat shadow per spec */}
         <div className="flex flex-col items-center gap-6 px-8 text-center">

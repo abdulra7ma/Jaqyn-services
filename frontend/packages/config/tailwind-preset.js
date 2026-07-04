@@ -50,6 +50,10 @@ module.exports = {
         sheet: "0 -20px 40px -24px rgba(20,16,11,.5)",
         // centered-modal drop shadow (design-system §10 / .dc.html)
         modal: "0 30px 60px -24px rgba(20,16,11,.6)",
+        // Stacked drop shadow for a card that reads as a real, floating physical
+        // object (landing hero cards use the same two-layer recipe): a deep soft
+        // cast far below + a tighter contact shadow just under the edge.
+        "card-float": "0 28px 50px -18px rgba(46,30,18,.5), 0 10px 20px -12px rgba(46,30,18,.42)",
       },
       backgroundImage: {
         "brand-gradient": "linear-gradient(150deg, #C25E3C, #A2492A)",
@@ -137,6 +141,26 @@ module.exports = {
           "0%": { transform: "translateY(20px)", opacity: "0" },
           "100%": { transform: "translateY(0)", opacity: "1" },
         },
+        // Gentle idle bob — hero avatar + wallet-style cards on the QR landing
+        // screen "float" like the physical cards in the loyalty wallet. Amplitude
+        // 8px; loops forever. Gate behind useReducedMotion() in the component.
+        "jq-float": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-8px)" },
+        },
+        // Physical-card suspension — a wider vertical bob (12px) plus a barely
+        // there sway (±0.7deg) so a full card reads as hanging in space, not just
+        // sliding. Mirrors the landing hero's floating cards (jqFloatA/B).
+        "jq-card-float": {
+          "0%, 100%": { transform: "translateY(0) rotate(-0.7deg)" },
+          "50%": { transform: "translateY(-12px) rotate(0.7deg)" },
+        },
+        // Pulsing status dot — scale + fade, mirrors the landing site's jqDot
+        // "live / arriving now" indicator.
+        "jq-dot": {
+          "0%, 100%": { transform: "scale(1)", opacity: "0.5" },
+          "50%": { transform: "scale(1.5)", opacity: "1" },
+        },
       },
       animation: {
         // Streak flame: 2.4s ease-in-out loop.
@@ -161,6 +185,14 @@ module.exports = {
         "jq-rise": "jq-rise 0.3s ease both",
         // Slower rise variant (.4s) for overlays that enter after content.
         "jq-rise-slow": "jq-rise 0.4s ease both",
+        // Idle float: 4s ease-in-out loop. Avatar uses this; the reward card uses
+        // the slower 5.5s variant so the two bob out of phase.
+        "jq-float": "jq-float 4s ease-in-out infinite",
+        "jq-float-slow": "jq-float 5.5s ease-in-out infinite",
+        // Physical reward card suspension: 6s ease-in-out loop.
+        "jq-card-float": "jq-card-float 6s ease-in-out infinite",
+        // Status dot pulse: 1.6s loop (landing parity).
+        "jq-dot": "jq-dot 1.6s ease-in-out infinite",
       },
     },
   },

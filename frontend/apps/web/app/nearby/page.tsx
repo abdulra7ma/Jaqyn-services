@@ -259,7 +259,7 @@ function CategoryChips({
   onChange: (key: string) => void;
 }) {
   return (
-    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+    <div className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {options.map((o) => {
         const active = value === o.key;
         const emoji = CATEGORY_EMOJI[o.key] ?? "📍";
@@ -270,7 +270,7 @@ function CategoryChips({
             onClick={() => onChange(o.key)}
             aria-pressed={active}
             className={cn(
-              "flex flex-none items-center gap-2 rounded-pill py-1.5 pl-1.5 pr-4 text-sm font-bold shadow-card transition active:scale-95",
+              "flex flex-none snap-start items-center gap-2 rounded-pill py-1.5 pl-1.5 pr-4 text-sm font-bold shadow-card transition active:scale-95",
               active ? "bg-brand text-brand-fg" : "border border-line bg-card text-ink",
             )}
           >

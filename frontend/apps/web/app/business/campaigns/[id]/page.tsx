@@ -11,9 +11,11 @@ import {
   useCampaignAction,
   useCancelCampaignVoucher,
   useDuplicateCampaign,
+  useUpdateCampaign,
   useUploadCampaignImage,
   type CampaignDetailTabs,
   type CampaignLifecycleAction,
+  type CampaignPayload,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Badge } from "@jaqyn/ui";
@@ -97,12 +99,22 @@ function Detail({ id, tabs }: { id: string; tabs: CampaignDetailTabs }) {
       {/* gradient hero */}
       <div className="relative flex items-center gap-4 overflow-hidden rounded-[20px] bg-[linear-gradient(120deg,#3C2E22,#5A4330)] p-6 text-white">
         <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-amber/15" aria-hidden />
-        <div
-          className="flex h-16 w-16 flex-none items-center justify-center rounded-2xl bg-white/15 text-3xl"
-          aria-hidden
-        >
-          {c.glyph || TYPE_GLYPH[c.type]}
-        </div>
+        {c.image ? (
+          // eslint-disable-next-line @next/next/no-img-element -- remote R2 media, plain load (no canvas/crossOrigin)
+          <img
+            src={c.image}
+            alt=""
+            className="h-16 w-16 flex-none rounded-2xl object-cover"
+            aria-hidden
+          />
+        ) : (
+          <div
+            className="flex h-16 w-16 flex-none items-center justify-center rounded-2xl bg-white/15 text-3xl"
+            aria-hidden
+          >
+            {c.glyph || TYPE_GLYPH[c.type]}
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="font-display text-[22px] font-bold">{c.name}</h1>
@@ -183,7 +195,7 @@ function Detail({ id, tabs }: { id: string; tabs: CampaignDetailTabs }) {
       {tab === "groups" && <GroupsTab tabs={tabs} />}
       {tab === "rewardUsage" && <RewardUsageTab id={id} tabs={tabs} />}
       {tab === "analytics" && <AnalyticsTab tabs={tabs} />}
-      {tab === "settings" && <SettingsTab tabs={tabs} />}
+      {tab === "settings" && <SettingsTab id={id} tabs={tabs} />}
 
       {studioOpen && (
         <SocialPostStudio
@@ -469,30 +481,204 @@ function SettingsRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SettingsTab({ tabs }: { tabs: CampaignDetailTabs }) {
+const SET_LABEL = "text-[12px] font-bold text-subtle";
+const SET_FIELD =
+  "mt-1.5 w-full rounded-xl border-[1.5px] border-line bg-card px-3.5 py-3 text-sm font-semibold text-ink outline-none focus:border-brand";
+
+function SettingsField({
+  label,
+  value,
+  onChange,
+  inputMode,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  inputMode?: "numeric" | "text";
+}) {
+  return (
+    <label className="mt-4 block first:mt-0">
+      <span className={SET_LABEL}>{label}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        inputMode={inputMode}
+        className={SET_FIELD}
+      />
+    </label>
+  );
+}
+
+// Backend freezes a running campaign's terms; only draft/scheduled are editable
+// (CampaignService._EDITABLE_STATUSES). Mirror that here so the form is only
+// shown when the PUT would actually succeed.
+const EDITABLE_STATUSES = new Set(["draft", "scheduled"]);
+
+// rule.group_checkin_window is adapted to a "N min" string; pull the integer
+// back out for the numeric field (empty when unset).
+function parseMinutes(s: string | null): string {
+  const m = s?.match(/\d+/);
+  return m ? m[0] : "";
+}
+
+function SettingsReadOnly({ c }: { c: CampaignDetailTabs["settings"] }): JSX.Element {
   const t = useT();
+  return (
+    <div className="flex flex-col gap-px overflow-hidden rounded-2xl border border-line bg-line">
+      <SettingsRow label={t("cmp.biz.form.name")} value={c.name} />
+      <SettingsRow label={t("cmp.biz.form.reward")} value={c.reward.title || "—"} />
+      <SettingsRow
+        label={t("cmp.biz.form.maxParticipants")}
+        value={c.max_participants == null ? "∞" : String(c.max_participants)}
+      />
+      <SettingsRow
+        label={t("cmp.biz.form.repeat")}
+        value={t(c.repeat_policy === "repeatable" ? "cmp.rule.repeatable" : "cmp.rule.repeatOnce")}
+      />
+      {c.type === "social" && c.instagram_handle && (
+        <SettingsRow label={t("cmp.biz.form.instagram")} value={c.instagram_handle} />
+      )}
+    </div>
+  );
+}
+
+function SettingsTab({ id, tabs }: { id: string; tabs: CampaignDetailTabs }) {
+  const t = useT();
+  const errMessage = useErrMessage();
   const c = tabs.settings;
+  const update = useUpdateCampaign();
+  const editable = EDITABLE_STATUSES.has(c.status);
+
+  const [name, setName] = useState(c.name);
+  const [rewardTitle, setRewardTitle] = useState(c.reward.title);
+  const [maxP, setMaxP] = useState(c.max_participants == null ? "" : String(c.max_participants));
+  const [repeatable, setRepeatable] = useState(c.repeat_policy === "repeatable");
+  const [requiredCount, setRequiredCount] = useState(
+    c.rule.required_count == null ? "" : String(c.rule.required_count),
+  );
+  const [groupSize, setGroupSize] = useState(
+    c.rule.required_group_size == null ? "" : String(c.rule.required_group_size),
+  );
+  const [checkin, setCheckin] = useState(parseMinutes(c.rule.group_checkin_window));
+
+  const invalid = !name.trim() || !rewardTitle.trim();
+
+  function toNum(s: string): number | null {
+    const n = Number(s);
+    return s.trim() === "" || !Number.isFinite(n) ? null : n;
+  }
+
+  function onSave() {
+    if (invalid || update.isPending) return;
+    const patch: Partial<CampaignPayload> = {
+      // `type` steers toCampaignWritePayload to the right rule branch; the
+      // backend ignores type changes on an existing campaign.
+      type: c.type,
+      name: name.trim(),
+      reward_title: rewardTitle.trim(),
+      max_participants: toNum(maxP),
+      repeat_policy: repeatable ? "repeatable" : "once",
+    };
+    if (c.type === "individual") {
+      patch.mechanic = c.rule.mechanic ?? "visit";
+      const rc = toNum(requiredCount);
+      if (rc != null) patch.required_count = rc;
+    } else if (c.type === "group") {
+      const gs = toNum(groupSize);
+      const cw = toNum(checkin);
+      if (gs != null) patch.required_group_size = gs;
+      if (cw != null) patch.group_checkin_window_minutes = cw;
+    }
+    update.mutate({ id, patch });
+  }
+
   return (
     <div className="mt-[22px] max-w-md">
       <div className="mb-3 flex items-center gap-2">
         <TypeBadge type={c.type} />
         <StatusPill status={c.status} />
       </div>
-      <div className="flex flex-col gap-px overflow-hidden rounded-2xl border border-line bg-line">
-        <SettingsRow label={t("cmp.biz.form.name")} value={c.name} />
-        <SettingsRow label={t("cmp.biz.form.reward")} value={c.reward.title || "—"} />
-        <SettingsRow
-          label={t("cmp.biz.form.maxParticipants")}
-          value={c.max_participants == null ? "∞" : String(c.max_participants)}
-        />
-        <SettingsRow
-          label={t("cmp.biz.form.repeat")}
-          value={t(c.repeat_policy === "repeatable" ? "cmp.rule.repeatable" : "cmp.rule.repeatOnce")}
-        />
-        {c.type === "social" && c.instagram_handle && (
-          <SettingsRow label={t("cmp.biz.form.instagram")} value={c.instagram_handle} />
-        )}
-      </div>
+
+      {!editable ? (
+        <>
+          <p className="mb-3 text-[12.5px] font-semibold text-subtle">{t("cmp.biz.settings.frozen")}</p>
+          <SettingsReadOnly c={c} />
+        </>
+      ) : (
+        <div className="rounded-2xl border border-line bg-card p-5">
+          <SettingsField label={t("cmp.biz.form.name")} value={name} onChange={setName} />
+          <SettingsField
+            label={t("cmp.biz.form.rewardTitle")}
+            value={rewardTitle}
+            onChange={setRewardTitle}
+          />
+          {c.type === "individual" && (
+            <SettingsField
+              label={t("cmp.biz.form.requiredVisits")}
+              value={requiredCount}
+              onChange={setRequiredCount}
+              inputMode="numeric"
+            />
+          )}
+          {c.type === "group" && (
+            <div className="mt-4 flex gap-3.5">
+              <div className="flex-1">
+                <SettingsField
+                  label={t("cmp.biz.form.groupSize")}
+                  value={groupSize}
+                  onChange={setGroupSize}
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="flex-1">
+                <SettingsField
+                  label={t("cmp.biz.form.checkinWindow")}
+                  value={checkin}
+                  onChange={setCheckin}
+                  inputMode="numeric"
+                />
+              </div>
+            </div>
+          )}
+          <SettingsField
+            label={t("cmp.biz.form.maxParticipants")}
+            value={maxP}
+            onChange={setMaxP}
+            inputMode="numeric"
+          />
+          <button
+            type="button"
+            onClick={() => setRepeatable((r) => !r)}
+            aria-pressed={repeatable}
+            className="mt-4 flex w-full items-center gap-2.5 rounded-xl border-[1.5px] border-line bg-card px-3.5 py-3 text-left"
+          >
+            <span
+              className={`flex h-6 w-6 flex-none items-center justify-center rounded-md text-xs font-bold ${
+                repeatable ? "bg-brand text-brand-fg" : "border border-line text-transparent"
+              }`}
+              aria-hidden
+            >
+              ✓
+            </span>
+            <span className="text-[13.5px] font-semibold text-ink">{t("cmp.biz.form.repeat")}</span>
+          </button>
+
+          {update.isError && (
+            <p className="mt-3 text-[12.5px] font-semibold text-danger">{errMessage(update.error)}</p>
+          )}
+          {update.isSuccess && !update.isPending && (
+            <p className="mt-3 text-[12.5px] font-semibold text-brand-deep">{t("cmp.biz.settings.saved")}</p>
+          )}
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={invalid || update.isPending}
+            className="mt-4 w-full rounded-xl bg-brand py-3.5 text-[14.5px] font-bold text-brand-fg shadow-glow transition active:scale-[.99] disabled:opacity-60"
+          >
+            {update.isPending ? t("cmp.biz.settings.saving") : t("cmp.biz.settings.save")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

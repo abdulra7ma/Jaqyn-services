@@ -194,6 +194,15 @@ describe("HomeHeroCarousel", () => {
     expect(carouselIndex(320, 300, 3)).toBe(1);
     expect(carouselIndex(640, 300, 3)).toBe(2);
   });
+
+  it("lets touch scroll the rail horizontally (touch-action pan-x, not pan-y)", () => {
+    // Regression: touch-pan-y set touch-action:pan-y, which blocks horizontal
+    // touch scrolling — the carousel wouldn't swipe on mobile. It must be pan-x.
+    render(<HomeHeroCarousel heroes={[{ kind: "new-user" }, { kind: "new-user" }]} />);
+    const rail = screen.getByRole("list");
+    expect(rail.className).toContain("touch-pan-x");
+    expect(rail.className).not.toContain("touch-pan-y");
+  });
 });
 
 describe("WalletPeekRail", () => {

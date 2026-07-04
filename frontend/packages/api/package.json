@@ -7,7 +7,7 @@
   "scripts": {
     "lint": "echo skip",
     "typecheck": "tsc --noEmit",
-    "test": "tsc --module nodenext --moduleResolution nodenext --target ES2022 --skipLibCheck --outDir .test-tmp --rootDir src src/customer/adapters.test.ts src/customer/postAuthRoute.test.ts && node --test \".test-tmp/**/*.test.js\"; status=$?; rm -rf .test-tmp; exit $status"
+    "test": "tsc --module nodenext --moduleResolution nodenext --target ES2022 --skipLibCheck --outDir .test-tmp --rootDir src src/customer/adapters.test.ts src/customer/postAuthRoute.test.ts src/business/adapters.test.ts && node --test \".test-tmp/**/*.test.js\"; status=$?; rm -rf .test-tmp; exit $status"
   },
   "dependencies": {
     "@jaqyn/i18n": "workspace:*"

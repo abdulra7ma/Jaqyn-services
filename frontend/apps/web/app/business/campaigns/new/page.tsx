@@ -7,10 +7,15 @@
 // backend publish rules for UX — the service is the authority. Submit calls
 // useCreateCampaign and routes to the new campaign's detail.
 
-import { useCatalog, useCreateCampaign, type BusinessCampaignType } from "@jaqyn/api";
+import {
+  businessApi,
+  useCatalog,
+  useCreateCampaign,
+  type BusinessCampaignType,
+} from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { OwnerShell } from "../../_components/OwnerShell";
 import { useErrMessage } from "../../../_lib/useErrMessage";
 import {
@@ -233,7 +238,94 @@ function ItemRewardPicker({ form, set }: { form: CampaignForm; set: SetFn }) {
   );
 }
 
-function StepDetails({ form, set }: { form: CampaignForm; set: SetFn }) {
+/** Optional campaign photo picker. Preview is a local blob URL (no network, no
+ * CORS); the file is uploaded to the campaign after it is created. */
+function PhotoField({
+  file,
+  onChange,
+}: {
+  file: File | null;
+  onChange: (f: File | null) => void;
+}) {
+  const t = useT();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return (
+    <div className="mt-4">
+      <span className={LABEL}>{t("cmp.biz.form.photo")}</span>
+      <div className="mt-1.5 flex items-center gap-3.5">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          aria-label={t("cmp.social.addPhoto")}
+          className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-xl border-[1.5px] border-dashed border-line bg-card text-2xl text-subtle transition hover:border-brand/40"
+        >
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element -- local blob preview, not remote media
+            <img src={preview} alt="" className="h-full w-full object-cover" />
+          ) : (
+            "＋"
+          )}
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="text-[13px] font-semibold text-brand"
+            >
+              {preview ? t("cmp.social.changePhoto") : t("cmp.social.addPhoto")}
+            </button>
+            {preview && (
+              <button
+                type="button"
+                onClick={() => onChange(null)}
+                className="text-[13px] font-semibold text-subtle"
+              >
+                {t("cmp.biz.form.photoRemove")}
+              </button>
+            )}
+          </div>
+          <p className="mt-0.5 text-[12px] text-subtle">{t("cmp.biz.form.photoHint")}</p>
+        </div>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0] ?? null;
+          e.target.value = "";
+          onChange(f);
+        }}
+      />
+    </div>
+  );
+}
+
+function StepDetails({
+  form,
+  set,
+  photo,
+  onPhoto,
+}: {
+  form: CampaignForm;
+  set: SetFn;
+  photo: File | null;
+  onPhoto: (f: File | null) => void;
+}) {
   const t = useT();
   return (
     <div className={PANEL}>
@@ -243,6 +335,8 @@ function StepDetails({ form, set }: { form: CampaignForm; set: SetFn }) {
         onChange={(v) => set("name", v)}
         placeholder={t("cmp.biz.form.namePlaceholder")}
       />
+
+      <PhotoField file={photo} onChange={onPhoto} />
 
       {/* INDIVIDUAL — campaigns are visit-count challenges. */}
       {form.type === "individual" && (
@@ -334,6 +428,14 @@ export default function NewCampaignPage() {
 
   const [step, setStep] = useState<0 | 1>(0);
   const [form, setForm] = useState<CampaignForm>(CAMPAIGN_FORM_DEFAULT);
+  const [photo, setPhoto] = useState<File | null>(null);
+  // Set while the campaign is created and its (optional) photo uploaded, so the
+  // submit button stays busy across both requests before we navigate away.
+  const [submitting, setSubmitting] = useState(false);
+  // Holds the created campaign id when the campaign saved but its photo upload
+  // failed — so the owner can retry the photo or continue without losing the
+  // already-created campaign (we must not re-run create and duplicate it).
+  const [photoFailedId, setPhotoFailedId] = useState<string | null>(null);
   const create = useCreateCampaign();
 
   const set: SetFn = (key, val) => setForm((f) => ({ ...f, [key]: val }));
@@ -352,11 +454,37 @@ export default function NewCampaignPage() {
     setStep(1);
   }
 
+  // Upload the (optional) photo onto an already-created campaign, then navigate.
+  // On failure keep the id so the UI can offer retry/continue — never silently
+  // drop the photo the owner deliberately attached.
+  async function uploadThenGo(id: string) {
+    if (!photo) {
+      router.replace(`/business/campaigns/${id}`);
+      return;
+    }
+    try {
+      await businessApi.uploadCampaignImage(id, photo);
+      router.replace(`/business/campaigns/${id}`);
+    } catch {
+      setPhotoFailedId(id);
+      setSubmitting(false);
+    }
+  }
+
   function onSubmit() {
-    if (invalidKey) return;
+    if (invalidKey || submitting) return;
+    setSubmitting(true);
+    setPhotoFailedId(null);
     create.mutate(toPayload(form), {
-      onSuccess: (c) => router.replace(`/business/campaigns/${c.id}`),
+      onSuccess: (c) => uploadThenGo(c.id),
+      onError: () => setSubmitting(false),
     });
+  }
+
+  function retryPhoto() {
+    if (!photoFailedId || submitting) return;
+    setSubmitting(true);
+    void uploadThenGo(photoFailedId);
   }
 
   return (
@@ -404,13 +532,33 @@ export default function NewCampaignPage() {
             <StepOutcome form={form} onPickType={pickType} onPickTemplate={pickTemplate} onScratch={scratch} />
           ) : (
             <>
-              <StepDetails form={form} set={set} />
+              <StepDetails form={form} set={set} photo={photo} onPhoto={setPhoto} />
               {create.isError && (
                 <p className="mt-3 text-[12.5px] font-semibold text-danger">{errMessage(create.error)}</p>
               )}
               {invalidKey && (
                 <p className="mt-3 text-[12.5px] font-semibold text-danger">{t(invalidKey)}</p>
               )}
+              {photoFailedId ? (
+                <div className="mt-[18px] rounded-xl border-[1.5px] border-line bg-card p-4">
+                  <p className="text-[13px] font-semibold text-ink">{t("cmp.biz.form.photoFailed")}</p>
+                  <div className="mt-3 flex gap-3">
+                    <button
+                      onClick={() => router.replace(`/business/campaigns/${photoFailedId}`)}
+                      className="rounded-xl border-[1.5px] border-line bg-card px-[22px] py-3 text-sm font-semibold text-ink"
+                    >
+                      {t("cmp.biz.form.photoSkip")}
+                    </button>
+                    <button
+                      onClick={retryPhoto}
+                      disabled={submitting}
+                      className="flex-1 rounded-xl bg-brand py-3 text-sm font-bold text-brand-fg shadow-glow transition active:scale-[.99] disabled:opacity-60"
+                    >
+                      {submitting ? t("cmp.social.uploading") : t("cmp.biz.form.photoRetry")}
+                    </button>
+                  </div>
+                </div>
+              ) : (
               <div className="mt-[18px] flex gap-3">
                 <button
                   onClick={() => setStep(0)}
@@ -420,12 +568,13 @@ export default function NewCampaignPage() {
                 </button>
                 <button
                   onClick={onSubmit}
-                  disabled={!!invalidKey || create.isPending}
+                  disabled={!!invalidKey || submitting}
                   className="flex-1 rounded-xl bg-brand py-3.5 text-[14.5px] font-bold text-brand-fg shadow-glow transition active:scale-[.99] disabled:opacity-60"
                 >
-                  {create.isPending ? t("cmp.biz.form.creating") : t("cmp.biz.form.create")}
+                  {submitting ? t("cmp.biz.form.creating") : t("cmp.biz.form.create")}
                 </button>
               </div>
+              )}
             </>
           )}
         </div>

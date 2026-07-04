@@ -20,6 +20,7 @@
 import {
   useMarkPatchBoardSeen,
   useMarkPatchesSeen,
+  useMe,
   usePatches,
   type PatchOut,
 } from "@jaqyn/api";
@@ -328,6 +329,7 @@ export default function PatchesPage(): JSX.Element {
   const t = useT();
 
   const { data, isLoading, isError } = usePatches();
+  const me = useMe();
   const markBoardSeen = useMarkPatchBoardSeen();
   const markSeen = useMarkPatchesSeen();
 
@@ -411,7 +413,7 @@ export default function PatchesPage(): JSX.Element {
 
       {/* Share card overlay */}
       {shareTarget && (
-        <ShareCard patch={shareTarget} onClose={() => setShareTarget(null)} />
+        <ShareCard patch={shareTarget} user={me.data?.user} onClose={() => setShareTarget(null)} />
       )}
 
       {/* Detail sheet */}

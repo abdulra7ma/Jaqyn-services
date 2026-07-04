@@ -21,7 +21,8 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next-settings/types/**/*.ts",
-    ".next-campaigns/types/**/*.ts"
+    ".next-campaigns/types/**/*.ts",
+    ".next-preview/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

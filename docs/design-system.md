@@ -147,6 +147,7 @@ Low-opacity, warm-tinted, tightly spread — a lift off paper, not a hard drop.
 | Soft | `0 8px 24px -16px rgba(46,36,29,.3)` | Raised cards, checklists |
 | Raised | `0 8px 22px -14px rgba(46,36,29,.45)` | Hoverable / tappable cards |
 | Float | `0 12px 28px -18px rgba(46,36,29,.5)` | Detail cards, popovers |
+| Card-float | `0 28px 50px -18px rgba(46,30,18,.5), 0 10px 20px -12px rgba(46,30,18,.42)` (`shadow-card-float`) | Physical floating cards (stacked cast + contact shadow) |
 | Accent | `0 12px 26px -8px rgba(160,73,42,.6)` | Primary buttons only |
 
 ---
@@ -257,6 +258,15 @@ skip the animation class entirely.
 | `animate-jq-pop` | `jq-pop` | ease 0.55s | Earn-moment patch centre pop |
 | `animate-jq-rise` | `jq-rise` | ease 0.3s | Sheet / overlay rise-in |
 | `animate-jq-rise-slow` | `jq-rise` | ease 0.4s | Delayed overlay content |
+| `animate-jq-float` | `jq-float` | ease-in-out 4s ∞ | Idle bob (8px) — QR-landing hero avatar |
+| `animate-jq-float-slow` | `jq-float` | ease-in-out 5.5s ∞ | Idle bob, out of phase — small floating chips |
+| `animate-jq-card-float` | `jq-card-float` | ease-in-out 6s ∞ | Physical-card suspension (12px bob + ±0.7° sway) — QR-landing reward card |
+| `animate-jq-dot` | `jq-dot` | ease-in-out 1.6s ∞ | Pulsing live/status dot (landing `jqDot` parity) |
+
+Physical floating cards pair `animate-jq-card-float` with the stacked
+`shadow-card-float` elevation and an inner gloss (a `bg-gradient-to-br
+from-white/30` sheen + a `top-0 h-px bg-white/40` edge highlight) so the face
+reads as a real, lit object — the same recipe as the landing hero cards.
 
 **Vessel fill** (loyalty/campaign progress bar height): not a keyframe — use Tailwind
 `transition-[height]` with arbitrary duration and easing:

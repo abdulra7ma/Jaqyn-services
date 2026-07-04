@@ -117,6 +117,26 @@ export function ScanIcon(p: Props) {
   );
 }
 
+export function QrIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <path d="M14 14h3v3h-3zM20 14v3M17 20h4M14 20h.01" />
+    </svg>
+  );
+}
+
+export function CameraIcon(p: Props) {
+  return (
+    <svg {...base} className={p.className}>
+      <path d="M8 6.5 9.5 4h5L16 6.5h3A2 2 0 0 1 21 8.5v9A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5v-9a2 2 0 0 1 2-2Z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </svg>
+  );
+}
+
 export function ChartIcon(p: Props) {
   return (
     <svg {...base} className={p.className}>

@@ -5,7 +5,7 @@
 import type { GalleryImage } from "../business/types";
 
 export type Role = "customer" | "business_owner" | "staff" | "admin";
-export type Language = "ru" | "en" | "ky";
+export type Language = "ru" | "en";
 
 export type User = {
   id: string;

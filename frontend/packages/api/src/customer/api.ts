@@ -212,7 +212,7 @@ export const customerApi: CustomerApi = {
             public_email: null,
             website_url: null,
             instagram_url: null,
-            logo_url: null,
+            logo_url: raw.business.logo_url ?? null,
             cover_url: null,
             glyph: "",
             accent_color: "#C25E3C",

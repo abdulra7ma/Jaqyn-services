@@ -20,6 +20,20 @@ Object.defineProperty(window, "matchMedia", {
     }) as unknown as MediaQueryList,
 });
 
+// jsdom has neither ResizeObserver nor IntersectionObserver; Embla (the swipe
+// carousel) constructs both on mount. No-op stubs let carousel screens render
+// without measuring layout.
+class ObserverStub {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+  takeRecords(): [] {
+    return [];
+  }
+}
+Object.defineProperty(window, "ResizeObserver", { writable: true, value: ObserverStub });
+Object.defineProperty(window, "IntersectionObserver", { writable: true, value: ObserverStub });
+
 // next/navigation is not available outside the Next runtime — stub the hooks the
 // screens use so they render under jsdom.
 vi.mock("next/navigation", () => ({

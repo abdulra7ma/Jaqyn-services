@@ -23,11 +23,12 @@ vi.mock("../_components/QrSheet", () => ({
   MyQrButton: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props}>{children}</button>,
 }));
 vi.mock("@jaqyn/api", () => {
-  const me = { user: { name: "Aida", phone: "+996 700", email: "aida@example.com", avatar: null, avatar_emoji: "", role: "customer" }, profile: { birthday: null, language: "en", marketing_opt_in: false } };
+  const me = { user: { name: "Aida", phone: "+996 700", email: "aida@example.com", avatar: null, avatar_emoji: "", role: "customer" }, profile: { birthday: null, language: "en", marketing_opt_in: false, profile_completed: true } };
   return {
   useMe: () => ({ data: me }),
   useUpdateProfile: () => ({ mutate: updateProfile, isPending: false }),
   useUploadAvatar: () => ({ mutate: vi.fn(), isPending: false }),
+  usePatches: () => ({ data: { patches: [] } }),
   useLoyaltyHomeSummary: () => ({
     data: {
       visit_streak_days: 4,
@@ -35,6 +36,7 @@ vi.mock("@jaqyn/api", () => {
       som_saved: "125.00",
       active_cards: 1,
     },
+    isLoading: false,
   }),
   };
 });
@@ -51,15 +53,21 @@ describe("ProfilePage", () => {
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
 
+    expect(screen.getByRole("button", { name: "common.save" })).toBeDisabled();
+    expect(screen.queryByLabelText("profile.name")).not.toBeInTheDocument();
+
+    const details = screen.getByRole("button", { name: "profile.details Aida · aida@example.com" });
+    fireEvent.click(details);
+    expect(screen.getByLabelText("profile.name")).toBeInTheDocument();
+
     await user.click(screen.getByRole("checkbox", { name: "profile.marketingAlerts" }));
     await user.click(screen.getByRole("button", { name: "common.save" }));
     expect(updateProfile).toHaveBeenCalledWith(
       expect.objectContaining({ marketing_opt_in: true }),
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
 
-    const details = screen.getByRole("button", { name: "profile.details" });
-    expect(screen.getByLabelText("profile.name")).toBeInTheDocument();
-    fireEvent.click(details);
-    expect(screen.queryByLabelText("profile.name")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "3 profile.rewardsEarned" })).toHaveAttribute("href", "/rewards");
+    expect(screen.getByRole("link", { name: "1 profile.cardsActive" })).toHaveAttribute("href", "/loyalty");
   });
 });

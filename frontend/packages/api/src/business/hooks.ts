@@ -1,10 +1,13 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { mergeCampaignIntoDetail } from "./adapters";
 import { businessApi } from "./api";
 import type {
+  BusinessCampaign,
   BusinessCampaignListParams,
   BusinessRegisterPayload,
+  CampaignDetailTabs,
   CampaignLifecycleAction,
   CampaignPayload,
   CatalogItemPayload,
@@ -15,6 +18,14 @@ import type {
   StaffInvitePayload,
   TeamRole,
 } from "./types";
+
+/** Write a flat mutation result into the tabbed detail cache without corrupting
+ * its shape. See {@link mergeCampaignIntoDetail}. */
+function patchCampaignDetail(qc: QueryClient, c: BusinessCampaign): void {
+  qc.setQueryData<CampaignDetailTabs>(bqk.campaign(c.id), (prev) =>
+    mergeCampaignIntoDetail(prev, c),
+  );
+}
 
 export const bqk = {
   me: ["business", "me"] as const,
@@ -320,7 +331,7 @@ export const useUpdateCampaign = () => {
     mutationFn: ({ id, patch }: { id: string; patch: Partial<CampaignPayload> }) =>
       businessApi.updateCampaign(id, patch),
     onSuccess: (c) => {
-      qc.setQueryData(bqk.campaign(c.id), c);
+      patchCampaignDetail(qc, c);
       qc.invalidateQueries({ queryKey: ["business", "campaigns"] });
     },
   });
@@ -332,7 +343,7 @@ export const useCampaignAction = () => {
     mutationFn: ({ id, action }: { id: string; action: CampaignLifecycleAction }) =>
       businessApi.campaignAction(id, action),
     onSuccess: (c) => {
-      qc.setQueryData(bqk.campaign(c.id), c);
+      patchCampaignDetail(qc, c);
       qc.invalidateQueries({ queryKey: ["business", "campaigns"] });
     },
   });
@@ -358,7 +369,7 @@ export const useUploadCampaignImage = (id: string) => {
   return useMutation({
     mutationFn: (file: File) => businessApi.uploadCampaignImage(id, file),
     onSuccess: (c) => {
-      qc.setQueryData(bqk.campaign(c.id), c);
+      patchCampaignDetail(qc, c);
       qc.invalidateQueries({ queryKey: ["business", "campaigns"] });
       qc.invalidateQueries({ queryKey: bqk.campaignSocialPost(id) });
     },

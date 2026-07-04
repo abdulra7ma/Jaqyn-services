@@ -132,8 +132,8 @@ export function HeroCard({ hero }: { hero: HeroResult }) {
           </div>
         )}
         <div className="relative mt-auto flex items-end justify-between gap-3 pt-6">
-          <span className="text-sm font-bold">{hero.rewardLabel}</span>
-          <span className="inline-flex min-h-12 min-w-28 items-center justify-center rounded-pill bg-white px-5 py-3 text-center text-sm font-bold leading-tight text-ink shadow-card">{t("home.useNow")} ›</span>
+          <span className="min-w-0 text-sm font-bold">{hero.rewardLabel}</span>
+          <span className="inline-flex min-h-12 min-w-28 flex-none items-center justify-center rounded-pill bg-white px-5 py-3 text-center text-sm font-bold leading-tight text-ink shadow-card">{t("home.useNow")} ›</span>
         </div>
       </Link>
     );
@@ -181,8 +181,8 @@ export function HeroCard({ hero }: { hero: HeroResult }) {
         </div>
       )}
       <div className="relative mt-auto flex items-end justify-between gap-3 pt-6 text-sm font-semibold text-white/90">
-        <span>{open ? t("nearby.open") : t("nearby.closed")} · {hero.businessArea || hero.business}</span>
-        <span className="inline-flex min-h-12 min-w-32 items-center justify-center rounded-pill bg-white px-5 py-3 text-center font-bold leading-tight text-ink shadow-card">
+        <span className="min-w-0">{open ? t("nearby.open") : t("nearby.closed")} · {hero.businessArea || hero.business}</span>
+        <span className="inline-flex min-h-12 min-w-32 flex-none items-center justify-center rounded-pill bg-white px-5 py-3 text-center font-bold leading-tight text-ink shadow-card">
           {t(hero.source === "campaign" ? "home.openCampaign" : "home.openCard")} ›
         </span>
       </div>
@@ -571,7 +571,7 @@ export function HomeHeroCarousel({ heroes }: { heroes: HeroResult[] }) {
             carouselIndex(node.scrollLeft, node.clientWidth, heroes.length),
           );
         }}
-        className="flex cursor-grab snap-x snap-mandatory select-none gap-3 overflow-x-auto touch-pan-y active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex cursor-grab snap-x snap-mandatory select-none gap-3 overflow-x-auto touch-pan-x active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {heroes.map((hero, index) => (
           <li key={`${hero.kind}-${index}`} className="w-full flex-none snap-start">
@@ -727,9 +727,11 @@ export function ExploreHub() {
           <Link
             key={href}
             href={href}
-            className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border border-line bg-card px-1 text-center shadow-card transition active:scale-95"
+            className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border border-line bg-card px-1 text-center shadow-card transition active:scale-95"
           >
-            <Icon className="h-5 w-5 text-brand" />
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand/10">
+              <Icon className="h-6 w-6 text-brand" />
+            </span>
             <span className="text-xs font-bold leading-tight text-ink">{t(key)}</span>
           </Link>
         ))}

@@ -68,6 +68,7 @@ export function adaptBusinessCampaign(raw: Raw): BusinessCampaign {
   return {
     id: raw.id,
     glyph: raw.glyph ?? "",
+    image: typeof raw.image === "string" ? raw.image : null,
     name: raw.name,
     description: raw.description ?? "",
     type: fromBackendCampaignType(raw.campaign_type ?? raw.type),
@@ -175,6 +176,22 @@ export function adaptCampaignDetailTabs(raw: Raw): CampaignDetailTabs {
       type_stats: adaptTypeStats(analytics.type_stats),
     },
   };
+}
+
+/** Merge a flat mutation result into the cached tabbed detail.
+ *
+ * Campaign mutations (action/update/image-upload) resolve to a flat
+ * `BusinessCampaign`, but the detail query caches the tabbed
+ * `CampaignDetailTabs`. Overwriting the cache with the flat object corrupts the
+ * shape and crashes the detail reader (`tabs.overview.type`). This patches only
+ * the `overview`/`settings` tabs and keeps the rest. Returns `prev` unchanged
+ * when nothing is cached yet (so a fresh page fetches instead of rendering a
+ * half-built object). */
+export function mergeCampaignIntoDetail(
+  prev: CampaignDetailTabs | undefined,
+  c: BusinessCampaign,
+): CampaignDetailTabs | undefined {
+  return prev ? { ...prev, overview: c, settings: c } : prev;
 }
 
 export function adaptParticipant(raw: Raw): CampaignParticipantRow {

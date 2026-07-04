@@ -137,6 +137,30 @@ Railway containers are **ephemeral** — uploads vanish on every redeploy. Push 
    ```
 The `USE_S3` branch in `backend/config/settings/base.py` wires this; media URLs become `https://pub-<hash>.r2.dev/...`.
 
+5. **CORS on the bucket — required, not optional.** Media URLs are cross-origin
+   to the app (`pub-<hash>.r2.dev` ≠ `app.jaqyn.kg`). The app loads some images
+   with `crossOrigin="anonymous"` and renders them to a canvas (`html-to-image`)
+   for the social-share **download/export**. Without a CORS policy the browser
+   blocks both the image load and the canvas export (`No 'Access-Control-Allow-Origin'
+   header`). Bucket → **Settings → CORS Policy → Add**, paste:
+   ```json
+   [
+     {
+       "AllowedOrigins": ["https://app.jaqyn.kg"],
+       "AllowedMethods": ["GET", "HEAD"],
+       "AllowedHeaders": ["*"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
+   Add any other origins that render media (e.g. `https://jaqyn.kg` landing) to
+   `AllowedOrigins`. The r2.dev public domain honors this bucket policy.
+
+> **r2.dev is Cloudflare's rate-limited *dev* domain.** Fine for launch; for
+> production traffic bind a **custom R2 domain** (Bucket → Settings → Custom
+> Domains) and set `AWS_S3_CUSTOM_DOMAIN` to it — same CORS policy applies. A
+> custom domain also removes the r2.dev rate cap on downloads.
+
 > Throwaway demo only? Skip R2 and attach a Railway **Volume** at `/app/media` on the web service. But a volume pins the service to one instance and blocks zero-downtime deploys.
 
 ---
@@ -146,6 +170,8 @@ The `USE_S3` branch in `backend/config/settings/base.py` wires this; media URLs 
 The Vite landing is a static build. Either:
 - **Railway**: **+ New** → repo → Root Directory `landing`, build `npm run build`, serve `dist` (Railway static). Generate a domain.
 - Or skip it for now — the Next.js app already covers the product.
+
+> **Must set before building**: `VITE_APP_URL` = the deployed frontend host (mirrors backend `FRONTEND_URL`), `VITE_API_URL` = the backend host (or empty if same-origin). Vite bakes these in at `npm run build` — they're compiled into the static bundle, not read at runtime. Missing `VITE_APP_URL` silently falls back to `http://localhost:3000` (see `landing/.env.example`), so CTAs like "Explore Deals" point at localhost in prod. Adding the var to Railway after the fact does nothing until you trigger a redeploy.
 
 ---
 
@@ -164,6 +190,7 @@ The Vite landing is a static build. Either:
 - [ ] `DJANGO_ALLOWED_HOSTS` + `DJANGO_CSRF_TRUSTED_ORIGINS` = the web service's `*.up.railway.app` host
 - [ ] `API_PROXY_TARGET` (frontend) = web service URL; `FRONTEND_URL` (backend) = frontend service URL
 - [ ] `USE_S3=true` and a test upload lands in R2 (URL is `pub-...r2.dev`, not local)
+- [ ] R2 bucket **CORS policy** allows `https://app.jaqyn.kg` GET (else share-card image + download break — see §5.5)
 - [ ] `/api/health/` returns 200 (web healthcheck green)
 - [ ] worker log shows Celery + beat started
 - [ ] superuser: web service → **Shell** → `python manage.py createsuperuser`

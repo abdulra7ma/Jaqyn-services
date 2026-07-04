@@ -72,6 +72,7 @@ Cross-cutting docs live in `docs/`; each deployable has canonical docs under `ba
 | [Campaigns Liveness Sweep — QA Report](qa/campaigns-liveness-report.md) | qa | active |
 | [Onboarding / Activation / Landing — Production Readiness Audit](qa/onboarding-production-audit.md) | qa | active |
 | [Conventions](conventions/CONVENTIONS.md) | reference | active |
+| [UX Writing — voice, wording, and RU/EN copy rules](conventions/ux-writing.md) | reference | active |
 | [Data Schemas](schemas/SCHEMAS.md) | reference | active |
 | [Repository Structure](architecture/STRUCTURE.md) | reference | active |
 | [Campaign Rewards — Implementation Plan](specs/campaign-rewards-plan.md) | spec | draft |

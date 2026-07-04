@@ -350,6 +350,10 @@ export type BusinessCampaignRule = {
 export type BusinessCampaign = {
   id: string;
   glyph: string;
+  // Uploaded social-share image (POST /api/business/campaigns/{id}/image/).
+  // Absolute R2 URL in prod, relative `/media/...` in dev; null when unset.
+  // Doubles as the campaign icon on the detail hero when present.
+  image: string | null;
   name: string;
   description: string;
   type: BusinessCampaignType;

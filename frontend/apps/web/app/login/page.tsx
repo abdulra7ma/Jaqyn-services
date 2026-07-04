@@ -66,7 +66,7 @@ function LoginFlow() {
           <div className="flex h-14 w-14 items-center justify-center rounded-[18px] bg-brand-gradient font-display text-3xl font-extrabold text-brand-fg shadow-glow">
             J
           </div>
-          <h1 className="mt-4 font-display text-2xl font-bold text-ink sm:text-[27px]">Welcome to Jaqyn</h1>
+          <h1 className="mt-4 font-display text-2xl font-bold text-ink sm:text-[27px]">{t("home.guestTitle")}</h1>
           <p className="mt-1.5 text-sm text-subtle">{t("auth.unified.subtitle")}</p>
         </div>
 
@@ -170,32 +170,32 @@ function LoginFlow() {
           {/* social auth — coming soon */}
           <div className="mt-6 flex items-center gap-3">
             <span className="h-px flex-1 bg-line" />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-subtle">or</span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-subtle">{t("auth.or")}</span>
             <span className="h-px flex-1 bg-line" />
           </div>
           <div className="mt-4 flex flex-col gap-2.5">
             {[
-              { key: "google", label: "Continue with Google", glyph: "G" },
-              { key: "apple", label: "Continue with Apple", glyph: "" },
+              { key: "google", labelKey: "signup.option.google", glyph: "G" },
+              { key: "apple", labelKey: "signup.option.apple", glyph: "" },
             ].map((p) => (
               <button
                 key={p.key}
                 type="button"
                 disabled
-                title="Social sign-in is coming soon"
+                title={t("auth.social.comingSoon")}
                 className="flex cursor-not-allowed items-center justify-center gap-2.5 rounded-xl border border-line bg-card/60 py-3 text-sm font-semibold text-subtle"
               >
                 <span className="font-display text-[15px]">{p.glyph}</span>
-                {p.label}
+                {t(p.labelKey)}
                 <span className="ml-1 rounded-full bg-board/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.04em] text-subtle">
-                  Soon
+                  {t("auth.social.soon")}
                 </span>
               </button>
             ))}
           </div>
         </div>
 
-        <p className="mt-5 text-center text-[12.5px] text-subtle">Google &amp; other social sign-in are coming soon.</p>
+        <p className="mt-5 text-center text-[12.5px] text-subtle">{t("auth.social.comingSoon")}</p>
         <p className="mt-2 text-center text-[12.5px] text-subtle">
           {t("auth.noAccount")}{" "}
           <Link href="/signup" className="font-semibold text-brand hover:underline">
