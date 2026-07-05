@@ -337,6 +337,44 @@ def test_public_business_detail_includes_catalog_rewards_and_group_offers(api_cl
     assert data["group_offers"][0]["reward_description"] == "15% off"
 
 
+def test_public_catalog_section_uses_custom_label_and_exposes_item_photo(api_client):
+    """A custom category label becomes a section title and an item photo is exposed.
+
+    Guards the contract the owner catalog editors + customer sheet rely on: any
+    typed-in label groups items into a section, and an uploaded item image surfaces
+    as `image_url`.
+    """
+    from io import BytesIO
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    business = Business.objects.create(
+        **business_payload("Corner Store"),
+        status=Business.Status.APPROVED,
+        visibility_status=Business.VisibilityStatus.PUBLISHED,
+    )
+    buf = BytesIO()
+    Image.new("RGB", (16, 16), "#C25E3C").save(buf, format="PNG")
+    CatalogItem.objects.create(
+        business=business,
+        module="products",
+        name="Reusable Cup",
+        category="Weekend Specials",  # a brand-new custom label
+        price="450 c",
+        image=SimpleUploadedFile("cup.png", buf.getvalue(), content_type="image/png"),
+    )
+
+    res = api_client.get(f"/api/businesses/{business.id}/")
+
+    assert res.status_code == 200
+    section = res.data["data"]["catalog_sections"][0]
+    assert section["title"] == "Weekend Specials"  # custom label → section title
+    item = section["items"][0]
+    assert item["module"] == "products"
+    assert item["image_url"] is not None  # uploaded photo exposed to customers
+
+
 def test_admin_approves_rejects_and_disables_businesses(api_client):
     owner = User.objects.create_user(
         phone="+996700111225", role=User.Role.BUSINESS_OWNER, is_phone_verified=True
