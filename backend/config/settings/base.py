@@ -288,6 +288,24 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# --- Security headers (Phase C) ---
+
+# Prevents browsers from MIME-sniffing a response away from the declared
+# Content-Type, closing a vector where an uploaded file served with a wrong
+# type could be interpreted as executable HTML/JS.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# Forbids the site from being embedded in any <frame>/<iframe>/<object>,
+# mitigating classic and drag-and-drop clickjacking attacks.
+# XFrameOptionsMiddleware (above) reads this setting and injects the header.
+X_FRAME_OPTIONS = "DENY"
+
+# Instructs browsers to send the full URL only to same-origin navigations and
+# only the origin (no path/query) to cross-origin HTTPS targets, hiding path
+# and query parameters (which may contain tokens) from third-party origins.
+# Matches the stricter per-route override on /business/activate in next.config.js.
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
