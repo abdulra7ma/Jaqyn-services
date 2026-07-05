@@ -945,10 +945,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "staff.redeem": "Погасить",
     "staff.redeem.done": "Погашено",
     "staff.manual.title": "Ручной код",
-    "staff.groups.title": "Активные группы",
-    "staff.groups.empty": "Нет групп",
-    "staff.groups.verify": "Проверить",
-    "staff.groups.redeem": "Выдать награду",
     "staff.activity.title": "Недавняя активность",
     // F3 filter chips
     "staff.activity.filter.all": "Все",
@@ -986,11 +982,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "staff.redeem.valid": "Действ.",
     "staff.redeem.emptyTitle": "Нет награды к выдаче",
     "staff.redeem.emptyHint": "Отсканируйте QR награды или введите код клиента.",
-    "staff.groups.arriving": "Группа сейчас придёт",
-    "staff.groups.required": "Требуется",
-    "staff.groups.checkedIn": "отметились",
-    "staff.groups.complete": "Отметить всех и завершить",
-    "staff.groups.redeemed": "Награда группы выдана",
     "staff.activity.emptyTitle": "Пока пусто",
 
     // --- staff-scan loyalty (FOUNDATION) ---
@@ -2821,10 +2812,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "staff.redeem": "Redeem",
     "staff.redeem.done": "Redeemed",
     "staff.manual.title": "Manual code",
-    "staff.groups.title": "Active groups",
-    "staff.groups.empty": "No groups",
-    "staff.groups.verify": "Verify",
-    "staff.groups.redeem": "Give reward",
     "staff.activity.title": "Recent activity",
     // F3 filter chips
     "staff.activity.filter.all": "All",
@@ -2862,11 +2849,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "staff.redeem.valid": "Valid",
     "staff.redeem.emptyTitle": "No reward pending",
     "staff.redeem.emptyHint": "Scan a customer's reward QR or enter their code to redeem.",
-    "staff.groups.arriving": "Group arriving now",
-    "staff.groups.required": "Required",
-    "staff.groups.checkedIn": "checked in",
-    "staff.groups.complete": "Mark all present & complete",
-    "staff.groups.redeemed": "Group reward redeemed",
     "staff.activity.emptyTitle": "Nothing yet",
 
     // --- staff-scan loyalty (FOUNDATION) ---

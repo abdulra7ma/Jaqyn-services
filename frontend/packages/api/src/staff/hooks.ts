@@ -26,9 +26,6 @@ export const useRecentActivity = (enabled = true, kind?: ActivityEventKind) =>
     enabled,
   });
 
-export const useStaffScan = () =>
-  useMutation({ mutationFn: (token: string) => staffApi.scan(token) });
-
 // First-login profile completion. Invalidates the shared `me` query so the
 // StaffShell gate re-reads profile_completed and stops redirecting to onboarding.
 export const useCompleteStaffProfile = () => {
@@ -39,26 +36,7 @@ export const useCompleteStaffProfile = () => {
   });
 };
 
-export const useStaffRedeem = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: { code?: string; token?: string }) => staffApi.redeem(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: sqk.activityPrefix }),
-  });
-};
-
-export const useStaffRedeemManual = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (code: string) => staffApi.redeemManual(code),
-    onSuccess: () => qc.invalidateQueries({ queryKey: sqk.activityPrefix }),
-  });
-};
-
 // ---- campaign-aware scan (apps.campaigns — plan §3) ----
-
-export const useScanCustomerForCampaigns = () =>
-  useMutation({ mutationFn: (token: string) => staffApi.scanCustomerForCampaigns(token) });
 
 export const useResolveScan = () =>
   useMutation({ mutationFn: (token: string) => staffApi.resolveScan(token) });

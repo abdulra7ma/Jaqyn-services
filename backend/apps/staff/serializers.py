@@ -6,10 +6,6 @@ from apps.staff.models import StaffMember
 from apps.staff.services import ACTIVITY_KINDS
 
 
-class StaffScanSerializer(serializers.Serializer):
-    token = serializers.CharField(max_length=128)
-
-
 class StaffTodayStatsSerializer(serializers.Serializer):
     """Serializes :class:`apps.staff.services.StaffTodayStats`."""
 

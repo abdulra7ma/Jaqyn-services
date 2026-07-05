@@ -8,7 +8,6 @@ import { session } from "../customer/session";
 import {
   adaptConfirmVisitResult,
   adaptRedeemResult,
-  adaptScanCustomerResult,
   adaptScanDispatch,
   adaptUnifiedScan,
   adaptVoucherScanResult,
@@ -22,11 +21,8 @@ import type {
   ConfirmSocialResult,
   RecentActivityPage,
   RedeemCampaignVoucherResult,
-  ScanCustomerResult,
   ScanDispatchResult,
-  ScanResult,
   UnifiedScanResult,
-  StaffRedemption,
   StaffTodayStats,
   TodayCode,
 } from "./types";
@@ -54,11 +50,6 @@ export const staffApi = {
     api.post<{ profile_completed: boolean }>("/api/staff/profile/complete/", body),
   todayCode: () => api.get<TodayCode>("/api/staff/today-code/"),
   stats: () => api.get<StaffTodayStats>("/api/staff/stats/"),
-  scan: (token: string) => api.post<ScanResult>("/api/staff/scan/", { token }),
-  redeem: (body: { code?: string; token?: string }) =>
-    api.post<StaffRedemption>("/api/staff/redeem/", body),
-  redeemManual: (code: string) =>
-    api.post<StaffRedemption>("/api/staff/redeem/manual-code/", { code }),
   recentActivity: (kind?: ActivityEventKind) =>
     api.get<RecentActivityPage>(
       kind
@@ -67,10 +58,6 @@ export const staffApi = {
     ),
 
   // ---- campaign-aware scan (apps.campaigns — plan §3) ----
-  scanCustomerForCampaigns: (token: string): Promise<ScanCustomerResult> =>
-    api
-      .post<any>("/api/staff/campaigns/scan-customer/", { token })
-      .then(adaptScanCustomerResult),
   // Read-only resolve of a scanned token → which preview to open. One round-trip
   // replaces the old visit/redeem mode toggle; no writes happen here.
   resolveScan: (token: string): Promise<ScanDispatchResult> =>
