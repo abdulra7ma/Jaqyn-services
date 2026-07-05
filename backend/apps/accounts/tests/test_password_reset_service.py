@@ -22,6 +22,9 @@ def _make_user(email="user@example.com", password="oldpassword"):
 
 
 def _issue(email="user@example.com", ip="1.2.3.4"):
+    # Drop the 60s resend cooldown so these tests can issue repeatedly; the
+    # cooldown itself is covered in test_security_hardening.py.
+    cache.delete(f"pwreset-resend:{email.lower()}")
     with patch("apps.accounts.tasks.send_password_reset_otp_task.delay") as delay:
         issue_password_reset_otp(email=email, ip_address=ip)
         return delay

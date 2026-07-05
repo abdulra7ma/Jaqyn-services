@@ -37,6 +37,21 @@ CAMPAIGN_EVENTS = {
 }
 
 
+# Payload keys whose values are credentials (an OTP code IS a login credential)
+# or raw PII (phone/email). They are redacted from the notification log line;
+# the NotificationLog DB row keeps the full payload — the DB is
+# access-controlled, log pipelines generally are not.
+SENSITIVE_PAYLOAD_KEYS = frozenset({"code", "phone", "email"})
+
+
+def _redacted(payload: dict) -> dict:
+    """Copy of ``payload`` with sensitive values replaced by ``***`` for logging."""
+    return {
+        key: ("***" if key in SENSITIVE_PAYLOAD_KEYS else value)
+        for key, value in payload.items()
+    }
+
+
 class Notifier:
     provider = "dev-log"
 
@@ -68,7 +83,7 @@ class Notifier:
             self.provider,
             channel,
             event,
-            payload,
+            _redacted(payload),
         )
         return NotificationLog.objects.create(
             recipient=recipient,

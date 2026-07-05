@@ -9,9 +9,21 @@ from core.email_i18n import OTP_EMAIL_STRINGS, PASSWORD_RESET_EMAIL_STRINGS, res
 logger = logging.getLogger(__name__)
 
 
-@shared_task
-def send_otp(phone, code):
-    logger.info("dev_otp phone=%s code=%s", phone, code)
+@shared_task(max_retries=3, default_retry_delay=5, time_limit=30)
+def send_otp(phone: str, code: str) -> str:
+    """Dispatch an SMS OTP to ``phone`` via the notifier; returns the notification id.
+
+    The code is NEVER logged — an OTP in a log line is a login credential for
+    anyone with log access. A DEBUG-gated breadcrumb with a masked phone is the
+    only trace this task leaves.
+    """
+    from django.conf import settings
+
+    from apps.accounts.services import mask_identifier
+
+    if settings.DEBUG:
+        # Dev-only visibility that a send happened; masked phone, code omitted.
+        logger.debug("dev_otp_dispatch phone=%s", mask_identifier(phone))
     return str(notifier.send(None, "sms", "otp", {"phone": phone, "code": code}).id)
 
 

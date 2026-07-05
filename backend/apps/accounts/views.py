@@ -1,5 +1,6 @@
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -70,6 +71,10 @@ def request_ip(request):
 
 class RequestOTPView(APIView):
     permission_classes = [AllowAny]
+    # Scoped throttle replaces the anon/user defaults — deliberately stricter,
+    # since every request costs an SMS. Same pattern on the auth views below.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_otp_request"
 
     def post(self, request):
         serializer = RequestOTPSerializer(data=request.data)
@@ -82,6 +87,8 @@ class RequestOTPView(APIView):
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_otp_verify"
 
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
@@ -92,6 +99,8 @@ class VerifyOTPView(APIView):
 
 class RequestEmailOTPView(APIView):
     permission_classes = [AllowAny]  # Public signup endpoint — no token required
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_otp_request"
 
     def post(self, request):
         serializer = RequestEmailOTPSerializer(data=request.data)
@@ -108,6 +117,8 @@ class RequestEmailOTPView(APIView):
 
 class VerifyEmailOTPView(APIView):
     permission_classes = [AllowAny]  # Public signup endpoint — no token required
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_otp_verify"
 
     def post(self, request):
         serializer = VerifyEmailOTPSerializer(data=request.data)
@@ -121,6 +132,8 @@ class VerifyEmailOTPView(APIView):
 
 class GoogleAuthView(APIView):
     permission_classes = [AllowAny]  # Public — the verified ID token is the credential
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_login"
 
     def post(self, request):
         serializer = GoogleAuthSerializer(data=request.data)
@@ -131,6 +144,8 @@ class GoogleAuthView(APIView):
 
 class PasswordLoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_login"
 
     def post(self, request):
         serializer = PasswordLoginSerializer(data=request.data)
@@ -143,6 +158,8 @@ class PasswordLoginView(APIView):
 
 class RequestPasswordResetView(APIView):
     permission_classes = [AllowAny]  # Public — anyone can request a reset code
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_password_reset"
 
     def post(self, request):
         serializer = RequestPasswordResetSerializer(data=request.data)
@@ -158,6 +175,9 @@ class RequestPasswordResetView(APIView):
 
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]  # Public — completes reset with the emailed code
+    # Verify-tier scope: completing a reset is a code-guessing surface, same as OTP verify.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_otp_verify"
 
     def post(self, request):
         serializer = ResetPasswordSerializer(data=request.data)
@@ -172,6 +192,8 @@ class ResetPasswordView(APIView):
 
 class LoginResolveView(APIView):
     permission_classes = [AllowAny]  # Public — determines auth method before credentials are sent
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_resolve"
 
     def post(self, request):
         serializer = LoginResolveSerializer(data=request.data)

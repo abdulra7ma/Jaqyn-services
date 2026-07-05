@@ -3,6 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.core.cache import cache
+from django.utils.crypto import constant_time_compare
 from google.auth.exceptions import GoogleAuthError
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
@@ -15,6 +16,32 @@ from core.email_i18n import resolve_language
 from core.exceptions import JaqynAPIException
 from core.logging import emit_event
 from core.ratelimit import clear_limit, hit_limit
+
+# Minimum gap between two OTP/reset-code sends to the same identifier. 60s
+# balances SMS/email cost and code-spam prevention against a user who missed
+# the message and wants to retry — a minute is the shortest wait that still
+# makes automated resend-hammering uneconomical.
+OTP_RESEND_COOLDOWN_SECONDS = 60
+
+
+def mask_identifier(value: str) -> str:
+    """Mask a phone or email for logs/analytics, keeping only a short tail.
+
+    Phones keep the leading country-code chunk and the last 4 digits
+    (``+996700123456`` -> ``+996***3456``); short values keep only the last 4.
+    Emails mask the local part down to its last 4 chars and keep the domain
+    (``dawoud@gmail.com`` -> ``***woud@gmail.com``). Never reversible from the
+    output alone — safe to emit in events and DEBUG logs.
+    """
+    if "@" in value:
+        local, _, domain = value.partition("@")
+        # Keep at most the last 4 chars of the local part; a 4-char-or-shorter
+        # local part keeps only its final char so something is always masked.
+        visible = local[-4:] if len(local) > 4 else local[-1:]
+        return f"***{visible}@{domain}"
+    if len(value) > 8:
+        return f"{value[:4]}***{value[-4:]}"
+    return f"***{value[-4:]}"
 
 
 def _resolve_user_email_language(user: User | None, requested_language: str) -> str:
@@ -31,15 +58,27 @@ def _resolve_user_email_language(user: User | None, requested_language: str) -> 
     return resolve_language(requested_language)
 
 
-def otp_key(phone):
+def otp_key(phone: str) -> str:
     return f"otp:{phone}"
 
 
-def otp_attempt_key(phone):
+def otp_attempt_key(phone: str) -> str:
     return f"otp-attempts:{phone}"
 
 
-def issue_otp(phone, ip_address):
+def issue_otp(phone: str, ip_address: str | None) -> str:
+    """Issue a 6-digit SMS OTP for ``phone`` and return the request_id.
+
+    Guards, in order: a 60s per-phone resend cooldown
+    (OTP_RESEND_COOLDOWN_SECONDS — checked first so rapid retries don't burn
+    the hourly allowance), then hourly per-phone and per-IP limits
+    (OTP_RATE_LIMIT_PER_PHONE / _PER_IP). Any guard tripping raises
+    RATE_LIMITED (429). On success the code + request_id are cached under
+    OTP_TTL_SECONDS, prior attempt counts are reset, and the SMS is dispatched
+    asynchronously.
+    """
+    if hit_limit(f"otp-resend:{phone}", 1, OTP_RESEND_COOLDOWN_SECONDS):
+        raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
     if hit_limit(f"otp-phone:{phone}", settings.OTP_RATE_LIMIT_PER_PHONE, 3600):
         raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
     if ip_address and hit_limit(f"otp-ip:{ip_address}", settings.OTP_RATE_LIMIT_PER_IP, 3600):
@@ -53,7 +92,17 @@ def issue_otp(phone, ip_address):
     return request_id
 
 
-def verify_otp(phone, code):
+def verify_otp(phone: str, code: str) -> tuple[User, bool, str, str]:
+    """Verify a phone OTP and return (user, is_new, access_token, refresh_token).
+
+    The submitted code is checked against the cached one with
+    ``constant_time_compare`` so response timing can't leak how many leading
+    digits matched. Missing cache entry -> OTP_EXPIRED; >5 attempts ->
+    RATE_LIMITED; mismatch -> INVALID_OTP. On success creates the user (role
+    CUSTOMER) if new, marks the phone verified, ensures a CustomerProfile for
+    customers, emits customer_signed_up (masked phone) for new users, clears
+    the cached code + attempts, and returns fresh JWTs.
+    """
     dev_otp = getattr(settings, "DEV_LOGIN_OTP", "")
     if dev_otp and code == dev_otp:
         # Dev static OTP — accept without the cache/attempt checks. Gated on the
@@ -69,7 +118,7 @@ def verify_otp(phone, code):
         if attempts > 5:
             raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
 
-        if payload["code"] != code:
+        if not constant_time_compare(payload["code"], code):
             raise JaqynAPIException("INVALID_OTP", status_code=status.HTTP_400_BAD_REQUEST)
 
     user, created = User.objects.get_or_create(phone=phone, defaults={"role": User.Role.CUSTOMER})
@@ -80,7 +129,8 @@ def verify_otp(phone, code):
     if user.role == User.Role.CUSTOMER:
         CustomerProfile.objects.get_or_create(user=user)
     if created:
-        emit_event("customer_signed_up", user_id=str(user.id), phone=phone)
+        # Masked: raw phone numbers are PII and must not land in event logs.
+        emit_event("customer_signed_up", user_id=str(user.id), phone=mask_identifier(phone))
 
     clear_limit(otp_key(phone))
     clear_limit(otp_attempt_key(phone))
@@ -100,7 +150,9 @@ def issue_email_otp(email: str, ip_address: str | None, language: str = "ru") ->
     """Issue a 6-digit OTP for email-based sign-in/signup, mirroring ``issue_otp`` for phone.
 
     Stores just the code and request_id in Redis keyed by email with OTP_TTL_SECONDS
-    TTL — no name/password is collected at this stage. Rate-limited to
+    TTL — no name/password is collected at this stage. Guarded by a 60s
+    per-email resend cooldown (OTP_RESEND_COOLDOWN_SECONDS, checked first so
+    rapid retries don't burn the hourly allowance), then rate-limited to
     OTP_RATE_LIMIT_PER_PHONE per hour per email and OTP_RATE_LIMIT_PER_IP per IP.
     Returns a request_id the client echoes back on verification. Email is normalized
     to lowercase so cache keys and stored addresses are consistent. Unknown emails
@@ -118,6 +170,8 @@ def issue_email_otp(email: str, ip_address: str | None, language: str = "ru") ->
     existing_user = User.objects.filter(email__iexact=email).select_related("customer_profile").first()
     if existing_user is not None and existing_user.is_google_account:
         raise JaqynAPIException("GOOGLE_ACCOUNT_ONLY", status_code=status.HTTP_401_UNAUTHORIZED)
+    if hit_limit(f"email-otp-resend:{email}", 1, OTP_RESEND_COOLDOWN_SECONDS):
+        raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
     if hit_limit(f"email-otp-email:{email}", settings.OTP_RATE_LIMIT_PER_PHONE, 3600):
         raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
     if ip_address and hit_limit(f"email-otp-ip:{ip_address}", settings.OTP_RATE_LIMIT_PER_IP, 3600):
@@ -139,7 +193,9 @@ def verify_email_otp(email: str, code: str) -> tuple[User, bool, str, str]:
     no usable password) if they don't exist yet; marks is_email_verified=True;
     creates CustomerProfile for new customers with profile_completed left False
     (name isn't collected at this stage — the ``/signup/complete`` gate handles
-    it); emits customer_signed_up for new users. Clears OTP from cache on success.
+    it); emits customer_signed_up (masked email) for new users. Clears OTP from
+    cache on success. The submitted code is checked with ``constant_time_compare``
+    so response timing can't leak how many leading digits matched.
     Raises JaqynAPIException on expired/invalid/rate-limited. If a user with this
     email already exists, they are logged in without overwriting their existing
     profile data. Email is normalized to lowercase so the cache lookup, DB query,
@@ -155,7 +211,7 @@ def verify_email_otp(email: str, code: str) -> tuple[User, bool, str, str]:
     if attempts > 5:
         raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
 
-    if payload["code"] != code:
+    if not constant_time_compare(payload["code"], code):
         raise JaqynAPIException("INVALID_OTP", status_code=status.HTTP_400_BAD_REQUEST)
 
     existing = User.objects.filter(email__iexact=email).first()
@@ -173,7 +229,8 @@ def verify_email_otp(email: str, code: str) -> tuple[User, bool, str, str]:
         CustomerProfile.objects.get_or_create(user=user)
 
     if is_new:
-        emit_event("customer_signed_up", user_id=str(user.id), email=email)
+        # Masked: raw emails are PII and must not land in event logs.
+        emit_event("customer_signed_up", user_id=str(user.id), email=mask_identifier(email))
 
     cache.delete(email_otp_key(email))
     cache.delete(email_otp_attempt_key(email))
@@ -241,7 +298,8 @@ def authenticate_google(id_token_str: str) -> tuple[User, bool, str, str]:
         CustomerProfile.objects.get_or_create(user=user)
 
     if is_new:
-        emit_event("customer_signed_up", user_id=str(user.id), email=email)
+        # Masked: raw emails are PII and must not land in event logs.
+        emit_event("customer_signed_up", user_id=str(user.id), email=mask_identifier(email))
 
     refresh = RefreshToken.for_user(user)
     return user, is_new, str(refresh.access_token), str(refresh)
@@ -258,7 +316,10 @@ def pwreset_otp_attempt_key(email: str) -> str:
 def issue_password_reset_otp(email: str, ip_address: str | None, language: str = "ru") -> None:
     """Issue a 6-digit password-reset code to an email address.
 
-    Rate-limited per email and per IP (OTP_RATE_LIMIT_PER_PHONE / _PER_IP, 3600s).
+    Guarded by a 60s per-email resend cooldown (OTP_RESEND_COOLDOWN_SECONDS,
+    checked first — before the account lookup — so the cooldown behaves
+    identically for existing and unknown emails), then rate-limited per email
+    and per IP (OTP_RATE_LIMIT_PER_PHONE / _PER_IP, 3600s).
     To avoid account enumeration this returns normally whether or not an account
     exists: a code is only generated, cached, and emailed when a user with a
     usable password is found for the (lowercased) email; otherwise it is a no-op.
@@ -267,6 +328,8 @@ def issue_password_reset_otp(email: str, ip_address: str | None, language: str =
     saved CustomerProfile.language wins over it, same as ``issue_email_otp``.
     """
     email = email.lower()
+    if hit_limit(f"pwreset-resend:{email}", 1, OTP_RESEND_COOLDOWN_SECONDS):
+        raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
     if hit_limit(f"pwreset-email:{email}", settings.OTP_RATE_LIMIT_PER_PHONE, 3600):
         raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
     if ip_address and hit_limit(f"pwreset-ip:{ip_address}", settings.OTP_RATE_LIMIT_PER_IP, 3600):
@@ -293,7 +356,9 @@ def reset_password(email: str, code: str, new_password: str) -> tuple[User, str,
     """Verify a password-reset code and set a new password. Returns (user, access, refresh).
 
     Reads the cached code for the (lowercased) email. Missing -> OTP_EXPIRED.
-    Counts attempts; >5 -> RATE_LIMITED. Wrong code -> INVALID_OTP. On success sets
+    Counts attempts; >5 -> RATE_LIMITED. The code is checked with
+    ``constant_time_compare`` (no timing side channel); wrong code ->
+    INVALID_OTP. On success sets
     the new password, clears the cached code + attempts, and returns fresh JWTs so
     the caller is logged straight in.
     """
@@ -307,7 +372,7 @@ def reset_password(email: str, code: str, new_password: str) -> tuple[User, str,
     if attempts > 5:
         raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
 
-    if payload["code"] != code:
+    if not constant_time_compare(payload["code"], code):
         raise JaqynAPIException("INVALID_OTP", status_code=status.HTTP_400_BAD_REQUEST)
 
     user = User.objects.filter(email__iexact=email, is_active=True).first()

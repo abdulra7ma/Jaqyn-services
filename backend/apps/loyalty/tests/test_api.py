@@ -553,3 +553,124 @@ def test_unified_scan_excludes_group_campaigns_from_customer_rows():
     data = response.data["data"]
     campaign_ids = [row["campaign_id"] for row in data["campaigns"]]
     assert str(group_campaign.id) not in campaign_ids
+
+
+# --- CustomerCatalogView access control (IDOR guard) ------------------------
+
+
+@pytest.mark.django_db
+def test_customer_catalog_non_member_gets_404(api_actors):
+    """A customer with no relationship to the program's business gets a 404.
+
+    Regression: the catalog endpoint used to list any business's items for any
+    authenticated customer given a program id.
+    """
+    from apps.businesses.models import CatalogItem
+
+    _, customer, _, business = api_actors
+    program = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Stamp card",
+        required_count=5,
+        reward_title="Free coffee",
+    )
+    CatalogItem.objects.create(business=business, name="Latte", price="250 c")
+
+    client = APIClient()
+    client.force_authenticate(customer)
+    response = client.get(f"/api/customer/loyalty/programs/{program.id}/catalog/")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_customer_catalog_member_gets_items(api_actors):
+    """A customer holding a membership with the program's business gets the catalog."""
+    from apps.businesses.models import CatalogItem
+
+    _, customer, _, business = api_actors
+    program = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Stamp card",
+        required_count=5,
+        reward_title="Free coffee",
+    )
+    LoyaltyMembership.objects.create(program=program, customer=customer)
+    CatalogItem.objects.create(business=business, name="Latte", price="250 c")
+    CatalogItem.objects.create(
+        business=business, name="Old item", price="100 c", is_active=False
+    )
+
+    client = APIClient()
+    client.force_authenticate(customer)
+    response = client.get(f"/api/customer/loyalty/programs/{program.id}/catalog/")
+
+    assert response.status_code == 200
+    names = [row["name"] for row in response.data["data"]["results"]]
+    assert names == ["Latte"]
+
+
+@pytest.mark.django_db
+def test_customer_catalog_membership_with_sibling_program_counts(api_actors):
+    """Membership in any program of the same business unlocks the catalog."""
+    from apps.businesses.models import CatalogItem
+
+    _, customer, _, business = api_actors
+    sibling = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Sibling stamps",
+        required_count=5,
+        reward_title="Free tea",
+    )
+    target = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.POINTS,
+        name="Points",
+        reward_title="Cashback",
+    )
+    LoyaltyMembership.objects.create(program=sibling, customer=customer)
+    CatalogItem.objects.create(business=business, name="Latte", price="250 c")
+
+    client = APIClient()
+    client.force_authenticate(customer)
+    response = client.get(f"/api/customer/loyalty/programs/{target.id}/catalog/")
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_customer_catalog_membership_with_other_business_does_not_count(api_actors):
+    """A card at business A grants nothing at business B (the IDOR case)."""
+    _, customer, _, business = api_actors
+    other_owner = User.objects.create_user(
+        phone="+996700099777", role=User.Role.BUSINESS_OWNER
+    )
+    other_biz = Business.objects.create(
+        owner=other_owner, name="Other Cafe", status=Business.Status.APPROVED
+    )
+    own_program = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Own stamps",
+        required_count=5,
+        reward_title="Free coffee",
+    )
+    LoyaltyMembership.objects.create(program=own_program, customer=customer)
+    other_program = LoyaltyProgram.objects.create(
+        business=other_biz,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Other stamps",
+        required_count=5,
+        reward_title="Other reward",
+    )
+
+    client = APIClient()
+    client.force_authenticate(customer)
+    response = client.get(
+        f"/api/customer/loyalty/programs/{other_program.id}/catalog/"
+    )
+
+    assert response.status_code == 404

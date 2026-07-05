@@ -9,7 +9,12 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.businesses.models import Business, CatalogItem
-from apps.loyalty.models import LoyaltyProgram, LoyaltyTransaction, LoyaltyVoucher
+from apps.loyalty.models import (
+    LoyaltyMembership,
+    LoyaltyProgram,
+    LoyaltyTransaction,
+    LoyaltyVoucher,
+)
 from apps.loyalty.serializers import (
     AwardSerializer,
     LoyaltyCardSerializer,
@@ -307,12 +312,29 @@ class CustomerRedeemPointsView(_WriteThrottleMixin, APIView):
 
 
 class CustomerCatalogView(APIView):
+    """Catalog items a customer can pick as a loyalty reward for one program.
+
+    Access rule (IDOR guard): the requester must hold a loyalty membership with
+    the program's business — any program of that business qualifies, matching
+    what CustomerBusinessLoyaltyView exposes. Non-members receive the same 404
+    as a nonexistent program so this endpoint reveals nothing about programs
+    or catalogs the customer has no relationship with.
+    """
+
     permission_classes = [IsCustomer]
     serializer_class = SelectItemSerializer
     pagination_class = StandardResultsSetPagination
 
     def get(self, request, program_id):
         program = get_object_or_404(LoyaltyProgram, id=program_id)
+        is_member = LoyaltyMembership.objects.filter(
+            customer=request.user, program__business_id=program.business_id
+        ).exists()
+        if not is_member:
+            # Same shape as the missing-program 404 — don't reveal existence.
+            raise JaqynAPIException(
+                "VALIDATION_ERROR", "Program not found", status_code=404
+            )
         items = CatalogItem.objects.filter(
             business=program.business, is_active=True
         ).values("id", "name", "price", "image")

@@ -15,6 +15,9 @@ def clear_cache():
 
 
 def _issue(email="user@example.com", ip="1.2.3.4"):
+    # Drop the 60s resend cooldown so these tests can issue repeatedly; the
+    # cooldown itself is covered in test_security_hardening.py.
+    cache.delete(f"email-otp-resend:{email.lower()}")
     with patch("apps.accounts.tasks.send_email_otp_task.delay"):
         return issue_email_otp(email, ip)
 

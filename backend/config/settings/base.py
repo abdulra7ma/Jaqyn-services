@@ -395,6 +395,25 @@ REST_FRAMEWORK = {
         "business_lead": "10/min",
         # Public pitch-link endpoints — anonymous prospects; generous but capped.
         "pitch": "20/min",
+        # --- Auth surfaces (apps.accounts) ---
+        # Per-client scoped limits on the anonymous auth endpoints. These sit on
+        # top of the service-layer per-identifier limits (issue_otp et al.) and
+        # bound what one client (IP) can attempt per minute.
+        # Every OTP request costs real money (SMS) or sends an email — tight cap
+        # also blunts signup spam.
+        "auth_otp_request": "5/min",
+        # A 6-digit code has 10^6 combinations; capping verify attempts keeps
+        # the brute-force window negligible (on top of the 5-attempt cache cap).
+        "auth_otp_verify": "10/min",
+        # Password logins — bounds credential-stuffing throughput per client.
+        "auth_login": "10/min",
+        # Reset codes are emailed; same cost/abuse profile as OTP requests.
+        "auth_password_reset": "5/min",
+        # Login-method resolve reveals otp-vs-password per identifier — cap
+        # enumeration probing while staying generous for normal login UX.
+        "auth_resolve": "20/min",
+        # Owner business-profile PATCH — routine settings saves, write-bounded.
+        "business_me_write": "30/min",
     },
 }
 

@@ -148,6 +148,14 @@ class BusinessRegisterView(APIView):
 
 class BusinessMeView(APIView):
     permission_classes = [IsBusinessOwnerOrAdmin]
+    throttle_scope = "business_me_write"
+
+    def get_throttles(self):
+        # Only the PATCH (write) surface is scope-throttled; GET keeps the
+        # global anon/user defaults. Same split as BusinessProgramDetailView.
+        if self.request.method == "PATCH":
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
 
     def get_business(self, request):
         try:

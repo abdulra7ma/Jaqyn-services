@@ -8,6 +8,13 @@ from apps.accounts.services import otp_key
 pytestmark = pytest.mark.django_db
 
 
+def _clear_resend_cooldown(phone):
+    # Tests below intentionally re-request within 60s; drop the per-phone
+    # resend cooldown so they exercise the behavior they were written for.
+    # The cooldown itself is covered in test_security_hardening.py.
+    cache.delete(f"otp-resend:{phone}")
+
+
 def test_request_and_verify_otp_creates_customer(api_client):
     phone = "+996700123456"
 
@@ -50,6 +57,7 @@ def test_resend_overwrites_code_and_returning_user_is_not_new(api_client):
     phone = "+996700123459"
     api_client.post("/api/auth/request-otp/", {"phone": phone}, format="json")
     first_code = cache.get(otp_key(phone))["code"]
+    _clear_resend_cooldown(phone)
     api_client.post("/api/auth/request-otp/", {"phone": phone}, format="json")
     second_code = cache.get(otp_key(phone))["code"]
 
@@ -57,6 +65,7 @@ def test_resend_overwrites_code_and_returning_user_is_not_new(api_client):
     first_login = api_client.post("/api/auth/verify-otp/", {"phone": phone, "code": second_code}, format="json")
     assert first_login.data["data"]["is_new"] is True
 
+    _clear_resend_cooldown(phone)
     api_client.post("/api/auth/request-otp/", {"phone": phone}, format="json")
     next_code = cache.get(otp_key(phone))["code"]
     second_login = api_client.post("/api/auth/verify-otp/", {"phone": phone, "code": next_code}, format="json")
@@ -69,6 +78,7 @@ def test_otp_rate_limit_per_phone(api_client, settings):
     phone = "+996700123460"
 
     assert api_client.post("/api/auth/request-otp/", {"phone": phone}, format="json").status_code == 200
+    _clear_resend_cooldown(phone)
     response = api_client.post("/api/auth/request-otp/", {"phone": phone}, format="json")
 
     assert response.status_code == 429
