@@ -31,6 +31,7 @@ export const bqk = {
   me: ["business", "me"] as const,
   dashboard: ["business", "dashboard"] as const,
   qr: ["business", "qr"] as const,
+  approvalCode: ["business", "approval-code"] as const,
   reports: (period: ReportPeriod, range?: ReportRange) =>
     ["business", "reports", period, range?.date_from ?? null, range?.date_to ?? null] as const,
   customers: ["business", "customers"] as const,
@@ -101,8 +102,26 @@ export const useSetOwnerStaff = () => {
   });
 };
 
-export const useRegenerateApprovalCode = () =>
-  useMutation({ mutationFn: () => businessApi.regenerateApprovalCode() });
+// Fetches the current active approval code for the business owner on mount.
+// `current_approval_code` on the backend is idempotent: it reuses today's active
+// code or creates one — so a first-load GET never silently invalidates staff codes.
+export const useStaffCode = (enabled = true) =>
+  useQuery({
+    queryKey: bqk.approvalCode,
+    queryFn: () => businessApi.approvalCode(),
+    enabled,
+    retry: false,
+  });
+
+export const useRegenerateApprovalCode = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => businessApi.regenerateApprovalCode(),
+    // Write the fresh code into the approvalCode cache immediately so the UI
+    // shows the new code without a separate GET round-trip.
+    onSuccess: (data) => qc.setQueryData(bqk.approvalCode, data),
+  });
+};
 
 // Brand image (logo) + background image (cover) uploads. Both write the fresh
 // business into the `me` cache and invalidate the customer-facing `me` key

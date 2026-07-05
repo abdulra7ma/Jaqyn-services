@@ -21,7 +21,7 @@ from apps.businesses.views import (
     GalleryListCreateView,
     OwnerStaffToggleView,
 )
-from apps.qr.views import BusinessQRView, RegenerateApprovalCodeView
+from apps.qr.views import BusinessQRView, OwnerApprovalCodeView, RegenerateApprovalCodeView
 
 urlpatterns = [
     path("register/", BusinessRegisterView.as_view(), name="business-register"),
@@ -31,6 +31,7 @@ urlpatterns = [
     path("profile/cover/", BusinessCoverUploadView.as_view(), name="business-cover-upload"),
     path("dashboard/", BusinessDashboardView.as_view(), name="business-dashboard"),
     path("qr/", BusinessQRView.as_view(), name="business-qr"),
+    path("approval-code/", OwnerApprovalCodeView.as_view(), name="business-approval-code"),
     path("approval-code/regenerate/", RegenerateApprovalCodeView.as_view(), name="business-approval-code-regenerate"),
     # ---- onboarding ----
     path("invites/validate/", OwnerInviteValidateView.as_view(), name="owner-invite-validate"),

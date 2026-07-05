@@ -107,7 +107,30 @@ class StaffTodayCodeView(APIView):
         return success_response({"code": code.code, "valid_from": code.valid_from, "valid_to": code.valid_to})
 
 
+class OwnerApprovalCodeView(APIView):
+    """Return the current active approval code for the authenticated business owner.
+
+    Returns the existing active code for today's window (creating one on first
+    call if none exists). This is a read-only endpoint — staff must always be
+    given today's code; the owner sees it immediately on load without pressing
+    regenerate.
+    """
+
+    permission_classes = [IsBusinessOwner]
+
+    def get(self, request):
+        code = current_approval_code(request.user.owned_business)
+        return success_response({"code": code.code, "valid_from": code.valid_from, "valid_to": code.valid_to})
+
+
 class RegenerateApprovalCodeView(APIView):
+    """Invalidate the current approval code and generate a fresh one.
+
+    Marks all active codes for the business as inactive, then creates a new
+    code for today's window. Staff using the old code will be rejected after
+    this call.
+    """
+
     permission_classes = [IsBusinessOwner]
 
     def post(self, request):

@@ -106,3 +106,49 @@ def test_current_approval_code_reuses_active_window():
 
     assert code.id == again.id
     assert ApprovalCode.objects.filter(business=business, is_active=True).count() == 1
+
+
+# ---- GET /api/business/approval-code/ (OwnerApprovalCodeView) ----
+
+
+def test_owner_approval_code_get_unauthenticated(api_client):
+    """Anonymous requests are rejected."""
+    response = api_client.get("/api/business/approval-code/")
+    assert response.status_code == 401
+
+
+def test_owner_approval_code_get_non_owner_forbidden(api_client):
+    """Non-owner roles (customer, staff) cannot fetch the owner approval code."""
+    customer = User.objects.create_user(phone="+996701000010", role=User.Role.CUSTOMER, is_phone_verified=True)
+    api_client.force_authenticate(customer)
+    response = api_client.get("/api/business/approval-code/")
+    assert response.status_code == 403
+
+
+def test_owner_approval_code_get_happy_path(api_client):
+    """Owner sees a 6-digit code on GET without calling regenerate first."""
+    business = make_business()
+    api_client.force_authenticate(business.owner)
+
+    response = api_client.get("/api/business/approval-code/")
+
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert len(data["code"]) == 6
+    assert "valid_from" in data
+    assert "valid_to" in data
+    # Repeated GETs return the same code (idempotent within the active window).
+    response2 = api_client.get("/api/business/approval-code/")
+    assert response2.data["data"]["code"] == data["code"]
+
+
+def test_owner_approval_code_get_returns_new_code_after_regenerate(api_client):
+    """After POST regenerate, GET returns the freshly generated code."""
+    business = make_business()
+    api_client.force_authenticate(business.owner)
+
+    original = api_client.get("/api/business/approval-code/").data["data"]["code"]
+    api_client.post("/api/business/approval-code/regenerate/")
+    refreshed = api_client.get("/api/business/approval-code/").data["data"]["code"]
+
+    assert original != refreshed
