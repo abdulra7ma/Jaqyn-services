@@ -36,15 +36,20 @@ export const STAFF_TABS = [
   },
 ] as const;
 
-/** Floating icon-pill bottom nav — white pill, icon-only tabs, active in brand. */
-export function StaffNav() {
+/** Floating icon-pill bottom nav — white pill, icon-only tabs, active in brand.
+ *  `showOnDesktop` overrides the default `lg:hidden` so pages that render their
+ *  own layout (e.g. staff/scan) can expose the nav at every viewport width. */
+export function StaffNav({ showOnDesktop = false }: { showOnDesktop?: boolean }) {
   const t = useT();
   const pathname = usePathname();
 
   return (
     <nav
       style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
-      className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-pill bg-card px-3 py-2 shadow-modal lg:hidden"
+      className={[
+        "fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-pill bg-card px-3 py-2 shadow-modal",
+        showOnDesktop ? "" : "lg:hidden",
+      ].join(" ").trim()}
     >
       {STAFF_TABS.map(({ href, key, icon }) => {
         const active = pathname.startsWith(href);

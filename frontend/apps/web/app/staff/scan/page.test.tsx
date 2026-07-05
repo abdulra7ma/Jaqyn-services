@@ -3,16 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CampaignScanRow, ScanCustomerResult, ScanDispatchResult, UnifiedScanResult } from "@jaqyn/api";
 
-// matchMedia is not implemented in jsdom; the scan page reads it to redirect on
-// desktop (1024px breakpoint). Sheet.tsx reads the 768px breakpoint to pick
-// Vaul vs Radix Dialog — we must return false for 1024px (so the scan page stays
-// alive) and true for 768px (so Sheet renders via Radix Dialog, which jsdom can
-// handle deterministically; Vaul's pointer-event internals crash in jsdom).
+// matchMedia is not implemented in jsdom. Sheet.tsx reads the 768px breakpoint
+// to pick Vaul vs Radix Dialog — we return true for that query so Sheet renders
+// via Radix Dialog (jsdom-compatible; Vaul's pointer-event internals crash in jsdom).
+// The scan page no longer reads the 1024px breakpoint for redirecting, so all
+// queries except the 768px one default to false (phone-width baseline).
 beforeEach(() => {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-    // Only the ≥1024px redirect query should read as false (phone-width);
-    // the ≥768px Sheet query should read as true (desktop Dialog path).
-    matches: !query.includes("1024"),
+    // The ≥768px Sheet query must match so Radix Dialog is used instead of Vaul.
+    matches: query.includes("768"),
     media: query,
     onchange: null,
     addEventListener: vi.fn(),
@@ -134,6 +133,28 @@ async function scan(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByText("staff.scan.enableCamera"));
   await user.click(screen.getByText("fire-scan"));
 }
+
+// Regression guard: at a desktop viewport (1024px+ matchMedia match), the scan
+// page must render its content — not redirect and return null.
+describe("Staff scan — desktop viewport regression", () => {
+  it("renders the scan UI when matchMedia reports ≥1024px (no redirect loop)", () => {
+    // Override the baseline mock so 1024px matches true (simulates desktop).
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("1024") || query.includes("768"),
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    dispatch = customerDispatch([]);
+    render(<StaffScanPage />);
+    // The camera-enable button proves the page rendered its scan UI, not null.
+    expect(screen.getByText("staff.scan.enableCamera")).toBeInTheDocument();
+  });
+});
 
 describe("Staff scan — loyalty chooser (choose-one)", () => {
   beforeEach(() => {

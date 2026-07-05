@@ -21,7 +21,6 @@ import type {
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { QrScanner, parseScanned } from "../../_components/QrScanner";
 import { useErrMessage } from "../../_lib/useErrMessage";
@@ -942,20 +941,6 @@ export default function StaffScanPage() {
   // request is in flight (a camera fires the same frame many times per second).
   const busyRef = useRef(false);
 
-  // Scanning is a mobile (cashier-device) action — on desktop, redirect to Groups.
-  const router = useRouter();
-  const [isDesktop, setIsDesktop] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
-    const apply = () => {
-      setIsDesktop(mq.matches);
-      if (mq.matches) router.replace("/staff/groups");
-    };
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, [router]);
-
   const dismiss = () => {
     setOverlay(null);
     setPendingCampaignId(null);
@@ -1150,9 +1135,6 @@ export default function StaffScanPage() {
   const role = staff?.role ?? "cashier";
   const bizInitial = (businessName[0] ?? "M").toUpperCase();
 
-  // Desktop has no scanner — render nothing while the redirect to Groups runs.
-  if (isDesktop) return null;
-
   if (ready && !isStaff) {
     return (
       <div className="mx-auto flex min-h-screen max-w-[440px] flex-col items-center justify-center bg-[#14100B] px-6">
@@ -1285,8 +1267,9 @@ export default function StaffScanPage() {
         )}
       </div>
 
-      {/* Light bottom nav over the immersive scanner — matches the design. */}
-      <StaffNav />
+      {/* Light bottom nav over the immersive scanner — shown at all viewports since
+          this page doesn't use StaffShell's sidebar. */}
+      <StaffNav showOnDesktop />
     </div>
   );
 }
