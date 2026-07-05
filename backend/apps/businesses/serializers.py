@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.core.validators import RegexValidator
 
 from apps.businesses.models import Business, BusinessImage, BusinessType, CatalogItem, StaffInvite
+from apps.staff.services import ACTIVITY_KINDS
 
 
 class BusinessTypeSerializer(serializers.ModelSerializer):
@@ -354,6 +355,24 @@ class StaffInviteSerializer(serializers.ModelSerializer):
         model = StaffInvite
         fields = ("id", "full_name", "contact", "role", "status", "created_at")
         read_only_fields = ("id", "status", "created_at")
+
+
+class DashboardActivityEventSerializer(serializers.Serializer):
+    """Serializes one :class:`apps.staff.services.ActivityEvent` for the owner dashboard.
+
+    A deliberate five-field mirror of the staff feed's event shape, defined here
+    so the businesses service consumes the staff activity service's public surface
+    (the ``ActivityEvent`` dataclass + ``ACTIVITY_KINDS``) rather than reaching
+    into ``apps.staff.serializers`` — presentation stays inside each boundary.
+    ``customer`` is already masked upstream; ``label`` is untranslated data
+    context (reward / program / campaign name) the frontend wraps in copy.
+    """
+
+    id = serializers.CharField()
+    kind = serializers.ChoiceField(choices=ACTIVITY_KINDS)
+    customer = serializers.CharField(allow_blank=True)
+    label = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
 
 
 class BusinessAdminActionSerializer(serializers.Serializer):

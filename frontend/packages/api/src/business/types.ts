@@ -1,6 +1,10 @@
 // Business-owner domain types (mirror backend business/loyalty/groups/reporting
 // serializers). Kept in the API layer so dashboard screens stay decoupled.
 
+// The dashboard's activity feed reuses the staff activity event shape — the
+// backend serializes the same ActivityEvent dataclass on both endpoints.
+import type { ActivityEvent } from "../staff/types";
+
 export type BusinessStatus = "pending" | "approved" | "rejected" | "disabled";
 
 export type OnboardingStatus =
@@ -244,6 +248,8 @@ export type DashboardMetrics = {
 export type Dashboard = {
   business: BusinessProfile;
   metrics: DashboardMetrics;
+  /** Today's events for this business, newest first, capped ~10. */
+  activity: ActivityEvent[];
 };
 
 export type MaskedCustomer = { id: string; phone: string; name: string | null };

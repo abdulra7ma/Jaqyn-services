@@ -1,6 +1,7 @@
 import math
 
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import ScopedRateThrottle
@@ -14,6 +15,7 @@ from apps.businesses.serializers import (
     BusinessLeadSerializer,
     BusinessSerializer,
     CatalogItemSerializer,
+    DashboardActivityEventSerializer,
     GalleryUploadSerializer,
     OwnerStaffToggleSerializer,
     PublicBusinessSerializer,
@@ -30,6 +32,7 @@ from apps.businesses.services import (
     set_catalog_item_image,
 )
 from apps.staff.services.management import ensure_owner_staff
+from apps.staff.services import list_activity_events
 from apps.reporting.services import business_metrics
 from core.exceptions import JaqynAPIException
 from core.permissions import IsBusinessOwner, IsBusinessOwnerOrAdmin
@@ -240,7 +243,25 @@ class BusinessCoverUploadView(_BusinessImageUploadView):
         return set_business_cover(business, image)
 
 
+# Owner dashboard shows only today's events, newest first, capped short — it's a
+# glance widget, not the full staff history feed. The staff activity service caps
+# each source at its newest 500 rows and today's events are by definition the
+# newest, so filtering to today after that cap never drops one; the query count
+# stays flat (one capped query per source).
+_DASHBOARD_ACTIVITY_LIMIT = 10
+
+
 class BusinessDashboardView(APIView):
+    """GET /api/business/dashboard/ — owner's headline metrics + today's activity feed.
+
+    Returns ``business`` (profile), ``metrics`` (reporting counters), and
+    ``activity`` — today's events from the shared staff activity service
+    (:func:`apps.staff.services.list_activity_events`), scoped to the owner's
+    business, newest first and capped at :data:`_DASHBOARD_ACTIVITY_LIMIT`. Each
+    event carries a masked customer label, kind, data label, and timestamp. The
+    feed is empty for a business with no activity today.
+    """
+
     permission_classes = [IsBusinessOwnerOrAdmin]
 
     def get(self, request):
@@ -250,6 +271,14 @@ class BusinessDashboardView(APIView):
             raise JaqynAPIException("VALIDATION_ERROR", "Business not found", status_code=404)
 
         metrics = business_metrics(business)
+        # "Today" = local calendar date, matching get_staff_today_stats' boundary.
+        # created_at is tz-aware; convert to local time before comparing the date.
+        today = timezone.localdate()
+        activity = [
+            event
+            for event in list_activity_events(business)
+            if timezone.localtime(event.created_at).date() == today
+        ][:_DASHBOARD_ACTIVITY_LIMIT]
         return success_response({
             "business": BusinessSerializer(business).data,
             "metrics": {
@@ -258,6 +287,7 @@ class BusinessDashboardView(APIView):
                 "rewards": metrics["rewards_issued"],
                 **metrics,
             },
+            "activity": DashboardActivityEventSerializer(activity, many=True).data,
         })
 
 

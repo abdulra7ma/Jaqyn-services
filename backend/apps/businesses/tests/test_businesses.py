@@ -60,6 +60,71 @@ def test_owner_business_endpoints_are_scoped(api_client):
     assert dashboard.data["data"]["metrics"]["customers"] == 0
     assert dashboard.data["data"]["metrics"]["rewards"] == 0
     assert dashboard.data["data"]["metrics"]["total_scans"] == 0
+    # A fresh business has no activity today — the feed is present but empty.
+    assert dashboard.data["data"]["activity"] == []
+
+
+def test_dashboard_activity_lists_todays_events_for_own_business(api_client):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.qr.models import ScanLog
+    from apps.staff.models import StaffMember
+
+    owner = User.objects.create_user(
+        phone="+996700111230", role=User.Role.BUSINESS_OWNER, is_phone_verified=True
+    )
+    business = Business.objects.create(owner=owner, **business_payload())
+    staff = StaffMember.objects.create(
+        business=business, user=owner, name="Owner", role=StaffMember.Role.MANAGER
+    )
+    campaign = Campaign.objects.create(
+        business=business,
+        name="Visit Streak",
+        campaign_type=Campaign.CampaignType.INDIVIDUAL,
+        status=Campaign.Status.ACTIVE,
+    )
+    customer = User.objects.create_user(
+        phone="+996700900001",
+        role=User.Role.CUSTOMER,
+        is_phone_verified=True,
+        name="Aida Nurlanovna",
+    )
+
+    # A confirmed campaign visit today → one "visit" event in the feed.
+    ScanLog.objects.create(
+        business=business,
+        staff=staff,
+        customer=customer,
+        action="campaign_confirm_visit",
+        status=ScanLog.Status.SUCCESS,
+        metadata={"campaign_id": str(campaign.id)},
+    )
+    # A yesterday scan must not show up in *today's* feed.
+    stale = ScanLog.objects.create(
+        business=business,
+        staff=staff,
+        customer=customer,
+        action="campaign_confirm_visit",
+        status=ScanLog.Status.SUCCESS,
+        metadata={"campaign_id": str(campaign.id)},
+    )
+    ScanLog.objects.filter(id=stale.id).update(
+        created_at=timezone.now() - timedelta(days=1)
+    )
+
+    api_client.force_authenticate(owner)
+    dashboard = api_client.get("/api/business/dashboard/")
+
+    assert dashboard.status_code == 200
+    activity = dashboard.data["data"]["activity"]
+    assert len(activity) == 1
+    event = activity[0]
+    assert event["kind"] == "visit"
+    assert event["customer"] == "Aida N."  # masked: first name + last initial
+    assert event["label"] == "Visit Streak"
+    assert "created_at" in event
 
 
 def test_owner_profile_update_persists_public_profile_fields(api_client):
