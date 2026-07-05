@@ -42,7 +42,7 @@ export default function CollectPage() {
             {(data) => (
               <Card className="rounded-[24px] p-6 shadow-card">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={data.png} alt="my QR" className="h-56 w-56" />
+                <img src={data.png} alt={t("home.myQr")} className="h-56 w-56" />
               </Card>
             )}
           </QueryBoundary>

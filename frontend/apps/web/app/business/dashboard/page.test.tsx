@@ -78,7 +78,7 @@ describe("BusinessDashboardPage — today's activity", () => {
       makeEvent({ id: "e3", kind: "stamp", customer: "", label: "" }),
     ]);
     render(<BusinessDashboardPage />);
-    // Both the title and sub fall back to the shared kind-label i18n key.
-    expect(screen.getAllByText("staff.activity.kind.stamp").length).toBeGreaterThan(0);
+    // Both the title and sub fall back to the owner-surface kind-label i18n key.
+    expect(screen.getAllByText("owner.dashboard.activity.kind.stamp").length).toBeGreaterThan(0);
   });
 });

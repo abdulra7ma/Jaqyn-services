@@ -751,11 +751,11 @@ function MapChrome({
       <div className="absolute left-3 top-3 z-20 flex gap-1.5">
         <MapButton label="+" onClick={onZoomIn} />
         <MapButton label="-" onClick={onZoomOut} />
-        <MapButton label="Fit" onClick={onFit} />
+        <MapButton label={t("nearby.map.fit")} onClick={onFit} />
       </div>
       <div className="absolute right-3 top-3 z-20 flex gap-1.5">
         {onUseLocation && <MapButton label={t("nearby.you")} onClick={onUseLocation} />}
-        <MapButton label={full ? "Close" : "Full"} onClick={onToggleFull} />
+        <MapButton label={full ? t("nearby.map.close") : t("nearby.map.full")} onClick={onToggleFull} />
       </div>
 
       {selected && (

@@ -15,7 +15,7 @@ type SlideKey = "welcome" | "show_qr" | "track" | "discover" | "groups" | "done"
 type SlideDef = {
   key: SlideKey;
   Icon: (p: { className?: string }) => JSX.Element;
-  titleStatic: string;
+  titleKey: string;
   tint: string;
 };
 
@@ -24,60 +24,61 @@ const SLIDE_DEFS: SlideDef[] = [
   {
     key: "welcome",
     Icon: GiftIcon,
-    titleStatic: "Welcome to Jaqyn",
+    titleKey: "onboarding.slide.welcome.title",
     tint: "bg-brand/15 text-brand",
   },
   {
     key: "show_qr",
     Icon: ScanIcon,
-    titleStatic: "Show your QR",
+    titleKey: "onboarding.slide.showQr.title",
     tint: "bg-amber/20 text-amber",
   },
   {
     key: "track",
     Icon: GiftIcon,
-    titleStatic: "Track your rewards",
+    titleKey: "onboarding.slide.track.title",
     tint: "bg-brand/15 text-brand",
   },
   {
     key: "discover",
     Icon: PinIcon,
-    titleStatic: "Discover nearby",
+    titleKey: "onboarding.slide.discover.title",
     tint: "bg-sage/20 text-sage",
   },
   {
     key: "groups",
     Icon: UsersIcon,
-    titleStatic: "Team up in Groups",
+    titleKey: "onboarding.slide.groups.title",
     tint: "bg-amber/20 text-amber",
   },
   {
     key: "done",
     Icon: UserIcon,
-    titleStatic: "You're all set",
+    titleKey: "onboarding.slide.done.title",
     tint: "bg-brand/15 text-brand",
   },
 ];
 
-const SLIDE_BODIES: Record<SlideKey, string> = {
-  welcome: "Your loyalty, all in one place. Collect rewards from every café, salon and shop you love — no paper cards.",
-  show_qr: "__i18n__", // filled from t("onboarding.welcomeSlide2")
-  track: "The Rewards tab shows every card you're filling and what you can redeem right now.",
-  discover: "Browse loyalty spots around you in the Nearby tab and start a new card in one tap.",
-  groups: "Join friends in Groups to unlock shared offers and reach rewards together, faster.",
-  done: "Manage your details and language anytime in Profile. Let's collect your first reward!",
+// Body text i18n keys per slide key (show_qr reuses the older onboarding.welcomeSlide2 key).
+const SLIDE_BODY_KEYS: Record<SlideKey, string> = {
+  welcome: "onboarding.slide.welcome.body",
+  show_qr: "onboarding.welcomeSlide2",
+  track: "onboarding.slide.track.body",
+  discover: "onboarding.slide.discover.body",
+  groups: "onboarding.slide.groups.body",
+  done: "onboarding.slide.done.body",
 };
 
 /** One tour slide: icon tile, title, body, and (on the final slide) the first-stamp task. */
-function Slide({ def, body, showTask }: { def: SlideDef; body: string; showTask: boolean }): JSX.Element {
+function Slide({ def, showTask }: { def: SlideDef; showTask: boolean }): JSX.Element {
   const t = useT();
   return (
     <div className="flex flex-1 flex-col items-center justify-center text-center">
       <div className={`flex h-20 w-20 items-center justify-center rounded-[26px] shadow-card ${def.tint}`}>
         <def.Icon className="h-9 w-9" />
       </div>
-      <h1 className="mt-7 font-display text-[26px] font-bold text-ink sm:text-[29px]">{def.titleStatic}</h1>
-      <p className="mt-3 max-w-[340px] text-[15px] leading-relaxed text-subtle">{body}</p>
+      <h1 className="mt-7 font-display text-[26px] font-bold text-ink sm:text-[29px]">{t(def.titleKey)}</h1>
+      <p className="mt-3 max-w-[340px] text-[15px] leading-relaxed text-subtle">{t(SLIDE_BODY_KEYS[def.key])}</p>
 
       {showTask && (
         <div className="mt-6 w-full rounded-2xl border border-line bg-card px-4 py-3">
@@ -144,11 +145,6 @@ function OnboardingFlow() {
     else embla?.scrollNext();
   }, [isLast, finish, embla]);
 
-  const bodyFor = (key: SlideKey): string => {
-    const raw = SLIDE_BODIES[key];
-    return raw === "__i18n__" ? t("onboarding.welcomeSlide2") : raw;
-  };
-
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-cream px-4 py-10 font-sans text-ink sm:px-6">
       {/* drifting background blobs — same language as the auth screen */}
@@ -175,7 +171,7 @@ function OnboardingFlow() {
               key={s.key}
               type="button"
               onClick={() => embla?.scrollTo(idx)}
-              aria-label={s.titleStatic}
+              aria-label={t(s.titleKey)}
               aria-current={idx === i}
               className={`h-1.5 rounded-full transition-all duration-300 ${
                 idx === i ? "w-6 bg-brand" : "w-1.5 bg-line"
@@ -191,7 +187,7 @@ function OnboardingFlow() {
           <div className="flex h-full touch-pan-y">
             {SLIDE_DEFS.map((s) => (
               <div key={s.key} className="flex min-w-0 flex-[0_0_100%] flex-col">
-                <Slide def={s} body={bodyFor(s.key)} showTask={s.key === "done"} />
+                <Slide def={s} showTask={s.key === "done"} />
               </div>
             ))}
           </div>
@@ -200,15 +196,15 @@ function OnboardingFlow() {
         {/* controls */}
         <div className="flex flex-col gap-3 pb-2">
           <Button onClick={next} disabled={updateProfile.isPending}>
-            {isLast ? (updateProfile.isPending ? "..." : "Get started") : "Next"}
+            {isLast ? (updateProfile.isPending ? "..." : t("onboarding.getStarted")) : t("onboarding.next")}
           </Button>
           <div className="flex items-center justify-center">
             {i > 0 ? (
               <button type="button" className="text-sm font-semibold text-subtle hover:text-brand" onClick={back}>
-                ‹ Back
+                {t("onboarding.back")}
               </button>
             ) : (
-              <span className="text-sm text-transparent">‹ Back</span>
+              <span className="text-sm text-transparent">{t("onboarding.back")}</span>
             )}
           </div>
         </div>

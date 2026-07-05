@@ -23,13 +23,13 @@ const ACTIVITY_ICON: Record<ActivityEventKind, string> = {
   social: "📢",
 };
 
-// Relative "time ago" in short units — same compact form the staff feed uses;
-// no i18n string ops needed beyond the single-letter unit suffixes.
-function fmtAgo(iso: string): string {
+// Relative "time ago" in short units — same compact form the staff feed uses.
+// Accepts a `t` resolver so the unit suffixes are i18n-aware.
+function fmtAgo(iso: string, t: (key: string) => string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return `${Math.max(diff, 0)}с`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}м`;
-  return `${Math.floor(diff / 3600)}ч`;
+  if (diff < 60) return `${Math.max(diff, 0)}${t("common.ago.s")}`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}${t("common.ago.m")}`;
+  return `${Math.floor(diff / 3600)}${t("common.ago.h")}`;
 }
 
 export default function BusinessDashboardPage() {
@@ -103,13 +103,13 @@ export default function BusinessDashboardPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold text-ink">
-                          {event.customer || t(`staff.activity.kind.${event.kind}`)}
+                          {event.customer || t(`owner.dashboard.activity.kind.${event.kind}`)}
                         </div>
                         <div className="truncate text-xs text-subtle">
-                          {event.label || t(`staff.activity.kind.${event.kind}`)}
+                          {event.label || t(`owner.dashboard.activity.kind.${event.kind}`)}
                         </div>
                       </div>
-                      <div className="flex-none text-xs font-semibold text-subtle">{fmtAgo(event.created_at)}</div>
+                      <div className="flex-none text-xs font-semibold text-subtle">{fmtAgo(event.created_at, t)}</div>
                     </li>
                   ))}
                 </ul>

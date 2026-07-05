@@ -13,6 +13,7 @@ import type {
   CampaignFeed,
   CampaignVoucher,
   CampaignWallet,
+  GroupSession,
   LoyaltyCardView,
   LoyaltyHomeSummary,
   LoyaltyVoucherWallet,
@@ -81,6 +82,7 @@ const mockState = {
   wallet: emptyWallet as CampaignWallet,
   loyaltyWallet: emptyLoyaltyWallet as LoyaltyVoucherWallet,
   groups: emptyGroups as MyGroup[],
+  groupSession: null as GroupSession | null,
 };
 
 const mockJoinCampaign = vi.fn();
@@ -92,6 +94,8 @@ vi.mock("@jaqyn/api", () => ({
   useCampaignWallet: () => ({ data: mockState.wallet, isLoading: false, isError: false }),
   useLoyaltyVouchers: () => ({ data: mockState.loyaltyWallet, isLoading: false, isError: false }),
   useMyGroups: () => ({ data: mockState.groups, isLoading: false, isError: false }),
+  useGroupSession: () => ({ data: mockState.groupSession, isLoading: false, isError: false }),
+  useLeaveGroupSession: () => ({ mutate: vi.fn(), isPending: false }),
   useNearby: () => ({ data: [], isLoading: false, isError: false }),
   useJoinCampaign: () => ({ mutateAsync: mockJoinCampaign, isPending: false }),
 }));
@@ -107,6 +111,7 @@ describe("CampaignsPage — 3 states", () => {
     mockState.wallet = emptyWallet;
     mockState.loyaltyWallet = emptyLoyaltyWallet;
     mockState.groups = [];
+    mockState.groupSession = null;
   });
 
   describe("new / empty user", () => {
@@ -131,7 +136,6 @@ describe("CampaignsPage — 3 states", () => {
         discover: [makeActiveCampaign({ id: "nearby-c1", my_progress: { joined: false, status: "joined", current_count: 0, target_count: 5, completed: false, voucher_id: null } })],
         sections: { featured: [], trending: [], fresh: [] },
       };
-
       // Mock the join mutation to resolve immediately.
       mockJoinCampaign.mockResolvedValueOnce(undefined);
 
@@ -206,6 +210,9 @@ describe("CampaignsPage — 3 states", () => {
       render(<CampaignsPage />);
       fireEvent.click(screen.getByRole("button", { name: /Coffee Challenge/ }));
       expect(screen.getByRole("dialog", { name: "Coffee Challenge" })).toBeInTheDocument();
+      expect(screen.getByText("cmp.detail.howItWorks")).toBeInTheDocument();
+      expect(screen.getByText("cmp.detail.rules")).toBeInTheDocument();
+      expect(screen.getByText("cmp.detail.schedule")).toBeInTheDocument();
       expect(screen.getByText("cmp.detail.showQr")).toBeInTheDocument();
     });
 
@@ -284,6 +291,41 @@ describe("CampaignsPage — 3 states", () => {
         discover: [],
         sections: { featured: [], trending: [], fresh: [] },
       };
+      mockState.groups = [{
+        id: "g1",
+        campaign_id: "c1",
+        campaign_name: "Coffee Challenge",
+        business_name: "Manas Coffee",
+        business_logo_url: "/media/manas.png",
+        status: "forming",
+        required_size: 4,
+        joined_count: 1,
+      }];
+      mockState.groupSession = {
+        id: "g1",
+        campaign: { id: "c1", name: "Coffee Challenge", glyph: "👥" },
+        business_name: "Manas Coffee",
+        business_logo_url: "/media/manas.png",
+        group_leader: "u1",
+        invite_code: "invite-code",
+        invite_url: "https://jaqyn.example/q/invite-code",
+        status: "forming",
+        required_size: 4,
+        joined_count: 1,
+        members: [{
+          id: "m1",
+          name: "Test Client",
+          initial: "T",
+          is_leader: true,
+          is_you: true,
+          checked_in: false,
+          status: "joined",
+        }],
+        visit_time: "2026-07-05T15:00:00Z",
+        name: null,
+        note: null,
+        checkin_token: null,
+      };
 
       const { container } = render(<CampaignsPage />);
       expect(container.querySelector('img[src="/media/manas.png"]')).toBeInTheDocument();
@@ -294,7 +336,10 @@ describe("CampaignsPage — 3 states", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /Manas Coffee cmp\.home\.groups\.badge/ }));
       expect(screen.getByRole("dialog", { name: "Coffee Challenge" })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "cmp.home.groups.invite" })).toBeInTheDocument();
+      expect(screen.getByText(/Test Client/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "common.copy" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "cmp.group.inviteFriends" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "cmp.group.leave" })).toBeInTheDocument();
     });
   });
 

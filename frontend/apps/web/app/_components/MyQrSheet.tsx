@@ -85,7 +85,7 @@ export function MyQrSheet({
           {qr.data ? (
             <div className="mt-4 rounded-[22px] bg-white p-4 shadow-[0_12px_32px_-8px_rgba(46,36,29,.28)]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={qr.data.png} alt="my QR" className="h-52 w-52" />
+              <img src={qr.data.png} alt={t("home.myQr")} className="h-52 w-52" />
             </div>
           ) : (
             <div className="mt-4 flex h-[216px] w-[216px] items-center justify-center rounded-[22px] bg-board">

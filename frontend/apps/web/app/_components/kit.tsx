@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@jaqyn/ui";
+import { useT } from "@jaqyn/i18n";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import type { User } from "@jaqyn/api";
@@ -12,10 +13,11 @@ export function PageTitle({ children }: { children: ReactNode }) {
 }
 
 export function BackButton({ href }: { href: string }) {
+  const t = useT();
   return (
     <Link
       href={href}
-      aria-label="back"
+      aria-label={t("common.back")}
       className="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-card text-lg text-ink"
     >
       ‹

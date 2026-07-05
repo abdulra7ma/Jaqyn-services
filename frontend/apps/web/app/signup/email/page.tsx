@@ -93,7 +93,7 @@ export default function EmailSignupPage() {
         type="button"
         onClick={() => (step === "verify" ? setStep("form") : router.back())}
         className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-line bg-card/70 text-subtle backdrop-blur transition hover:text-brand sm:left-6 sm:top-6"
-        aria-label="Back"
+        aria-label={t("common.back")}
       >
         ←
       </button>

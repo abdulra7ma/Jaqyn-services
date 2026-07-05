@@ -229,11 +229,11 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
 
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   {directions && (
-                    <Action href={directions}>Directions</Action>
+                    <Action href={directions}>{t("biz.detail.directions")}</Action>
                   )}
-                  {b.phone && <Action href={`tel:${b.phone}`}>Call</Action>}
+                  {b.phone && <Action href={`tel:${b.phone}`}>{t("biz.detail.call")}</Action>}
                   {b.website_url && (
-                    <Action href={b.website_url}>Website</Action>
+                    <Action href={b.website_url}>{t("biz.detail.website")}</Action>
                   )}
                   {b.instagram_url && (
                     <Action href={instagramHref(b.instagram_url)}>
@@ -305,7 +305,7 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
             {b.group_offers && b.group_offers.length > 0 && (
               <Card>
                 <p className="font-display text-sm font-bold text-ink">
-                  Group offers
+                  {t("biz.detail.groupOffers")}
                 </p>
                 <div className="mt-3 flex flex-col gap-2">
                   {b.group_offers.map((o) => (
@@ -322,7 +322,7 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
                         {o.max_group_size
                           ? `-${o.max_group_size}`
                           : "+"}{" "}
-                        people · {o.time_start}-{o.time_end}
+                        {t("biz.detail.people")} · {o.time_start}-{o.time_end}
                       </div>
                       <div className="mt-1 text-xs font-semibold text-brand">
                         {o.reward_description}
@@ -336,7 +336,7 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
             {b.catalog_sections && b.catalog_sections.length > 0 && (
               <Card>
                 <p className="font-display text-sm font-bold text-ink">
-                  Menu &amp; offerings
+                  {t("biz.detail.menu")}
                 </p>
                 <div className="mt-3 flex flex-col gap-4">
                   {b.catalog_sections.map((section) => (
@@ -385,7 +385,7 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
             {b.gallery && b.gallery.length > 0 && (
               <Card>
                 <p className="font-display text-sm font-bold text-ink">
-                  Photos
+                  {t("biz.detail.photos")}
                 </p>
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   {b.gallery.map((photo) => (

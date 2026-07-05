@@ -71,16 +71,16 @@ export default function NearbyPage() {
 
   function requestLocation(auto = false) {
     if (!navigator.geolocation) {
-      setLocMsg("Location is not available in this browser.");
+      setLocMsg(t("nearby.loc.unavailable"));
       return;
     }
-    setLocMsg(auto ? "Allow location to center the map around you." : "Finding your location…");
+    setLocMsg(auto ? t("nearby.loc.allow") : t("nearby.loc.finding"));
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocMsg("Map centered on your location");
+        setLocMsg(t("nearby.loc.centered"));
       },
-      () => setLocMsg("Location denied. Showing default nearby list."),
+      () => setLocMsg(t("nearby.loc.denied")),
       { enableHighAccuracy: true, timeout: 8000 },
     );
   }

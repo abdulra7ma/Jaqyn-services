@@ -20,6 +20,8 @@ import {
   useLoyaltyCards,
   useLoyaltyHomeSummary,
   useLoyaltyVouchers,
+  useGroupSession,
+  useLeaveGroupSession,
   useMyGroups,
   useNearby,
   useJoinCampaign,
@@ -34,7 +36,16 @@ import { useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { CustomerShell } from "../_components/CustomerShell";
-import { CampaignCard, DiscoverRow, GlyphTile } from "../_components/campaigns";
+import {
+  CampaignCard,
+  DiscoverRow,
+  GlyphTile,
+  GroupMemberRow,
+  howItWorks,
+  missionLine,
+  ruleLines,
+} from "../_components/campaigns";
+import { AvatarSlots, hhmm, inviteUrl, useCopy } from "../_components/groups";
 import { useRequireAuth } from "../_lib/auth";
 import { useUserLocation } from "../_lib/useUserLocation";
 import { Confetti } from "./_components/Confetti";
@@ -276,6 +287,51 @@ function InProgressRow({ campaign: c }: InProgressRowProps) {
             </div>
           </div>
 
+          <div className="mt-4 grid grid-cols-2 gap-2.5">
+            <div className="rounded-xl bg-card p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-subtle">
+                {t("cmp.detail.challenge")}
+              </p>
+              <p className="mt-1 text-[13px] font-semibold leading-snug text-ink">
+                {missionLine(t, c)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-card p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-subtle">
+                {t("cmp.detail.schedule")}
+              </p>
+              <p className="mt-1 text-[13px] font-semibold leading-snug text-ink">
+                {c.active_hours || `${c.start_label} – ${c.end_label}`}
+              </p>
+            </div>
+          </div>
+
+          <h3 className="mt-5 font-display text-[15px] font-bold text-ink">
+            {t("cmp.detail.howItWorks")}
+          </h3>
+          <ol className="mt-2.5 flex flex-col gap-2">
+            {howItWorks(t, c.campaign_type).map((step, index) => (
+              <li key={step} className="flex items-center gap-3 rounded-xl bg-card px-3 py-2.5">
+                <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-brand-muted font-display text-xs font-bold text-brand">
+                  {index + 1}
+                </span>
+                <span className="text-[13px] leading-snug text-ink">{step}</span>
+              </li>
+            ))}
+          </ol>
+
+          <h3 className="mt-5 font-display text-[15px] font-bold text-ink">
+            {t("cmp.detail.rules")}
+          </h3>
+          <ul className="mt-2.5 flex flex-col gap-2">
+            {ruleLines(t, c).map((rule) => (
+              <li key={rule} className="flex gap-2.5 text-[13px] leading-snug text-subtle">
+                <span className="font-bold text-brand" aria-hidden>·</span>
+                {rule}
+              </li>
+            ))}
+          </ul>
+
           <Link
             href="/campaigns/visit-qr"
             onClick={() => setOpen(false)}
@@ -304,8 +360,34 @@ interface GroupProgressRowProps {
 function GroupProgressRow({ campaign: c, group }: GroupProgressRowProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const joined = group?.joined_count ?? c.my_progress?.current_count ?? 0;
-  const required = group?.required_size ?? c.rule.required_group_size ?? 0;
+  const sessionQuery = useGroupSession(group?.id ?? "", {
+    refetchInterval: open ? 4000 : undefined,
+  });
+  const leave = useLeaveGroupSession();
+  const { copied, copy } = useCopy();
+  const session = sessionQuery.data;
+  const joined = session?.joined_count ?? group?.joined_count ?? c.my_progress?.current_count ?? 0;
+  const required = session?.required_size ?? group?.required_size ?? c.rule.required_group_size ?? 0;
+  const remaining = Math.max(0, required - joined);
+  const link = session ? inviteUrl(session.invite_code, session.invite_url) : "";
+
+  const shareInvite = async () => {
+    if (!session) return;
+    const text = t("cmp.invite.message")
+      .replace("{business}", session.business_name)
+      .replace("{count}", String(remaining))
+      .replace("{reward}", c.reward.title)
+      .replace("{time}", hhmm(session.visit_time));
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: c.name, text, url: link });
+      } catch {
+        // The native share sheet was dismissed; keep this details sheet open.
+      }
+      return;
+    }
+    copy(`${text} ${link}`);
+  };
 
   return (
     <>
@@ -379,25 +461,42 @@ function GroupProgressRow({ campaign: c, group }: GroupProgressRowProps) {
 
         {c.description && <p className="mt-4 text-[14px] leading-relaxed text-subtle">{c.description}</p>}
 
+        {session?.visit_time && (
+          <div className="mt-3 inline-flex rounded-pill bg-amber/15 px-3 py-1.5 text-[12px] font-semibold text-amber-deep">
+            {t("cmp.group.visitAt").replace("{time}", hhmm(session.visit_time))}
+          </div>
+        )}
+
         <div className="mt-5 rounded-2xl bg-card p-4 shadow-card">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-[13px] font-semibold text-subtle">{t("cmp.group.progress")}</p>
               <p className="mt-1 font-display text-3xl font-bold text-ink">{joined}/{required}</p>
             </div>
-            <span className="flex -space-x-1.5" aria-hidden>
-              {Array.from({ length: required }).map((_, index) => (
-                <span
-                  // eslint-disable-next-line react/no-array-index-key -- fixed seat count, stable order
-                  key={index}
-                  className={cn(
-                    "h-9 w-9 rounded-full border-2 border-card",
-                    index < joined ? "bg-indigo" : "bg-indigo-soft",
-                  )}
-                />
-              ))}
-            </span>
           </div>
+          <div className="mt-4">
+            {session ? (
+              <AvatarSlots members={session.members} requiredSize={session.required_size} />
+            ) : (
+              <span className="flex -space-x-1.5" aria-hidden>
+                {Array.from({ length: required }).map((_, index) => (
+                  <span
+                    // eslint-disable-next-line react/no-array-index-key -- fixed seat count, stable order
+                    key={index}
+                    className={cn(
+                      "h-9 w-9 rounded-full border-2 border-card",
+                      index < joined ? "bg-indigo" : "bg-indigo-soft",
+                    )}
+                  />
+                ))}
+              </span>
+            )}
+          </div>
+          <p className="mt-3 text-[13px] font-semibold text-subtle">
+            {remaining === 0
+              ? t("cmp.group.ready")
+              : t("cmp.group.needMore").replace("{count}", String(remaining))}
+          </p>
         </div>
 
         <div className="mt-3 flex items-center gap-3 rounded-2xl bg-sage-soft p-4">
@@ -405,13 +504,46 @@ function GroupProgressRow({ campaign: c, group }: GroupProgressRowProps) {
           <p className="font-display text-[16px] font-bold text-ink">{c.reward.title}</p>
         </div>
 
-        <Link
-          href={`/campaigns/${c.id}/group`}
-          onClick={() => setOpen(false)}
-          className="mt-6 block w-full rounded-2xl bg-brand px-6 py-3.5 text-center text-[15px] font-semibold text-white shadow-glow"
-        >
-          {t("cmp.home.groups.invite")}
-        </Link>
+        {session && (
+          <>
+            <div className="mt-4 flex flex-col gap-2 rounded-2xl bg-card p-3">
+              {session.members.map((member) => (
+                <GroupMemberRow key={member.id} member={member} />
+              ))}
+            </div>
+
+            <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-dashed border-line bg-card px-4 py-3.5">
+              <span aria-hidden>🔗</span>
+              <span className="flex-1 truncate font-mono text-[12px] font-semibold text-subtle">{link}</span>
+              <button
+                type="button"
+                onClick={() => copy(link)}
+                className="flex-none rounded-lg bg-brand-muted px-3 py-1.5 text-xs font-bold text-brand"
+              >
+                {copied ? t("common.copied") : t("common.copy")}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => { void shareInvite(); }}
+              className="mt-4 w-full rounded-2xl bg-brand px-6 py-3.5 text-center text-[15px] font-semibold text-white shadow-glow"
+            >
+              {t("cmp.group.inviteFriends")}
+            </button>
+            <button
+              type="button"
+              onClick={() => leave.mutate(session.id, { onSuccess: () => setOpen(false) })}
+              disabled={leave.isPending}
+              className="mt-2 w-full rounded-2xl px-6 py-3 text-[13px] font-semibold text-subtle disabled:opacity-60"
+            >
+              {t("cmp.group.leave")}
+            </button>
+          </>
+        )}
+        {!session && group && (
+          <p className="mt-4 text-center text-[13px] text-subtle">{t("common.loading")}</p>
+        )}
         <button
           type="button"
           onClick={() => setOpen(false)}

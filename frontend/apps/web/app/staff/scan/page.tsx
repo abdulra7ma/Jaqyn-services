@@ -1245,7 +1245,7 @@ export default function StaffScanPage() {
                     <div style={{ color: "rgba(255,255,255,.6)", fontSize: 11.5 }}>{staffName} · {t(`staff.role.${role}`)}</div>
                   </div>
                 </div>
-                <span style={{ background: "rgba(255,255,255,.14)", color: "#fff", fontSize: 10.5, fontWeight: 700, padding: "5px 10px", borderRadius: 99, letterSpacing: ".05em" }}>STAFF</span>
+                <span style={{ background: "rgba(255,255,255,.14)", color: "#fff", fontSize: 10.5, fontWeight: 700, padding: "5px 10px", borderRadius: 99, letterSpacing: ".05em" }}>{t("staff.badge")}</span>
               </div>
             </div>
 

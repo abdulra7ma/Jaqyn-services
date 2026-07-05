@@ -40,7 +40,7 @@ describe("MyQrSheet", () => {
 
   it("renders the QR image when data is ready", () => {
     render(<MyQrSheet isAuthenticated onClose={vi.fn()} />);
-    const img = screen.getByAltText("my QR") as HTMLImageElement;
+    const img = screen.getByAltText("home.myQr") as HTMLImageElement;
     expect(img).toBeInTheDocument();
     expect(img.src).toContain("data:image/png");
   });

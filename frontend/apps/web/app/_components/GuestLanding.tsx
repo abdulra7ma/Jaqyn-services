@@ -7,7 +7,7 @@
 // a friendly fallback so the showcase is never empty.
 
 import { useNearby, type Business } from "@jaqyn/api";
-import { LanguageSwitch } from "@jaqyn/i18n";
+import { LanguageSwitch, useT } from "@jaqyn/i18n";
 import Link from "next/link";
 
 const CAT_EMOJI: Record<string, string> = {
@@ -22,16 +22,18 @@ const CAT_EMOJI: Record<string, string> = {
 const emoji = (c?: string) => CAT_EMOJI[c ?? "other"] ?? "🏪";
 
 const FEATURES = [
-  { glyph: "☕", title: "Collect stamps", body: "Scan at the counter, fill your card, earn free items." },
-  { glyph: "👥", title: "Group deals", body: "Bring friends and unlock a reward together." },
-  { glyph: "🎁", title: "Instant rewards", body: "Redeem the moment you qualify — no points to chase." },
-  { glyph: "📍", title: "Local partners", body: "Cafes, salons and shops all around Bishkek." },
+  { glyph: "☕", titleKey: "guest.features.stamps.title", bodyKey: "guest.features.stamps.body" },
+  { glyph: "👥", titleKey: "guest.features.groups.title", bodyKey: "guest.features.groups.body" },
+  { glyph: "🎁", titleKey: "guest.features.rewards.title", bodyKey: "guest.features.rewards.body" },
+  { glyph: "📍", titleKey: "guest.features.local.title", bodyKey: "guest.features.local.body" },
 ];
 
+// FLOATING cards are demo reward previews. Business names ("Manas Coffee", "Salon & Spa")
+// are proper nouns and not translated. Reward/tag strings go through i18n.
 const FLOATING = [
-  { glyph: "☕", title: "Buy 5, get 1 free", tag: "Manas Coffee", anim: "jqFloatA 7s ease-in-out infinite" },
-  { glyph: "🎂", title: "Free birthday dessert", tag: "Salon & Spa", anim: "jqFloatB 9s ease-in-out infinite" },
-  { glyph: "👥", title: "15% off for groups of 4", tag: "Group deal", anim: "jqFloatC 8s ease-in-out infinite" },
+  { glyph: "☕", titleKey: "guest.floating.stamp", tag: "Manas Coffee", tagIsKey: false, anim: "jqFloatA 7s ease-in-out infinite" },
+  { glyph: "🎂", titleKey: "guest.floating.birthday", tag: "Salon & Spa", tagIsKey: false, anim: "jqFloatB 9s ease-in-out infinite" },
+  { glyph: "👥", titleKey: "guest.floating.group", tag: "guest.floating.groupTag", tagIsKey: true, anim: "jqFloatC 8s ease-in-out infinite" },
 ];
 
 const FALLBACK: Pick<Business, "id" | "name" | "category" | "area" | "reward">[] = [
@@ -44,6 +46,7 @@ const FALLBACK: Pick<Business, "id" | "name" | "category" | "area" | "reward">[]
 ];
 
 export function GuestLanding() {
+  const t = useT();
   const nearby = useNearby();
   const places = (nearby.data && nearby.data.length ? nearby.data : (FALLBACK as Business[])).slice(0, 6);
   const marquee = [...places, ...places, ...places].slice(0, 14);
@@ -71,10 +74,10 @@ export function GuestLanding() {
               <LanguageSwitch />
             </div>
             <Link href="/login" className="rounded-pill px-3 py-2 text-[13.5px] font-semibold text-ink hover:text-brand sm:px-4">
-              Sign in
+              {t("guest.signIn")}
             </Link>
             <Link href="/login" className="rounded-pill bg-brand px-4 py-2 text-[13.5px] font-bold text-brand-fg shadow-glow transition hover:brightness-105 sm:px-5">
-              Register now
+              {t("guest.registerNow")}
             </Link>
           </div>
         </div>
@@ -85,31 +88,30 @@ export function GuestLanding() {
         <section className="grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-2 lg:gap-8 lg:py-24">
           <div className="animate-[jqIn_.4s_ease] text-center lg:text-left">
             <span className="inline-flex items-center gap-2 rounded-pill border border-line bg-card/70 px-3 py-1.5 text-[12px] font-semibold text-subtle backdrop-blur">
-              <span className="h-2 w-2 rounded-full bg-sage-deep" /> Bishkek local rewards
+              <span className="h-2 w-2 rounded-full bg-sage-deep" /> {t("guest.hero.badge")}
             </span>
             <h1 className="mt-4 font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-ink sm:text-5xl lg:text-6xl">
-              Earn rewards at your favorite local spots.
+              {t("guest.hero.title")}
             </h1>
             <p className="mx-auto mt-4 max-w-md text-[15px] leading-relaxed text-subtle lg:mx-0 sm:text-base">
-              Collect stamps, unlock group deals, and redeem free coffee, cuts and treats at cafes, salons and shops
-              across the city — no email, no points to chase.
+              {t("guest.hero.body")}
             </p>
             <div className="mt-7 flex flex-col items-center gap-3 sm:flex-row lg:items-start">
               <Link href="/login" className="w-full rounded-[14px] bg-brand px-7 py-3.5 text-center text-[15px] font-bold text-brand-fg shadow-glow transition hover:brightness-105 sm:w-auto">
-                Register now — it’s free
+                {t("guest.registerCta")}
               </Link>
               <Link href="/nearby" className="w-full rounded-[14px] border-[1.5px] border-line bg-card/70 px-7 py-3.5 text-center text-[15px] font-semibold text-ink backdrop-blur transition hover:border-brand sm:w-auto">
-                Explore nearby
+                {t("guest.exploreNearby")}
               </Link>
             </div>
-            <p className="mt-4 text-[12.5px] text-subtle">Join with just your phone number · takes 30 seconds.</p>
+            <p className="mt-4 text-[12.5px] text-subtle">{t("guest.joinHint")}</p>
           </div>
 
           {/* floating reward cards */}
           <div className="relative mx-auto h-[300px] w-full max-w-[420px] sm:h-[340px] lg:h-[400px]">
             {FLOATING.map((c, i) => (
               <div
-                key={c.title}
+                key={c.titleKey}
                 className="absolute w-[230px] rounded-[18px] border border-line bg-card/90 p-4 shadow-card backdrop-blur sm:w-[260px]"
                 style={{
                   top: `${[6, 38, 64][i]}%`,
@@ -121,8 +123,8 @@ export function GuestLanding() {
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 flex-none items-center justify-center rounded-[12px] bg-brand-muted text-xl">{c.glyph}</div>
                   <div className="min-w-0">
-                    <div className="truncate font-display text-[15px] font-bold text-ink">{c.title}</div>
-                    <div className="text-[12px] text-subtle">{c.tag}</div>
+                    <div className="truncate font-display text-[15px] font-bold text-ink">{t(c.titleKey)}</div>
+                    <div className="text-[12px] text-subtle">{c.tagIsKey ? t(c.tag) : c.tag}</div>
                   </div>
                 </div>
               </div>
@@ -132,17 +134,17 @@ export function GuestLanding() {
 
         {/* what you get */}
         <section className="py-6 sm:py-10">
-          <h2 className="text-center font-display text-2xl font-bold text-ink sm:text-3xl">What you get</h2>
+          <h2 className="text-center font-display text-2xl font-bold text-ink sm:text-3xl">{t("guest.features.title")}</h2>
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {FEATURES.map((f, i) => (
               <div
-                key={f.title}
+                key={f.titleKey}
                 className="animate-[jqIn_.5s_ease_both] rounded-2xl border border-line bg-card/80 p-5 backdrop-blur-sm"
                 style={{ animationDelay: `${i * 90}ms` }}
               >
                 <div className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-brand-muted text-2xl">{f.glyph}</div>
-                <div className="mt-3.5 font-display text-base font-bold text-ink">{f.title}</div>
-                <p className="mt-1.5 text-[13.5px] leading-relaxed text-subtle">{f.body}</p>
+                <div className="mt-3.5 font-display text-base font-bold text-ink">{t(f.titleKey)}</div>
+                <p className="mt-1.5 text-[13.5px] leading-relaxed text-subtle">{t(f.bodyKey)}</p>
               </div>
             ))}
           </div>
@@ -150,8 +152,8 @@ export function GuestLanding() {
 
         {/* partners marquee */}
         <section className="py-6 sm:py-10">
-          <h2 className="text-center font-display text-2xl font-bold text-ink sm:text-3xl">Partners you can earn at</h2>
-          <p className="mt-2 text-center text-[13.5px] text-subtle">A growing network of local businesses around Bishkek.</p>
+          <h2 className="text-center font-display text-2xl font-bold text-ink sm:text-3xl">{t("guest.partners.title")}</h2>
+          <p className="mt-2 text-center text-[13.5px] text-subtle">{t("guest.partners.subtitle")}</p>
           <div className="relative mt-7 overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_8%,#000_92%,transparent)]">
             <div className="jq-marquee flex w-max gap-3" style={{ animation: "jqMarquee 28s linear infinite" }}>
               {marquee.map((b, i) => (
@@ -167,8 +169,8 @@ export function GuestLanding() {
         {/* places near you */}
         <section className="py-6 sm:py-10">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-2xl font-bold text-ink sm:text-3xl">Places near you</h2>
-            <Link href="/nearby" className="text-[13.5px] font-semibold text-brand">See all ›</Link>
+            <h2 className="font-display text-2xl font-bold text-ink sm:text-3xl">{t("guest.places.title")}</h2>
+            <Link href="/nearby" className="text-[13.5px] font-semibold text-brand">{t("guest.places.seeAll")}</Link>
           </div>
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {places.map((b, i) => (
@@ -205,21 +207,21 @@ export function GuestLanding() {
           <div className="relative overflow-hidden rounded-[24px] bg-brand-gradient px-6 py-10 text-center text-brand-fg shadow-glow sm:px-10 sm:py-14">
             <div aria-hidden className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" style={{ animation: "jqBob 6s ease-in-out infinite" }} />
             <div aria-hidden className="absolute -bottom-12 -left-8 h-44 w-44 rounded-full bg-white/10" style={{ animation: "jqBob 7s ease-in-out infinite" }} />
-            <h2 className="relative font-display text-2xl font-extrabold sm:text-3xl">Ready to start collecting?</h2>
+            <h2 className="relative font-display text-2xl font-extrabold sm:text-3xl">{t("guest.cta.title")}</h2>
             <p className="relative mx-auto mt-2 max-w-md text-[14.5px] opacity-90">
-              Create your free account and your first stamp card is one scan away.
+              {t("guest.cta.body")}
             </p>
             <Link href="/login" className="relative mt-6 inline-block rounded-[14px] bg-card px-8 py-3.5 text-[15px] font-bold text-brand-deep shadow-card transition hover:brightness-95">
-              Register now
+              {t("guest.cta.button")}
             </Link>
           </div>
         </section>
       </main>
 
       <footer className="relative z-10 border-t border-line/60 py-6 text-center text-[12.5px] text-subtle">
-        Jaqyn · Bishkek local rewards · Already a member?{" "}
+        {t("guest.footer")}{" "}
         <Link href="/login" className="font-semibold text-brand">
-          Sign in
+          {t("guest.footer.signIn")}
         </Link>
       </footer>
     </div>

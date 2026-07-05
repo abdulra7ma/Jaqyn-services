@@ -48,7 +48,7 @@ export function StaffShell({
       <div className="mx-auto flex min-h-screen max-w-md flex-col bg-cream">
         <header className="sticky top-0 z-10 flex items-center gap-2 bg-cream px-5 py-4">
           {back && (
-            <Link href={back} aria-label="back" className="text-subtle hover:text-brand">
+            <Link href={back} aria-label={t("common.back")} className="text-subtle hover:text-brand">
               ←
             </Link>
           )}
@@ -98,7 +98,7 @@ export function StaffShell({
           {back && (
             <Link
               href={back}
-              aria-label="back"
+              aria-label={t("common.back")}
               className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-card text-subtle transition hover:border-brand hover:text-brand"
             >
               ←

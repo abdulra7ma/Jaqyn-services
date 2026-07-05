@@ -80,20 +80,20 @@ export function CustomerShell({
               <button
                 type="button"
                 onClick={backFn}
-                aria-label="back"
+                aria-label={t("common.back")}
                 className="text-subtle hover:text-brand"
               >
                 ←
               </button>
             ) : (
               back && (
-                <Link href={back} aria-label="back" className="text-subtle hover:text-brand">
+                <Link href={back} aria-label={t("common.back")} className="text-subtle hover:text-brand">
                   ←
                 </Link>
               )
             )}
             {guest ? (
-              <Link href="/" aria-label="Jaqyn — home" className="flex items-center gap-2">
+              <Link href="/" aria-label={t("common.homeAria")} className="flex items-center gap-2">
                 <span className="flex h-8 w-8 flex-none items-center justify-center rounded-[10px] bg-brand-gradient font-display text-lg font-extrabold text-brand-fg shadow-glow">
                   J
                 </span>
@@ -128,7 +128,7 @@ export function CustomerShell({
               <button
                 type="button"
                 onClick={backFn}
-                aria-label="back"
+                aria-label={t("common.back")}
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-card text-subtle transition hover:border-brand hover:text-brand"
               >
                 ←
@@ -137,7 +137,7 @@ export function CustomerShell({
               back && (
                 <Link
                   href={back}
-                  aria-label="back"
+                  aria-label={t("common.back")}
                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-card text-subtle transition hover:border-brand hover:text-brand"
                 >
                   ←

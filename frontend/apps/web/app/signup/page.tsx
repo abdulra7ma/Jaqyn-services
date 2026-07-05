@@ -24,7 +24,7 @@ export default function SignupPage() {
       <Link
         href="/"
         className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-line bg-card/70 text-subtle backdrop-blur transition hover:text-brand sm:left-6 sm:top-6"
-        aria-label="Back home"
+        aria-label={t("auth.backHome")}
       >
         ←
       </Link>
@@ -63,7 +63,7 @@ export default function SignupPage() {
             <div className="flex items-center gap-3 py-1">
               <span className="h-px flex-1 bg-line" />
               <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-subtle">
-                or
+                {t("auth.or")}
               </span>
               <span className="h-px flex-1 bg-line" />
             </div>
@@ -76,13 +76,13 @@ export default function SignupPage() {
                 key={p.key}
                 type="button"
                 disabled
-                title="Social sign-in is coming soon"
+                title={t("auth.social.comingSoon")}
                 className="flex cursor-not-allowed items-center justify-center gap-2.5 rounded-xl border border-line bg-card/60 py-3 text-sm font-semibold text-subtle"
               >
                 <span className="font-display text-[15px]">{p.glyph}</span>
                 {p.label}
                 <span className="ml-1 rounded-full bg-board/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.04em] text-subtle">
-                  Soon
+                  {t("auth.social.soon")}
                 </span>
               </button>
             ))}

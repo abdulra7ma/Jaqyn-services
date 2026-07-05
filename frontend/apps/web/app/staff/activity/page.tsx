@@ -31,11 +31,11 @@ const KIND_ICON: Record<ActivityEventKind, string> = {
   social: "📢",
 };
 
-function fmtRelative(iso: string): string {
+function fmtRelative(iso: string, t: (key: string) => string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return `${diff}с`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}м`;
-  return `${Math.floor(diff / 3600)}ч`;
+  if (diff < 60) return `${diff}${t("common.ago.s")}`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}${t("common.ago.m")}`;
+  return `${Math.floor(diff / 3600)}${t("common.ago.h")}`;
 }
 
 // Filter chip spec: All → no kind param; others map directly.
@@ -139,7 +139,7 @@ export default function StaffActivityPage() {
 
                         {/* Time */}
                         <span className="flex-none text-xs text-subtle">
-                          {fmtRelative(event.created_at)}
+                          {fmtRelative(event.created_at, t)}
                         </span>
                       </div>
                     ))}
