@@ -260,8 +260,8 @@ export function OnboardingFlow() {
   // Section-label suggestions for the datalist: module defaults + labels already
   // used by this business. The owner can still type a brand-new label.
   const catType = useMemo(
-    () => labelSuggestions(catalogModule, items.map((i) => i.category)),
-    [catalogModule, items],
+    () => labelSuggestions(catalogModule, (catalog.data ?? []).map((i) => i.category)),
+    [catalogModule, catalog.data],
   );
   const staffList = team.data?.members ?? [];
   const staffUsed = staffList.length;

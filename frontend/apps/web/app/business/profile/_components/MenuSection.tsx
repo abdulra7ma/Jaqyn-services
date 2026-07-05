@@ -49,8 +49,8 @@ export function MenuSection({ notify }: { notify: Notify }) {
   // Section-label suggestions: module defaults + labels already in use. A new
   // typed value is a new label.
   const labels = useMemo(
-    () => labelSuggestions(catalogModule, items.map((i) => i.category)),
-    [catalogModule, items],
+    () => labelSuggestions(catalogModule, (catalog.data ?? []).map((i) => i.category)),
+    [catalogModule, catalog.data],
   );
 
   function stageAddImage(e: React.ChangeEvent<HTMLInputElement>) {
