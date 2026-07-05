@@ -84,3 +84,9 @@ FIX-09 → FIX-10. 01–04 are launch blockers; 05–08 strongly recommended;
 - Loyalty settings: show disabled immutable fields with explanation.
 - Persist locale preference across logout.
 - Document NEXT_PUBLIC_ENABLE_TEST_UPLOAD as dev-only (verify unset in prod).
+- Business-surface i18n (found in FIX-07 sweep, owner is concierge-onboarded
+  so not launch-blocking): LocationPicker placeholders/aria, OwnerShell +
+  BusinessShell aria-labels, business/staff close aria,
+  business/activate page (mostly hardcoded EN incl. consent line),
+  business/onboarding OnboardingFlow (extensive EN), MenuSection placeholder.
+- guest.floating.* RU marketing copy — copywriter review (flagged in locales.ts).

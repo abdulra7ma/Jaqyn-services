@@ -8,6 +8,18 @@ Priority: HIGH · Area: frontend i18n · Model: **haiku sweep → sonnet fix**
   surfaces face strangers at launch; business owner surface is
   concierge-onboarded — lower priority, log findings to PLAN backlog).
 
+## Carried over from FIX-05 (must handle in this pass)
+Add these keys (used by business/more staff-code confirm, currently render raw):
+- `biz.staffCode.regenConfirm.title` — EN "Generate a new code?" / RU "Создать новый код?"
+- `biz.staffCode.regenConfirm.description` — EN "Your staff's current code will stop working immediately." / RU "Текущий код сотрудников перестанет работать немедленно."
+- `biz.staffCode.regenConfirm.confirm` — EN "Generate new code" / RU "Создать новый код"
+
+## Carried over from FIX-04 (must handle in this pass)
+- Business dashboard activity rows reuse `staff.activity.kind.*` keys on an
+  owner surface — add dedicated `owner.dashboard.activity.kind.*` keys.
+- `fmtAgo` relative-time suffixes in the dashboard page (`с/м/ч`) are
+  hardcoded Russian (mirrors staff `fmtRelative`) — route through i18n.
+
 ## Current behavior
 LAUNCH.md item 3 requires RU 100% on customer + staff surfaces. At least
 one hardcoded string exists ("Get started" on the onboarding tour); a
