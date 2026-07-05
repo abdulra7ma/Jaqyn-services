@@ -5,6 +5,7 @@ import { useT } from "@jaqyn/i18n";
 import { Button, Loading } from "@jaqyn/ui";
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import { SUPPORT_URL } from "../../_lib/config";
 import { ClaimSheet } from "./_components/ClaimSheet";
 import { FeatureBlocks } from "./_components/FeatureBlocks";
 import { PitchCard } from "./_components/PitchCard";
@@ -28,7 +29,7 @@ function DeadLink() {
         </h1>
         <p className="mt-2 text-sm text-subtle">{t("pitch.dead.sub")}</p>
         <a
-          href="https://t.me/jaqyn"
+          href={SUPPORT_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-pill bg-brand px-6 py-3.5 text-[15px] font-bold text-white shadow-glow hover:bg-brand-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
