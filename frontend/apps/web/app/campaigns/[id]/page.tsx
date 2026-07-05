@@ -2,6 +2,7 @@
 
 import { useCampaign, useJoinCampaign, type Campaign } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { CustomerShell } from "../../_components/CustomerShell";
 import { QueryBoundary } from "../../_components/QueryBoundary";
@@ -50,9 +51,45 @@ function CtaBar({ campaign }: { campaign: Campaign }) {
     };
   }
 
-  // Ended/cancelled campaigns the customer never completed have no action.
+  // Ended/cancelled campaigns the customer has not yet completed: show a status
+  // notice with a way forward rather than a silent empty CTA area.
   const inactive = (campaign.status === "ended" || campaign.status === "cancelled") && !p?.completed;
-  if (inactive || !cta) return null;
+  if (inactive) {
+    return (
+      <div
+        className="mt-6 flex flex-col gap-3 rounded-2xl bg-board px-4 py-4"
+        role="status"
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="text-lg" aria-hidden>
+            🏁
+          </span>
+          <p className="font-display text-[15px] font-bold text-ink">
+            {t("cmp.detail.ended.notice")}
+          </p>
+        </div>
+        <p className="text-[13px] text-subtle">{t("cmp.detail.ended.body")}</p>
+        <div className="flex flex-col gap-2">
+          <Link
+            href="/campaigns"
+            className="rounded-xl bg-card px-4 py-3 text-center text-[13.5px] font-semibold text-ink shadow-[0_2px_8px_rgba(46,36,29,.05)] transition active:opacity-80"
+          >
+            {t("cmp.detail.ended.backToCampaigns")}
+          </Link>
+          {p?.voucher_id && (
+            <Link
+              href="/rewards"
+              className="rounded-xl bg-card px-4 py-3 text-center text-[13.5px] font-semibold text-sage shadow-[0_2px_8px_rgba(46,36,29,.05)] transition active:opacity-80"
+            >
+              {t("cmp.detail.ended.viewReward")}
+            </Link>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (!cta) return null;
 
   return (
     <div className="sticky bottom-0 -mx-4 mt-6 bg-gradient-to-t from-cream from-[26%] to-transparent px-4 pb-[calc(16px+env(safe-area-inset-bottom))] pt-3.5 sm:-mx-6 sm:px-6">
