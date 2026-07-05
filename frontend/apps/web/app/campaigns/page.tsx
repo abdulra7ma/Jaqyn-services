@@ -483,7 +483,7 @@ function StarterMission({ nearby }: { nearby: Campaign[] }) {
           {t("cmp.home.empty.showQr").replace("{business}", selectedCampaign.business.name)}
         </p>
         <Link
-          href="/visit-qr"
+          href="/campaigns/visit-qr"
           className="mt-4 block rounded-pill bg-brand px-6 py-3 font-semibold text-white shadow-glow"
         >
           {t("cmp.home.hero.showQr")}

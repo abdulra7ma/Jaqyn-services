@@ -83,6 +83,8 @@ const mockState = {
   groups: emptyGroups as MyGroup[],
 };
 
+const mockJoinCampaign = vi.fn();
+
 vi.mock("@jaqyn/api", () => ({
   useLoyaltyHomeSummary: () => ({ data: mockState.summary, isLoading: false, isError: false }),
   useLoyaltyCards: () => ({ data: mockState.cards, isLoading: false, isError: false }),
@@ -91,7 +93,7 @@ vi.mock("@jaqyn/api", () => ({
   useLoyaltyVouchers: () => ({ data: mockState.loyaltyWallet, isLoading: false, isError: false }),
   useMyGroups: () => ({ data: mockState.groups, isLoading: false, isError: false }),
   useNearby: () => ({ data: [], isLoading: false, isError: false }),
-  useJoinCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useJoinCampaign: () => ({ mutateAsync: mockJoinCampaign, isPending: false }),
 }));
 
 import CampaignsPage from "./page";
@@ -120,6 +122,33 @@ describe("CampaignsPage — 3 states", () => {
       render(<CampaignsPage />);
       // Stats strip uses stats keys; none should appear in new-user state.
       expect(screen.queryByText("cmp.home.stats.rewards")).not.toBeInTheDocument();
+    });
+
+    it("starter mission joined state links to /campaigns/visit-qr", async () => {
+      // Set up a joinable nearby campaign.
+      mockState.feed = {
+        followed: [],
+        discover: [makeActiveCampaign({ id: "nearby-c1", my_progress: { joined: false, status: "joined", current_count: 0, target_count: 5, completed: false, voucher_id: null } })],
+        sections: { featured: [], trending: [], fresh: [] },
+      };
+
+      // Mock the join mutation to resolve immediately.
+      mockJoinCampaign.mockResolvedValueOnce(undefined);
+
+      render(<CampaignsPage />);
+
+      // Campaign selection buttons are rendered with business name + reward.
+      // Click the first campaign button (accessible name is "Manas Free coffee").
+      const campaignButton = screen.getByRole("button", { name: /Manas Free coffee/ });
+      fireEvent.click(campaignButton);
+
+      // Click join.
+      const joinButton = screen.getByRole("button", { name: /cmp\.home\.empty\.join/ });
+      fireEvent.click(joinButton);
+
+      // Wait for the mutation to complete and the joined state to render.
+      const showQrLink = await screen.findByRole("link", { name: /cmp\.home\.hero\.showQr/ });
+      expect(showQrLink).toHaveAttribute("href", "/campaigns/visit-qr");
     });
   });
 
