@@ -13,7 +13,9 @@ import type { PatchOut, PatchesSummary } from "@jaqyn/api";
 
 // Minimal shell stub — avoids CustomerShell's auth + router dependencies.
 vi.mock("../../_components/CustomerShell", () => ({
-  CustomerShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  CustomerShell: ({ children, back }: { children: React.ReactNode; back?: string }) => (
+    <div data-back={back}>{children}</div>
+  ),
 }));
 vi.mock("../../_lib/auth", () => ({ useRequireAuth: () => ({ isAuthenticated: true }) }));
 
@@ -115,6 +117,11 @@ describe("PatchesPage — board", () => {
       earned_count: 1,
       total: 2,
     };
+  });
+
+  it("returns to campaigns from the shell back button", () => {
+    const { container } = render(<PatchesPage />);
+    expect(container.querySelector('[data-back="/campaigns"]')).toBeInTheDocument();
   });
 
   it("renders patch grid with accessible button names", () => {

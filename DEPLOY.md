@@ -68,7 +68,11 @@ DJANGO_COLLECTSTATIC=true
 USE_S3=true               # plus the AWS_* / R2 vars (step 5)
 SEED_TEST_USERS=false
 DEV_LOGIN_OTP=
+EMAIL_BACKEND=anymail.backends.resend.EmailBackend
+RESEND_API_KEY=<from Resend dashboard → API Keys>
+DEFAULT_FROM_EMAIL=Jaqyn <noreply@mail.jaqyn.kg>
 ```
+Email confirmation / password reset send via [Resend](https://resend.com) (`django-anymail`), not SMTP — `mail.jaqyn.kg` is verified there (SPF/DKIM/DMARC DNS records added at the registrar). Email-sending tasks run in the **worker** service (`apps/accounts/tasks.py`, `apps/businesses/tasks.py`), so these three vars must also be set on the worker service in step 3, not just web.
 
 Now generate this service's URL: **Settings → Networking → Generate Domain** → e.g. `jaqyn-web-production.up.railway.app`. Then add the host-dependent vars (you finally know the host):
 ```

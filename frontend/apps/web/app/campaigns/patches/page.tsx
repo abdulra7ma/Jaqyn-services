@@ -380,7 +380,7 @@ export default function PatchesPage(): JSX.Element {
 
   if (isLoading) {
     return (
-      <CustomerShell title={t("patch.title")} hideChromeTitle>
+      <CustomerShell title={t("patch.title")} back="/campaigns" hideChromeTitle>
         <div className="min-h-[100dvh] bg-cream flex items-center justify-center">
           <span className="text-subtle text-sm font-sans">{t("common.loading")}</span>
         </div>
@@ -390,7 +390,7 @@ export default function PatchesPage(): JSX.Element {
 
   if (isError || !data) {
     return (
-      <CustomerShell title={t("patch.title")} hideChromeTitle>
+      <CustomerShell title={t("patch.title")} back="/campaigns" hideChromeTitle>
         <div className="min-h-[100dvh] bg-cream flex items-center justify-center">
           <span className="text-subtle text-sm font-sans">{t("common.error")}</span>
         </div>
@@ -401,7 +401,7 @@ export default function PatchesPage(): JSX.Element {
   const currentEarnPatch = earnQueue[0] ?? null;
 
   return (
-    <CustomerShell title={t("patch.title")} hideChromeTitle>
+    <CustomerShell title={t("patch.title")} back="/campaigns" hideChromeTitle>
       {/* Earn moment overlay — one at a time, queued */}
       {currentEarnPatch && (
         <EarnMoment

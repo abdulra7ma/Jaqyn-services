@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "apps.system",
     "apps.leads",
     "apps.patches",
+    "anymail",
 ]
 
 # --- Django admin theming (django-unfold) ---
@@ -499,7 +500,12 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 # send runs inside the request, so a hung connect triggers a gunicorn WORKER
 # TIMEOUT and kills the worker. A bounded timeout fails fast instead.
 EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "15"))
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Jaqyn <noreply@jaqyn.local>")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Jaqyn <noreply@mail.jaqyn.kg>")
+
+# Resend (django-anymail) API-based sending. Set EMAIL_BACKEND to
+# anymail.backends.resend.EmailBackend + RESEND_API_KEY in .env to send via
+# Resend instead of raw SMTP/console.
+ANYMAIL = {"RESEND_API_KEY": os.getenv("RESEND_API_KEY", "")}
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()

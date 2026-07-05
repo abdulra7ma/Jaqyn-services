@@ -3,7 +3,7 @@ title: Backend Configuration
 service: backend
 type: reference
 status: active
-last_reviewed: 2026-06-30---
+last_reviewed: 2026-07-05---
 
 # Backend Configuration
 
@@ -53,10 +53,23 @@ Postgres: `POSTGRES_DB/USER/PASSWORD` (default `jaqyn`), `POSTGRES_HOST`
 `CELERY_RESULT_BACKEND` (`…/2`), `CELERY_TASK_ALWAYS_EAGER` (`false`).
 
 ### Email
-`EMAIL_BACKEND` (default console — **prod rejects console**), `EMAIL_HOST`
-(`localhost`), `EMAIL_PORT` (`1025`, Mailpit), `EMAIL_USE_TLS`/`EMAIL_USE_SSL`
-(bool, accept on/1/yes/true), `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`,
-`EMAIL_TIMEOUT` (`15`), `DEFAULT_FROM_EMAIL`.
+Prod sends via **Resend** (`django-anymail`), API-based, not SMTP. Local dev
+defaults to the console backend; Mailpit (SMTP) is also available for a
+clickable UI.
+
+- `EMAIL_BACKEND` (default console — **prod rejects console**, `prod.py`
+  fail-fast). Prod value: `anymail.backends.resend.EmailBackend`.
+- `RESEND_API_KEY` — read into `ANYMAIL["RESEND_API_KEY"]` (`base.py`); only
+  used when `EMAIL_BACKEND` is the Resend backend.
+- `DEFAULT_FROM_EMAIL` (default `Jaqyn <noreply@mail.jaqyn.kg>`) — must be on a
+  domain verified in the Resend dashboard (SPF/DKIM/DMARC DNS records).
+- SMTP fallback vars (Mailpit locally, or another SMTP provider): `EMAIL_HOST`
+  (`localhost`), `EMAIL_PORT` (`1025`), `EMAIL_USE_TLS`/`EMAIL_USE_SSL` (bool,
+  accept on/1/yes/true), `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`,
+  `EMAIL_TIMEOUT` (`15`).
+- Email-sending Celery tasks: `apps/accounts/tasks.py`,
+  `apps/businesses/tasks.py` — run in the **worker** process, so email vars
+  must be set there too, not just on the web service.
 
 ### Media / R2
 `USE_S3` (`false`). When true: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
