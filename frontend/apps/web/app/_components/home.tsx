@@ -139,6 +139,60 @@ export function HeroCard({ hero }: { hero: HeroResult }) {
     );
   }
 
+  if (hero.source === "campaign" && hero.cashbackReward) {
+    const progressPct = hero.total > 0 ? Math.round((hero.current / hero.total) * 100) : 0;
+    return (
+      <Link
+        href={hero.href}
+        className="relative flex h-[300px] flex-col overflow-hidden rounded-reward-card bg-wallet-sage p-reward-card text-white shadow-reward-card"
+        aria-label={`${hero.title} — ${hero.business}`}
+      >
+        <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" />
+        <div className="absolute -bottom-16 -left-12 h-44 w-44 rounded-full bg-white/10" />
+
+        <div className="relative flex items-center justify-between gap-3">
+          <span className="flex min-w-0 items-center gap-3">
+            <BusinessLogo name={hero.business} url={hero.businessLogoUrl ?? null} size="medium" />
+            <span className="min-w-0">
+              <span className="inline-flex rounded-pill bg-white/20 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white">
+                {t("home.cashbackCampaign")}
+              </span>
+              <span className="mt-1 block truncate text-base font-bold">{hero.business}</span>
+            </span>
+          </span>
+          <span className="rounded-pill bg-white/20 px-3 py-1.5 text-sm font-extrabold">
+            {hero.current}/{hero.total}
+          </span>
+        </div>
+
+        <div className="relative mt-5 flex items-center gap-4">
+          <span className="flex h-20 w-20 flex-none items-center justify-center rounded-full border border-white/30 bg-white/15 font-display text-2xl font-extrabold shadow-card" aria-hidden>
+            сом
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wide text-white/70">{t("home.cashbackUnlock")}</p>
+            <p className="mt-1 font-display text-2xl font-extrabold leading-tight">{hero.title}</p>
+          </div>
+        </div>
+
+        <div className="relative mt-5">
+          <div className="h-2.5 overflow-hidden rounded-pill bg-white/25" aria-hidden>
+            <div className="h-full rounded-pill bg-white" style={{ width: `${progressPct}%` }} />
+          </div>
+          <p className="mt-2 text-xs font-semibold text-white/75">
+            {t("home.cashbackProgress")
+              .replace("{current}", String(hero.current))
+              .replace("{total}", String(hero.total))}
+          </p>
+        </div>
+
+        <span className="relative mt-auto flex min-h-14 w-full items-center justify-center rounded-xl bg-white px-4 text-base font-bold text-sage-deep shadow-card">
+          {t("home.viewCashback")} ›
+        </span>
+      </Link>
+    );
+  }
+
   // progress variant
   const complete = hero.current >= hero.total;
   const open = hero.businessHours ? isOpenNow(hero.businessHours) !== false : true;

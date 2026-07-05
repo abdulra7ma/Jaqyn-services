@@ -128,6 +128,30 @@ describe("HeroCard — cashback variant", () => {
     expect(screen.queryByText("home.bonusProgress")).not.toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveAttribute("href", "/loyalty?business=b1");
   });
+
+  it("renders campaign cashback as a money card instead of stamp pips", () => {
+    render(
+      <HeroCard
+        hero={{
+          kind: "progress",
+          source: "campaign",
+          href: "/campaigns/cashback",
+          title: "Cashback som",
+          business: "Manas Coffee",
+          remaining: 1,
+          total: 1,
+          current: 0,
+          mechanic: "campaign",
+          cashbackReward: true,
+          accentClass: "bg-brand-gradient",
+        }}
+      />,
+    );
+    expect(screen.getByText("сом")).toBeInTheDocument();
+    expect(screen.getByText("home.cashbackCampaign")).toBeInTheDocument();
+    expect(screen.getByText(/home\.viewCashback/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("0 / 1")).not.toBeInTheDocument();
+  });
 });
 
 describe("HeroCard — map variant", () => {

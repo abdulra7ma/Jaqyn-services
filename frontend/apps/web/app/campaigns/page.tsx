@@ -26,9 +26,10 @@ import {
   type Campaign,
   type CampaignVoucher,
   type LoyaltyCardView,
+  type MyGroup,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
-import { cn } from "@jaqyn/ui";
+import { cn, Sheet } from "@jaqyn/ui";
 import { useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -109,24 +110,64 @@ function WinOverlay({ rewardTitle, onClose, voucherId }: WinOverlayProps) {
 
 function ClaimableBanner({ vouchers }: { vouchers: CampaignVoucher[] }) {
   const t = useT();
+  const [open, setOpen] = useState(false);
   if (vouchers.length === 0) return null;
   // vouchers is non-empty (checked above).
   const first = vouchers[0] as NonNullable<typeof vouchers[0]>;
+  const rewardHref = first.domain === "loyalty" ? "/rewards" : `/campaign-wallet/${first.id}`;
 
   return (
-    <Link
-      href="/campaign-wallet"
-      className="flex items-center gap-3 rounded-2xl bg-sage-soft p-4 transition active:scale-[.99]"
-    >
-      <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-sage text-white text-lg" aria-hidden>
-        🎁
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold text-[14px] text-ink">{t("cmp.home.claimable.title")}</p>
-        <p className="mt-0.5 truncate text-[12.5px] text-subtle">{first.reward_title} · {t("cmp.home.claimable.hint")}</p>
-      </div>
-      <span className="flex-none text-subtle" aria-hidden>›</span>
-    </Link>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-3 rounded-2xl bg-sage-soft p-4 text-left transition active:scale-[.99]"
+      >
+        <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-sage text-lg text-white" aria-hidden>
+          🎁
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold text-[14px] text-ink">{t("cmp.home.claimable.title")}</span>
+          <span className="mt-0.5 block truncate text-[12.5px] text-subtle">{first.reward_title} · {t("cmp.home.claimable.hint")}</span>
+        </span>
+        <span className="flex-none text-subtle" aria-hidden>›</span>
+      </button>
+
+      <Sheet
+        open={open}
+        onOpenChange={setOpen}
+        ariaLabel={t("cmp.home.claimable.sheetTitle")}
+        surface="cream"
+      >
+        <div className="pb-2 text-center">
+          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-sage text-3xl text-white shadow-card" aria-hidden>
+            🎁
+          </span>
+          <p className="mt-4 text-[11px] font-bold uppercase tracking-wide text-sage">
+            {t("cmp.home.claimable.ready")}
+          </p>
+          <h2 className="mt-1 font-display text-2xl font-bold text-ink">{first.reward_title}</h2>
+          <p className="mt-1 text-[14px] text-subtle">{first.business.name}</p>
+          <p className="mx-auto mt-4 max-w-xs text-[13.5px] leading-relaxed text-subtle">
+            {t("cmp.home.claimable.sheetHint")}
+          </p>
+          <Link
+            href={rewardHref}
+            onClick={() => setOpen(false)}
+            className="mt-6 block w-full rounded-2xl bg-brand px-6 py-3.5 text-center text-[15px] font-semibold text-white shadow-glow"
+          >
+            {t("cmp.home.claimable.viewReward")}
+          </Link>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="mt-2 w-full rounded-2xl px-6 py-3 text-[14px] font-semibold text-subtle"
+          >
+            {t("common.close")}
+          </button>
+        </div>
+      </Sheet>
+    </>
   );
 }
 
@@ -167,39 +208,220 @@ interface InProgressRowProps {
 
 function InProgressRow({ campaign: c }: InProgressRowProps) {
   const t = useT();
+  const [open, setOpen] = useState(false);
   const p = c.my_progress;
-  const isGroup = c.campaign_type === "group";
   const current = p?.current_count ?? 0;
   const target = p?.target_count ?? c.rule.required_count ?? 0;
   const pct = target > 0 ? Math.round((current / target) * 100) : 0;
 
   return (
-    <Link
-      href={isGroup ? `/campaigns/${c.id}/group` : `/campaigns/${c.id}`}
-      className="flex items-center gap-3 rounded-2xl border border-line bg-card p-3.5 transition active:scale-[.99]"
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="block w-full rounded-2xl border border-line bg-card p-4 text-left shadow-card transition active:scale-[.99]"
+      >
+        <div className="flex items-center gap-3">
+          <GlyphTile glyph={c.glyph || "⭐"} size={52} image={c.business.logo_url} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-display text-[16px] font-bold text-ink">{c.name}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <p className="truncate text-[13px] font-medium text-subtle">{c.business.name}</p>
+              {c.days_left > 0 && c.days_left <= 7 && (
+                <span className="flex-none rounded-pill bg-amber/10 px-2 py-0.5 text-[11px] font-semibold text-amber-deep">
+                  {c.days_left}d
+                </span>
+              )}
+            </div>
+          </div>
+          <div
+            className="flex h-12 w-14 flex-none items-center justify-center rounded-xl bg-reward-warm font-display text-lg font-bold text-brand"
+            aria-label={`${current} / ${target}`}
+          >
+            {current}/{target}
+          </div>
+        </div>
+        <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-line" aria-hidden>
+          <div className="h-full rounded-full bg-brand-gradient transition-[width]" style={{ width: `${pct}%` }} />
+        </div>
+      </button>
+
+      <Sheet open={open} onOpenChange={setOpen} ariaLabel={c.name} surface="cream">
+        <div className="pb-2">
+          <div className="flex items-center gap-3">
+            <GlyphTile glyph={c.glyph || "⭐"} size={56} image={c.business.logo_url} />
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold text-subtle">{c.business.name}</p>
+              <h2 className="font-display text-xl font-bold text-ink">{c.name}</h2>
+            </div>
+          </div>
+
+          {c.description && <p className="mt-4 text-[14px] leading-relaxed text-subtle">{c.description}</p>}
+
+          <div className="mt-5 rounded-2xl bg-card p-4 shadow-card">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] font-semibold text-subtle">{t("cmp.detail.yourProgress")}</p>
+              <p className="font-display text-2xl font-bold text-brand">{current}/{target}</p>
+            </div>
+            <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-line" aria-hidden>
+              <div className="h-full rounded-full bg-brand-gradient" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-3 rounded-2xl bg-sage-soft p-4">
+            <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-sage text-xl text-white" aria-hidden>🎁</span>
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-sage">{t("cmp.detail.challenge")}</p>
+              <p className="font-display text-[16px] font-bold text-ink">{c.reward.title}</p>
+            </div>
+          </div>
+
+          <Link
+            href="/campaigns/visit-qr"
+            onClick={() => setOpen(false)}
+            className="mt-6 block w-full rounded-2xl bg-brand px-6 py-3.5 text-center text-[15px] font-semibold text-white shadow-glow"
+          >
+            {t("cmp.detail.showQr")}
+          </Link>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="mt-2 w-full rounded-2xl px-6 py-3 text-[14px] font-semibold text-subtle"
+          >
+            {t("common.close")}
+          </button>
+        </div>
+      </Sheet>
+    </>
+  );
+}
+
+interface GroupProgressRowProps {
+  campaign: Campaign;
+  group?: MyGroup;
+}
+
+function GroupProgressRow({ campaign: c, group }: GroupProgressRowProps) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const joined = group?.joined_count ?? c.my_progress?.current_count ?? 0;
+  const required = group?.required_size ?? c.rule.required_group_size ?? 0;
+
+  return (
+    <>
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="block w-full rounded-2xl border border-line bg-card p-4 text-left shadow-card transition active:scale-[.99]"
     >
-      <GlyphTile glyph={c.glyph || (isGroup ? "👥" : "⭐")} size={42} image={c.business.logo_url} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate font-semibold text-[14px] text-ink">{c.name}</p>
-          {c.days_left > 0 && c.days_left <= 7 && (
-            <span className="flex-none rounded-pill bg-amber/10 px-2 py-0.5 text-[10.5px] font-semibold text-amber-deep">
-              {c.days_left}d
+      <div className="flex items-center gap-3">
+        <GlyphTile glyph={c.glyph || "👥"} size={56} image={c.business.logo_url} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate font-display text-[16px] font-bold text-ink">{c.business.name}</p>
+            <span className="flex-none rounded-pill bg-indigo-soft px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-indigo">
+              {t("cmp.home.groups.badge")}
             </span>
+          </div>
+          {c.days_left > 0 && c.days_left <= 7 && (
+            <p className="mt-1 text-[12px] font-semibold text-brand">
+              {t("cmp.home.groups.daysLeft").replace("{days}", String(c.days_left))}
+            </p>
           )}
         </div>
-        {/* Progress bar */}
-        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-line" aria-hidden>
-          <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${pct}%` }} />
-        </div>
-        <p className="mt-0.5 text-[11.5px] text-subtle">{current}/{target}</p>
       </div>
-      {isGroup && (
-        <span className={cn("flex-none rounded-pill border border-brand px-2.5 py-1 text-[12px] font-semibold text-brand")}>
-          {t("cmp.home.inprogress.invite")}
+
+      <div className="mt-4 flex items-center gap-3 rounded-xl bg-cream p-3">
+        <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-sage-soft text-xl" aria-hidden>
+          🎁
         </span>
-      )}
-    </Link>
+        <p className="font-display text-[15px] font-bold leading-snug text-ink">{c.reward.title}</p>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between gap-4">
+        <div
+          className="flex items-center gap-3"
+          aria-label={t("cmp.home.groups.joined")
+            .replace("{joined}", String(joined))
+            .replace("{required}", String(required))}
+        >
+          <span className="font-display text-2xl font-bold text-ink">{joined}/{required}</span>
+          <span className="flex -space-x-1.5" aria-hidden>
+            {Array.from({ length: required }).map((_, index) => (
+              <span
+                // eslint-disable-next-line react/no-array-index-key -- fixed seat count, stable order
+                key={index}
+                className={cn(
+                  "h-7 w-7 rounded-full border-2 border-card",
+                  index < joined ? "bg-indigo" : "bg-indigo-soft",
+                )}
+              />
+            ))}
+          </span>
+        </div>
+        <span className="rounded-pill bg-brand px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-reward-cta">
+          {t("cmp.home.groups.invite")}
+        </span>
+      </div>
+    </button>
+
+    <Sheet open={open} onOpenChange={setOpen} ariaLabel={c.name} surface="cream">
+      <div className="pb-2">
+        <div className="flex items-center gap-3">
+          <GlyphTile glyph={c.glyph || "👥"} size={56} image={c.business.logo_url} />
+          <div className="min-w-0 flex-1">
+            <span className="rounded-pill bg-indigo-soft px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-indigo">
+              {t("cmp.home.groups.badge")}
+            </span>
+            <h2 className="mt-1 font-display text-xl font-bold text-ink">{c.business.name}</h2>
+          </div>
+        </div>
+
+        {c.description && <p className="mt-4 text-[14px] leading-relaxed text-subtle">{c.description}</p>}
+
+        <div className="mt-5 rounded-2xl bg-card p-4 shadow-card">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[13px] font-semibold text-subtle">{t("cmp.group.progress")}</p>
+              <p className="mt-1 font-display text-3xl font-bold text-ink">{joined}/{required}</p>
+            </div>
+            <span className="flex -space-x-1.5" aria-hidden>
+              {Array.from({ length: required }).map((_, index) => (
+                <span
+                  // eslint-disable-next-line react/no-array-index-key -- fixed seat count, stable order
+                  key={index}
+                  className={cn(
+                    "h-9 w-9 rounded-full border-2 border-card",
+                    index < joined ? "bg-indigo" : "bg-indigo-soft",
+                  )}
+                />
+              ))}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center gap-3 rounded-2xl bg-sage-soft p-4">
+          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-sage text-xl text-white" aria-hidden>🎁</span>
+          <p className="font-display text-[16px] font-bold text-ink">{c.reward.title}</p>
+        </div>
+
+        <Link
+          href={`/campaigns/${c.id}/group`}
+          onClick={() => setOpen(false)}
+          className="mt-6 block w-full rounded-2xl bg-brand px-6 py-3.5 text-center text-[15px] font-semibold text-white shadow-glow"
+        >
+          {t("cmp.home.groups.invite")}
+        </Link>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="mt-2 w-full rounded-2xl px-6 py-3 text-[14px] font-semibold text-subtle"
+        >
+          {t("common.close")}
+        </button>
+      </div>
+    </Sheet>
+    </>
   );
 }
 
@@ -376,6 +598,7 @@ export default function CampaignsPage() {
   const allClaimable = [...activeCampaignVouchers, ...activeLoyaltyVouchers.map(
     // Bridge loyalty voucher to partial CampaignVoucher shape for the banner.
     (v) => ({
+      domain: "loyalty",
       id: v.id,
       reward_title: v.reward_title,
       business: { id: v.business, name: v.business_name },
@@ -402,8 +625,14 @@ export default function CampaignsPage() {
   const somSaved = summary?.som_saved ?? "0";
   const streakWeeks = summary?.visit_streak_weeks ?? 1;
 
-  const inProgressCampaigns = followed.filter((c) => c.my_progress && !c.my_progress.completed);
-  const myActiveGroup = myGroupsQuery.data?.find((g) => ACTIVE_GROUP_STATUSES.includes(g.status));
+  const inProgressCampaigns = followed.filter(
+    (c) => c.campaign_type !== "group" && c.my_progress && !c.my_progress.completed,
+  );
+  const inProgressGroupCampaigns = followed.filter(
+    (c) => c.campaign_type === "group" && c.my_progress && !c.my_progress.completed,
+  );
+  const activeGroups = (myGroupsQuery.data ?? []).filter((g) => ACTIVE_GROUP_STATUSES.includes(g.status));
+  const myActiveGroup = activeGroups[0];
 
   // Determine state.
   const isNew = rewardsEarned === 0 && cards.length === 0 && followed.length === 0;
@@ -509,6 +738,24 @@ export default function CampaignsPage() {
                 <div className="mt-3 flex flex-col gap-2.5">
                   {inProgressCampaigns.map((c) => (
                     <InProgressRow key={c.id} campaign={c} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Group deals stay separate from individual progress. */}
+            {inProgressGroupCampaigns.length > 0 && (
+              <section>
+                <h2 className="font-display text-lg font-bold text-ink">
+                  {t("cmp.home.groups.title")}
+                </h2>
+                <div className="mt-3 flex flex-col gap-2.5">
+                  {inProgressGroupCampaigns.map((c) => (
+                    <GroupProgressRow
+                      key={c.id}
+                      campaign={c}
+                      group={activeGroups.find((g) => g.campaign_id === c.id)}
+                    />
                   ))}
                 </div>
               </section>

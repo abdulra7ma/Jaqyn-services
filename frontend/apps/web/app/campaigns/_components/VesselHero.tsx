@@ -20,6 +20,7 @@ import { useReducedMotion } from "framer-motion";
 import { useT } from "@jaqyn/i18n";
 import { cn } from "@jaqyn/ui";
 import Link from "next/link";
+import { GlyphTile } from "../../_components/campaigns";
 import type { CampaignsHeroResult } from "../_lib/pickCampaignsHero";
 
 // ---- Stamp pips ----------------------------------------------------------------
@@ -124,9 +125,16 @@ function GroupHeroBody({ campaign, joined, required }: GroupHeroBodyProps) {
         <p className="mt-1 font-display text-[20px] font-bold leading-tight text-white">
           {campaign.reward.title}
         </p>
-        <p className="mt-1 text-[13px] text-white/80">
-          {campaign.business.name}
-        </p>
+        <div className="mt-2 flex items-center gap-2">
+          <GlyphTile
+            glyph={campaign.glyph || "👥"}
+            image={campaign.business.logo_url}
+            size={32}
+          />
+          <p className="min-w-0 truncate text-[13px] text-white/80">
+            {campaign.business.name}
+          </p>
+        </div>
       </div>
     </div>
   );

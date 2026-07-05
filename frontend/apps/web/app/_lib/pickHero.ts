@@ -38,6 +38,7 @@ export type HeroResult =
       total: number;
       current: number;
       mechanic?: "stamp" | "visit" | "campaign";
+      cashbackReward?: boolean;
       businessId?: string;
       businessArea?: string;
       businessHours?: Record<string, [string, string]>;
@@ -126,7 +127,7 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
 
   type Candidate =
     | { source: "loyalty"; remaining: number; total: number; current: number; href: string; title: string; business: string; businessLogoUrl: string | null; businessId: string; businessArea: string; businessHours: Record<string, [string, string]>; accentClass: string; mechanic: "stamp" | "visit"; lastActivityAt: string | null }
-    | { source: "campaign"; remaining: number; total: number; current: number; href: string; title: string; business: string; businessLogoUrl: string | null; accentClass: string; mechanic: "campaign" };
+    | { source: "campaign"; remaining: number; total: number; current: number; href: string; title: string; business: string; businessLogoUrl: string | null; accentClass: string; mechanic: "campaign"; cashbackReward: boolean };
 
   const candidates: Candidate[] = [];
   const secondaryCandidates: Candidate[] = [];
@@ -171,6 +172,9 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
       total: p.target_count,
       current: p.current_count,
       mechanic: "campaign",
+      cashbackReward: /cashback|кэшбэк/i.test(
+        `${campaign.reward.title} ${campaign.reward.description}`,
+      ),
       href: `/campaigns/${campaign.id}`,
       title: campaign.reward.title,
       business: campaign.business.name,
@@ -213,6 +217,9 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
         total: candidate.total,
         current: candidate.current,
         mechanic: candidate.mechanic,
+        ...(candidate.source === "campaign"
+          ? { cashbackReward: candidate.cashbackReward }
+          : {}),
         ...(candidate.source === "loyalty"
           ? {
               businessId: candidate.businessId,

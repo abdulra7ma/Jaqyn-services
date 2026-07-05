@@ -6,7 +6,7 @@
  * tested separately (it fires when my_progress.completed flips true).
  */
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   Campaign,
@@ -170,6 +170,14 @@ describe("CampaignsPage — 3 states", () => {
     it("shows in-progress list", () => {
       render(<CampaignsPage />);
       expect(screen.getByText("Coffee Challenge")).toBeInTheDocument();
+      expect(screen.getByLabelText("3 / 5")).toBeInTheDocument();
+    });
+
+    it("opens campaign details in a sheet", () => {
+      render(<CampaignsPage />);
+      fireEvent.click(screen.getByRole("button", { name: /Coffee Challenge/ }));
+      expect(screen.getByRole("dialog", { name: "Coffee Challenge" })).toBeInTheDocument();
+      expect(screen.getByText("cmp.detail.showQr")).toBeInTheDocument();
     });
 
     it("does not show the patches entry", () => {
@@ -209,6 +217,58 @@ describe("CampaignsPage — 3 states", () => {
     });
   });
 
+  describe("group reward hero", () => {
+    it("shows the business logo", () => {
+      mockState.summary = {
+        visit_streak_days: 7,
+        visit_streak_weeks: 1,
+        streak_active_today: true,
+        featured_campaign_ids: [],
+        rewards_earned: 0,
+        som_saved: "0",
+        active_cards: 1,
+      };
+      mockState.feed = {
+        followed: [
+          makeActiveCampaign({
+            business: {
+              id: "b1",
+              name: "Manas Coffee",
+              category: "cafe",
+              logo_url: "/media/manas.png",
+              area: "",
+              address: "",
+            },
+            campaign_type: "group",
+            rule: {
+              mechanic: "visit",
+              required_count: null,
+              max_count_per_day: null,
+              min_time_between: null,
+              required_group_size: 4,
+              group_checkin_window: null,
+              group_checkin_window_minutes: null,
+            },
+          }),
+          makeActiveCampaign({ id: "individual-campaign" }),
+        ],
+        discover: [],
+        sections: { featured: [], trending: [], fresh: [] },
+      };
+
+      const { container } = render(<CampaignsPage />);
+      expect(container.querySelector('img[src="/media/manas.png"]')).toBeInTheDocument();
+      expect(screen.getByText("cmp.home.inprogress.title")).toBeInTheDocument();
+      expect(screen.getByText("cmp.home.groups.title")).toBeInTheDocument();
+      expect(screen.getByText("cmp.home.groups.badge")).toBeInTheDocument();
+      expect(screen.getByLabelText("cmp.home.groups.joined")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /Manas Coffee cmp\.home\.groups\.badge/ }));
+      expect(screen.getByRole("dialog", { name: "Coffee Challenge" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "cmp.home.groups.invite" })).toBeInTheDocument();
+    });
+  });
+
   describe("claimable banner", () => {
     it("shows claimable banner when active campaign vouchers exist", () => {
       const voucher: CampaignVoucher = {
@@ -228,6 +288,29 @@ describe("CampaignsPage — 3 states", () => {
       mockState.cards = [makeLoyaltyCard()];
       render(<CampaignsPage />);
       expect(screen.getByText("cmp.home.claimable.title")).toBeInTheDocument();
+    });
+
+    it("opens the claimable reward in a sheet", () => {
+      const voucher: CampaignVoucher = {
+        id: "v1", code: "ABC", status: "active", glyph: "",
+        business: { id: "b1", name: "Manas" },
+        campaign: { id: "c1", name: "Coffee" },
+        reward_title: "Free coffee", reward_description: "", qr_token: "qr",
+        issued_label: "today", expires_label: "tomorrow", expiring_soon: false,
+        redeemed_at_label: null, redeemed_by: null, redeemed_branch: null,
+        catalog_item: null, item_selection: null,
+      };
+      mockState.wallet = { active: [voucher], used: [], expired: [] };
+      mockState.summary = {
+        visit_streak_days: 1, visit_streak_weeks: 1, streak_active_today: true,
+        featured_campaign_ids: [], rewards_earned: 1, som_saved: "0", active_cards: 1,
+      };
+      mockState.cards = [makeLoyaltyCard()];
+      render(<CampaignsPage />);
+
+      fireEvent.click(screen.getByRole("button", { name: /cmp\.home\.claimable\.title/ }));
+      expect(screen.getByRole("dialog", { name: "cmp.home.claimable.sheetTitle" })).toBeInTheDocument();
+      expect(screen.getByText("cmp.home.claimable.viewReward")).toBeInTheDocument();
     });
   });
 });

@@ -159,6 +159,9 @@ export function OnboardingFlow() {
 
   const [stage, setStage] = useState(1);
   const [f, setF] = useState<Form>(EMPTY);
+  // Inline validation errors, keyed by field. Shown all at once under each field
+  // when the owner tries to continue, cleared as they fix each one.
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState({ name: "", category: "", price: "", duration: "" });
   const [staffDraft, setStaffDraft] = useState<{ phone: string; role: StaffRole }>({
     phone: "",
@@ -243,6 +246,13 @@ export function OnboardingFlow() {
       persist(next);
       return next;
     });
+    // Clear any inline error for the fields being edited.
+    setErrors((e) => {
+      if (Object.keys(patch).every((k) => !(k in e))) return e;
+      const next = { ...e };
+      for (const k of Object.keys(patch)) delete next[k];
+      return next;
+    });
   }
   const on = (k: keyof Form) => (e: { target: { value: string } }) => set({ [k]: e.target.value } as Partial<Form>);
 
@@ -307,6 +317,38 @@ export function OnboardingFlow() {
     });
   }
 
+  // Required fields per the backend's onboarding_services.required_fields, so the
+  // inline gate matches exactly what the server enforces at submit — the owner
+  // never passes a step only to be blocked later. Returns field → message.
+  function validateStage(s: number): Record<string, string> {
+    const e: Record<string, string> = {};
+    if (s === 1) {
+      if (!f.displayName.trim()) e.displayName = "Business name is required";
+      if (!f.desc.trim()) e.desc = "Add a short description";
+      if (!f.phone.trim()) e.phone = "Phone number is required";
+      if (!f.address.trim()) e.address = "Address is required";
+      if (!me.data?.logo_url && !logoPreview) e.logo = "Upload a logo — it appears on your card";
+    }
+    if (s === 2 && !f.businessType) e.businessType = "Pick a business type to continue";
+    if (s === 3 && items.length === 0) e.items = `Add at least one ${meta.noun}`;
+    return e;
+  }
+
+  function goNext() {
+    const e = validateStage(stage);
+    if (Object.keys(e).length > 0) {
+      setErrors(e);
+      // Bring the first problem into view so the owner sees what to fix.
+      setTimeout(
+        () => document.querySelector('[data-error="true"]')?.scrollIntoView({ behavior: "smooth", block: "center" }),
+        0,
+      );
+      return;
+    }
+    setErrors({});
+    setStage(stage + 1);
+  }
+
   // Pull the most specific message the backend gave us. DRF puts field errors in
   // `details` (e.g. {"image": ["Upload a valid image."]}); the top-level message is
   // the generic "Validation error". Prefer the field detail so we can tell the owner
@@ -327,6 +369,7 @@ export function OnboardingFlow() {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setLogoError(null);
+    setErrors((e) => { const { logo, ...rest } = e; return rest; }); // clear "logo required"
     setLogoPreview(url); // show instantly, before the upload completes
     uploadLogo.mutate(file, {
       // Real logo_url is now in the `me` cache; dropping the preview reveals it.
@@ -488,6 +531,7 @@ export function OnboardingFlow() {
                 <StageIdentity
                   f={f}
                   on={on}
+                  errors={errors}
                   onLocationChange={(lat, lng, address) =>
                     set({ lat: String(lat), lng: String(lng), ...(address ? { address } : {}) })
                   }
@@ -518,7 +562,7 @@ export function OnboardingFlow() {
                     </button>
                   </div>
                 ) : (
-                  <StageType types={types.data ?? []} selected={f.businessType} onSelect={selectType} />
+                  <StageType types={types.data ?? []} selected={f.businessType} onSelect={selectType} error={errors.businessType} />
                 )
               )}
               {stage === 3 && (
@@ -549,6 +593,7 @@ export function OnboardingFlow() {
                   onDeleteGalleryImage={(id) => deleteGalleryImage.mutate(id)}
                   galleryUploading={uploadGalleryImage.isPending}
                   showToast={showToast}
+                  error={errors.items}
                 />
               )}
               {stage === 4 && (
@@ -589,17 +634,7 @@ export function OnboardingFlow() {
             )}
             {stage < 5 ? (
               <button
-                onClick={() => {
-                  if (stage === 1) {
-                    if (!f.displayName.trim()) return showToast("Enter a display name");
-                    if (!f.phone.trim()) return showToast("Enter a phone number");
-                    if (!f.address.trim()) return showToast("Enter an address");
-                    if (!f.desc.trim()) return showToast("Enter a description");
-                  }
-                  if (stage === 2 && !f.businessType) return showToast("Select a business type");
-                  if (stage === 3 && items.length === 0) return showToast(`Add at least one ${meta.noun}`);
-                  setStage(stage + 1);
-                }}
+                onClick={goNext}
                 className="rounded-[14px] bg-brand px-6 py-3.5 text-[15px] font-bold text-brand-fg shadow-glow transition hover:brightness-105 sm:px-7"
               >
                 Continue ›
@@ -668,13 +703,29 @@ function OnboardSubmitDialog({
   );
 }
 
-function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
+function Field({
+  label,
+  children,
+  className = "",
+  error,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+  error?: string;
+}) {
   return (
-    <label className={`block ${className}`}>
+    <label className={`block ${className}`} data-error={error ? "true" : undefined}>
       <span className={LABEL}>{label}</span>
       <div className="mt-1.5">{children}</div>
+      {error && <p className="mt-1 text-[12px] font-semibold text-danger">{error}</p>}
     </label>
   );
+}
+
+// Error-aware input class: red border when the field has a validation error.
+function fieldClass(hasError?: boolean) {
+  return hasError ? `${FIELD} border-danger` : FIELD;
 }
 
 type FormShape = Form;
@@ -682,6 +733,7 @@ type FormShape = Form;
 function StageIdentity({
   f,
   on,
+  errors,
   onLocationChange,
   onWeekChange,
   logoUrl,
@@ -697,6 +749,7 @@ function StageIdentity({
 }: {
   f: FormShape;
   on: (k: keyof FormShape) => (e: { target: { value: string } }) => void;
+  errors: Record<string, string>;
   onLocationChange: (lat: number, lng: number, address?: string) => void;
   onWeekChange: (week: Week) => void;
   logoUrl: string | null;
@@ -727,7 +780,11 @@ function StageIdentity({
             onClick={() => logoInputRef.current?.click()}
             disabled={logoUploading}
             className={`relative flex h-24 w-24 flex-none flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl ${
-              logoUrl ? "border-[1.5px] border-brand bg-brand-muted" : "border-[1.5px] border-dashed border-line bg-cream"
+              logoUrl
+                ? "border-[1.5px] border-brand bg-brand-muted"
+                : errors.logo
+                  ? "border-[1.5px] border-dashed border-danger bg-cream"
+                  : "border-[1.5px] border-dashed border-line bg-cream"
             }`}
           >
             {logoUrl ? (
@@ -769,25 +826,29 @@ function StageIdentity({
             )}
           </button>
         </div>
-        {/* Per-field upload errors point the owner at the exact tile that failed. */}
-        {logoError && <div className="mt-2 text-[12px] font-semibold text-danger">Logo: {logoError}</div>}
+        {/* Upload failures + the "logo required" gate both surface under the tiles. */}
+        {(logoError || errors.logo) && (
+          <div className="mt-2 text-[12px] font-semibold text-danger">
+            {logoError ? `Logo: ${logoError}` : errors.logo}
+          </div>
+        )}
         {coverError && <div className="mt-1 text-[12px] font-semibold text-danger">Cover: {coverError}</div>}
       </div>
 
       <div className={CARD}>
         <div className="font-display text-[15px] font-bold text-ink">Business profile</div>
-        <Field label="Display name *" className="mt-3.5">
-          <input value={f.displayName} onChange={on("displayName")} placeholder="Manas Coffee" className={FIELD} />
+        <Field label="Display name *" className="mt-3.5" error={errors.displayName}>
+          <input value={f.displayName} onChange={on("displayName")} placeholder="Manas Coffee" className={fieldClass(!!errors.displayName)} />
         </Field>
         <Field label="Legal name · optional" className="mt-3.5">
           <input value={f.legalName} onChange={on("legalName")} placeholder="Manas Coffee LLC" className={FIELD} />
         </Field>
-        <Field label="Description *" className="mt-3.5">
-          <textarea value={f.desc} onChange={on("desc")} rows={3} placeholder="A cozy specialty roastery…" className={`${FIELD} resize-none leading-relaxed`} />
+        <Field label="Description *" className="mt-3.5" error={errors.desc}>
+          <textarea value={f.desc} onChange={on("desc")} rows={3} placeholder="A cozy specialty roastery…" className={`${fieldClass(!!errors.desc)} resize-none leading-relaxed`} />
         </Field>
         <div className="mt-3.5 flex gap-3">
-          <Field label="Primary phone *" className="flex-1">
-            <input value={f.phone} onChange={on("phone")} placeholder="+996 555 120 880" className={FIELD} />
+          <Field label="Primary phone *" className="flex-1" error={errors.phone}>
+            <input value={f.phone} onChange={on("phone")} placeholder="+996 555 120 880" className={fieldClass(!!errors.phone)} />
           </Field>
           <Field label="Public email" className="flex-1">
             <input value={f.pubEmail} onChange={on("pubEmail")} placeholder="hello@manas.kg" className={FIELD} />
@@ -820,8 +881,8 @@ function StageIdentity({
 
       <div className={CARD}>
         <div className="font-display text-[15px] font-bold text-ink">Location</div>
-        <Field label="Address *" className="mt-3.5">
-          <input value={f.address} onChange={on("address")} placeholder="Chuy Avenue 142, Bishkek" className={FIELD} />
+        <Field label="Address *" className="mt-3.5" error={errors.address}>
+          <input value={f.address} onChange={on("address")} placeholder="Chuy Avenue 142, Bishkek" className={fieldClass(!!errors.address)} />
         </Field>
         <div className="mt-3.5">
           <LocationPicker
@@ -840,22 +901,33 @@ function StageIdentity({
         ) : (
           <div className="mt-2 text-[12.5px] text-subtle">{t("owner.settings.coordsEmpty")}</div>
         )}
-        <div className="mt-3.5 flex gap-3">
-          <Field label="City" className="flex-1">
-            <input value={f.city} onChange={on("city")} placeholder="Bishkek" className={FIELD} />
-          </Field>
-          <Field label="Country" className="flex-1">
-            <input value={f.country} onChange={on("country")} className={FIELD} />
-          </Field>
-        </div>
-        <div className="mt-3.5 flex gap-3">
-          <Field label="Time zone" className="flex-1">
-            <input value={f.tz} onChange={on("tz")} className={FIELD} />
-          </Field>
-          <Field label="Currency" className="flex-1">
-            <input value={f.currency} onChange={on("currency")} className={FIELD} />
-          </Field>
-        </div>
+        <Field label="City" className="mt-3.5">
+          <input value={f.city} onChange={on("city")} placeholder="Bishkek" className={FIELD} />
+        </Field>
+        {/* Regional defaults are pre-filled and rarely changed — tucked into a
+            disclosure so the form stays light, still editable when needed. */}
+        <details className="group mt-3.5 rounded-xl border border-line bg-card px-4 py-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[13px] font-semibold text-ink">
+            <span>Regional settings</span>
+            <span className="flex items-center gap-2 text-[12px] font-normal text-subtle">
+              {f.country} · {f.tz} · {f.currency}
+              <span aria-hidden className="transition group-open:rotate-180">⌄</span>
+            </span>
+          </summary>
+          <div className="mt-3 flex flex-col gap-3">
+            <Field label="Country">
+              <input value={f.country} onChange={on("country")} className={FIELD} />
+            </Field>
+            <div className="flex gap-3">
+              <Field label="Time zone" className="flex-1">
+                <input value={f.tz} onChange={on("tz")} className={FIELD} />
+              </Field>
+              <Field label="Currency" className="flex-1">
+                <input value={f.currency} onChange={on("currency")} className={FIELD} />
+              </Field>
+            </div>
+          </div>
+        </details>
       </div>
 
       <Dialog
@@ -877,9 +949,14 @@ function StageIdentity({
   );
 }
 
-function StageType({ types, selected, onSelect }: { types: BusinessType[]; selected: string; onSelect: (k: string) => void }) {
+function StageType({ types, selected, onSelect, error }: { types: BusinessType[]; selected: string; onSelect: (k: string) => void; error?: string }) {
   return (
     <div className="animate-[jqIn_.3s_ease]">
+      {error && (
+        <div data-error="true" className="mb-3.5 rounded-[14px] border border-[#EBC9BB] bg-[#F7E4DC] px-4 py-3 text-[13px] font-semibold text-danger">
+          {error}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-[13px] sm:grid-cols-2">
         {types.map((t) => {
           const sel = selected === t.key;
@@ -932,6 +1009,7 @@ function StageSetup(props: {
   onDeleteGalleryImage: (id: string) => void;
   galleryUploading: boolean;
   showToast: (msg: string) => void;
+  error?: string;
 }) {
   const { meta, items, draft, setDraft, categories, showDuration, showMenuStyle } = props;
   // One hidden file input per catalog item row; keyed by item id via refs map.
@@ -955,6 +1033,11 @@ function StageSetup(props: {
 
   return (
     <div className="flex animate-[jqIn_.3s_ease] flex-col gap-4">
+      {props.error && (
+        <div data-error="true" className="rounded-[14px] border border-[#EBC9BB] bg-[#F7E4DC] px-4 py-3 text-[13px] font-semibold text-danger">
+          {props.error}
+        </div>
+      )}
       <div className="flex items-center gap-[11px] rounded-[14px] border border-[#D4E4D9] bg-[#EAF1EC] px-4 py-3">
         <span className="text-base">⚙️</span>
         <div className="text-[12.5px] leading-snug text-[#3F6B52]">These fields are generated from your business type.</div>

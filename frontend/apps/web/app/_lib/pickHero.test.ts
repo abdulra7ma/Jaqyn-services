@@ -272,6 +272,29 @@ describe("pickHero — priority 2: closest to reward", () => {
     }
   });
 
+  it("preserves campaign cashback type for its dedicated visual", () => {
+    const result = pickHero(
+      {
+        ...empty,
+        followed: [
+          campaign({
+            reward: {
+              title: "Cashback som",
+              type: "custom",
+              description: "",
+              expiry_days_after_unlock: 30,
+              max_redemptions: null,
+              item_selection: null,
+              catalog_item: null,
+            },
+          }),
+        ],
+      },
+      NOW,
+    );
+    expect(result).toMatchObject({ kind: "progress", cashbackReward: true });
+  });
+
   it("joined campaign is featured before standing loyalty", () => {
     const result = pickHero(
       {
