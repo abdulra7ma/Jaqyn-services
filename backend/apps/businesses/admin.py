@@ -169,15 +169,20 @@ class BusinessAdmin(ModelAdmin):
         single live link per business. The raw token is surfaced only in this
         message and never stored.
         """
+        from django.conf import settings
+
         from apps.businesses.pitch_services import generate_pitch_invite
-        from core.frontend import frontend_base_url
 
         business = self.get_object(request, object_id)
         business.pitch_invites.filter(
             status__in=[PitchInvite.Status.PENDING, PitchInvite.Status.OPENED]
         ).update(status=PitchInvite.Status.EXPIRED)
         _, raw = generate_pitch_invite(business)
-        url = f"{frontend_base_url(request)}/pitch/{raw}"
+        # The pitch page renders on the customer-facing frontend, not the admin
+        # host. This request originates from the Django admin (backend origin), so
+        # header-derived origins (frontend_base_url) would point the link at the
+        # backend, which has no /pitch/ route. Always use the configured frontend.
+        url = f"{settings.FRONTEND_URL}/pitch/{raw}"
         messages.success(
             request,
             format_html(
