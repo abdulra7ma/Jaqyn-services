@@ -22,7 +22,15 @@ Status legend: TODO · WIP · BLOCKED · DONE
 ## Launch gate
 - [x] 01–04 DONE (blockers)
 - [x] 05–08 DONE or explicitly deferred by user
-- [ ] Full money-journey pass (LAUNCH.md §4) re-run after fixes
+- [x] Live verification pass done 2026-07-05 (local stack, all roles):
+  FIX-02 scan stable at 1280px; FIX-06 all 6 chips RU; FIX-05 code shown on
+  load → confirm dialog RU → rotated 105819→326382; FIX-04 dashboard payload
+  carries activity[] (populated case covered by tests); FIX-07 login/guest/
+  tour/staff surfaces RU; FIX-01 /campaigns/visit-qr renders QR + eligible
+  list; FIX-03 ended banner + links verified via status flip (restored).
+  NOT live-tested (unit-tested only): FIX-08 camera-denial (needs real
+  device), full scan→earn→redeem money loop (needs staff camera/QR at
+  counter — do on-device before launch per LAUNCH.md §4)
 - [ ] User confirmed → folder deleted (final `chore:` commit)
 
 ## Notes log
