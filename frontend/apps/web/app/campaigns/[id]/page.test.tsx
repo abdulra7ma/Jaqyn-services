@@ -88,6 +88,12 @@ describe("CampaignDetailPage — ended/cancelled status banner (FIX-03)", () => 
   });
 
   describe("ended campaign (no progress)", () => {
+    it("renders every campaign detail inside the route sheet", () => {
+      render(<CampaignDetailPage />);
+      expect(screen.getByRole("dialog", { name: "campaigns.title" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "common.close" })).toBeInTheDocument();
+    });
+
     it("renders the ended notice", () => {
       render(<CampaignDetailPage />);
       expect(screen.getByText("cmp.detail.ended.notice")).toBeInTheDocument();

@@ -663,6 +663,7 @@ def test_customer_join():
         f"/api/customer/campaigns/{campaign.id}/join/"
     )
     assert response.status_code == 201
+    assert response.data["data"]["wallet_cards_added"] == 0
     assert CampaignParticipant.objects.filter(
         campaign=campaign, customer=customer
     ).exists()

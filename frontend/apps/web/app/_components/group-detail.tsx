@@ -114,7 +114,7 @@ export function GroupCampaignDetail({ campaign: c }: { campaign: Campaign }) {
       </ul>
 
       {/* sticky CTA */}
-      <div className="sticky bottom-0 -mx-4 mt-6 bg-gradient-to-t from-cream from-[26%] to-transparent px-4 pb-[calc(16px+env(safe-area-inset-bottom))] pt-3.5 sm:-mx-6 sm:px-6">
+      <div className="sticky bottom-0 -mx-4 mt-6 bg-gradient-to-t from-cream from-[26%] to-transparent px-4 pb-[calc(16px+env(safe-area-inset-bottom))] pt-3.5">
         <button
           onClick={() => router.push(`/campaigns/${c.id}/group`)}
           className="w-full rounded-2xl bg-brand-gradient py-4 text-base font-bold text-white shadow-glow transition active:scale-[.99]"

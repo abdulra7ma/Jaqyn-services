@@ -11,6 +11,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useAuth } from "../../_lib/auth";
 import { useErrMessage } from "../../_lib/useErrMessage";
+import { CampaignRouteSheet } from "../../_components/CampaignRouteSheet";
+import { CustomerShell } from "../../_components/CustomerShell";
 
 export default function AutoJoinPage() {
   const t = useT();
@@ -36,8 +38,11 @@ export default function AutoJoinPage() {
   }, [ready, isAuthenticated, id, router]);
 
   return (
-    <main className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-6 text-center">
-      {join.isError ? (
+    <CustomerShell title={t("campaigns.title")} hideChromeTitle>
+      {!ready || !isAuthenticated ? null : (
+        <CampaignRouteSheet title={t("cmp.join.joining")} onClose={() => router.push("/campaigns")}>
+          <div className="flex min-h-72 flex-col items-center justify-center gap-3 px-6 text-center">
+            {join.isError ? (
         <>
           <p className="text-sm font-semibold text-danger">{errMessage(join.error)}</p>
           <button
@@ -51,12 +56,15 @@ export default function AutoJoinPage() {
             {t("cmp.join.retry")}
           </button>
         </>
-      ) : (
+            ) : (
         <>
           <span className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-brand" aria-hidden />
           <p className="text-sm font-semibold text-subtle">{t("cmp.join.joining")}</p>
         </>
+            )}
+          </div>
+        </CampaignRouteSheet>
       )}
-    </main>
+    </CustomerShell>
   );
 }

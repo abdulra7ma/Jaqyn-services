@@ -8,7 +8,11 @@
     @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Hanken+Grotesk:wght@400;600;700&display=swap');
     body { margin: 0; padding: 0; background: #FBF6EE; font-family: 'Hanken Grotesk', -apple-system, Helvetica, Arial, sans-serif; }
     .wrapper { max-width: 560px; margin: 40px auto; background: #FFFFFF; border-radius: 14px; padding: 40px; border: 1px solid #EFE3D1; }
-    .logo { font-family: 'Bricolage Grotesque', Georgia, serif; font-size: 24px; font-weight: 800; color: #C25E3C; margin-bottom: 24px; }
+    .logo { margin-bottom: 24px; }
+    .logo-mark { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center;
+                 background: #C25E3C; color: #ffffff; border-radius: 8px; vertical-align: middle;
+                 margin-right: 8px; font-family: 'Bricolage Grotesque', Georgia, serif; font-weight: 800; font-size: 16px; }
+    .logo-word { font-family: 'Bricolage Grotesque', Georgia, serif; font-size: 24px; font-weight: 800; color: #C25E3C; vertical-align: middle; }
     h1 { font-family: 'Bricolage Grotesque', Georgia, serif; font-size: 20px; color: #2E241D; margin: 0 0 16px; }
     p { font-size: 15px; color: #2E241D; line-height: 1.6; margin: 0 0 16px; }
     .code { font-family: 'Bricolage Grotesque', Georgia, serif; font-size: 32px; letter-spacing: 6px;
@@ -24,7 +28,7 @@
 </head>
 <body>
   <div class="wrapper">
-    <div class="logo">Jaqyn</div>
+    <div class="logo"><span class="logo-mark">J</span><span class="logo-word">Jaqyn</span></div>
     {% block content %}{% endblock %}
     {% if support_email or instagram_url or telegram_url %}
     <div class="footer">

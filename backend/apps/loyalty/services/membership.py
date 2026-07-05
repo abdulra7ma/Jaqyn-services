@@ -53,6 +53,14 @@ class LoyaltyCardView:
     business_lng: Optional[Decimal]
 
 
+@dataclass(frozen=True)
+class WalletJoinResult:
+    """Memberships present after a join and how many were newly created."""
+
+    memberships: list[LoyaltyMembership]
+    created_count: int
+
+
 class LoyaltyMembershipService:
     """Own membership creation and customer-card projections."""
 
@@ -63,6 +71,47 @@ class LoyaltyMembershipService:
         """Return the unique card, creating its zero-balance row idempotently."""
         return LoyaltyMembership.objects.get_or_create(
             program=program, customer=customer
+        )
+
+    @staticmethod
+    def join_active_programs_for_business(
+        business: object, customer: User
+    ) -> WalletJoinResult:
+        """Add every active card offered by a business to a customer's wallet.
+
+        Campaign joins use this cross-service entry point so the durable wallet is
+        populated in the same transaction. Existing memberships are returned
+        unchanged, making repeated campaign joins and shops with several campaigns
+        idempotent.
+        """
+        programs = list(
+            LoyaltyProgram.objects.filter(
+                business=business, status=LoyaltyProgram.Status.ACTIVE
+            ).order_by("created_at", "id")
+        )
+        if not programs:
+            return WalletJoinResult(memberships=[], created_count=0)
+        existing_program_ids = set(
+            LoyaltyMembership.objects.filter(
+                customer=customer, program__in=programs
+            ).values_list("program_id", flat=True)
+        )
+        new_memberships = [
+            LoyaltyMembership(program=program, customer=customer)
+            for program in programs
+            if program.id not in existing_program_ids
+        ]
+        LoyaltyMembership.objects.bulk_create(
+            new_memberships,
+            ignore_conflicts=True,
+        )
+        memberships = list(
+            LoyaltyMembership.objects.filter(customer=customer, program__in=programs)
+            .order_by("program__created_at", "program_id")
+        )
+        return WalletJoinResult(
+            memberships=memberships,
+            created_count=len(memberships) - len(existing_program_ids),
         )
 
     @staticmethod

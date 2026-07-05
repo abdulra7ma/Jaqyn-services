@@ -59,7 +59,6 @@ function AuthedHome() {
   const nearby = useNearby({
     lat: location?.lat,
     lng: location?.lng,
-    radius_km: location ? 2 : undefined,
     limit: 20,
   });
 
@@ -157,7 +156,11 @@ function AuthedHome() {
 
   const name = me.data?.user.name?.split(" ")[0] || t("home.friend");
   if (isNewCustomer) {
-    return nearby.isLoading ? <HeroSkeleton /> : <NewCustomerHome businesses={nearby.data ?? []} userLocation={location} />;
+    return nearby.isLoading ? (
+      <HeroSkeleton />
+    ) : (
+      <NewCustomerHome businesses={nearby.data ?? []} name={name} />
+    );
   }
 
   return (

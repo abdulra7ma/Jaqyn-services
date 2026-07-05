@@ -977,7 +977,7 @@ export function CollectingList({ cards, excludeProgramId }: { cards: LoyaltyCard
   );
 }
 
-export function NewCustomerHome({ businesses }: { businesses: Business[]; userLocation: { lat: number; lng: number } | null }) {
+export function NewCustomerHome({ businesses, name }: { businesses: Business[]; name: string }) {
   const t = useT();
   const openBusinesses = businesses.filter((business) => isOpenNow(business.working_hours) !== false);
   const visibleBusinesses = openBusinesses.length > 0 ? openBusinesses : businesses;
@@ -985,6 +985,20 @@ export function NewCustomerHome({ businesses }: { businesses: Business[]; userLo
 
   return (
     <div className="flex flex-col gap-6">
+      <header className="flex items-center justify-between gap-3">
+        <h1 className="truncate font-display text-2xl font-bold tracking-tight text-ink">
+          {t("home.heyName").replace("{name}", name)}
+        </h1>
+        <Link
+          href="/nearby"
+          aria-label={t("nav.nearby")}
+          className="inline-flex min-h-11 flex-none items-center gap-2 rounded-pill border border-line bg-card px-3.5 text-sm font-bold text-ink shadow-card"
+        >
+          <PinIcon className="h-4 w-4 text-brand" />
+          {t("nav.nearby")}
+        </Link>
+      </header>
+
       <section className="relative overflow-hidden rounded-modal bg-brand-gradient p-6 text-white shadow-glow">
         <span className="absolute -right-10 -top-12 h-40 w-40 rounded-full bg-white/5" aria-hidden />
         <span className="relative text-xs font-extrabold uppercase tracking-wider text-white/85">{t("home.startHere")}</span>
@@ -1003,10 +1017,15 @@ export function NewCustomerHome({ businesses }: { businesses: Business[]; userLo
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-lg font-bold text-ink">{t("home.popularNearYou")}</h2>
-          {hasOpenBusinesses && <span className="rounded-pill bg-sage-soft px-3 py-1 text-xs font-bold text-sage">{t("home.live")}</span>}
+          {hasOpenBusinesses ? (
+            <span className="rounded-pill bg-sage-soft px-3 py-1 text-xs font-bold text-sage">{t("home.live")}</span>
+          ) : businesses.length > 0 ? null : (
+            <Link href="/nearby" className="text-sm font-bold text-brand">{t("home.seeAll")}</Link>
+          )}
         </div>
-        <div className="flex flex-col gap-2.5">
-          {visibleBusinesses.slice(0, 3).map((business) => (
+        {visibleBusinesses.length > 0 ? (
+          <div className="flex flex-col gap-2.5">
+            {visibleBusinesses.slice(0, 3).map((business) => (
             <Link key={business.id} href={`/nearby/${business.id}`} className="flex items-center gap-3 rounded-xl border border-line bg-card p-3.5">
               <BusinessLogo name={business.name} url={business.logo_url} size="medium" />
               <span className="min-w-0 flex-1">
@@ -1016,8 +1035,23 @@ export function NewCustomerHome({ businesses }: { businesses: Business[]; userLo
               </span>
               <span className="text-xl text-subtle" aria-hidden>›</span>
             </Link>
-          ))}
-        </div>
+            ))}
+            <Link href="/nearby" className="flex min-h-12 items-center justify-center rounded-xl border border-line bg-card px-5 text-sm font-bold text-brand shadow-card">
+              {t("home.exploreNearby")}
+            </Link>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-line bg-card p-5 text-center shadow-card">
+            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-tile" aria-hidden>
+              <PinIcon className="h-5 w-5 text-brand" />
+            </span>
+            <h3 className="mt-3 font-display text-base font-bold text-ink">{t("home.nearbyEmptyTitle")}</h3>
+            <p className="mt-1 text-sm leading-relaxed text-subtle">{t("home.nearbyEmptyBody")}</p>
+            <Link href="/nearby" className="mt-4 flex min-h-12 items-center justify-center rounded-xl bg-brand px-5 text-sm font-bold text-white shadow-glow">
+              {t("home.exploreNearby")}
+            </Link>
+          </div>
+        )}
       </section>
     </div>
   );

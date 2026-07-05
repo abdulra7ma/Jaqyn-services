@@ -32,6 +32,7 @@ from apps.campaigns.services.eligibility import (
     EligibilityResult,
 )
 from apps.campaigns.services.rewards import CampaignRewardService
+from apps.loyalty.services import LoyaltyMembershipService
 from apps.staff.models import StaffMember
 from core.exceptions import JaqynAPIException
 from core.logging import emit_event
@@ -54,6 +55,14 @@ class ProgressResult:
     progress_count: int
     required_count: int
     voucher: CampaignRewardVoucher | None = None
+
+
+@dataclass(frozen=True)
+class CampaignJoinResult:
+    """Campaign participant plus the number of newly created wallet cards."""
+
+    participant: CampaignParticipant
+    wallet_cards_added: int
 
 
 class CampaignProgressService:
@@ -110,12 +119,21 @@ class CampaignProgressService:
 
     @classmethod
     def join_campaign(cls, campaign: Campaign, customer) -> CampaignParticipant:
-        """Enrol a customer in a campaign, creating their participant row (idempotent).
+        """Enrol a customer in a campaign and add the shop's cards to their wallet.
 
         Rejects a join when the campaign is not ACTIVE (``CAMPAIGN_NOT_ACTIVE``)
         or has hit ``max_participants`` (``CAMPAIGN_FULL``). Re-joining returns the
         existing row unchanged. A new row starts in JOINED with ``joined_at`` set.
+        Every active durable loyalty program for the campaign's business is joined
+        idempotently in the same transaction, so campaign and wallet cannot diverge.
         """
+        return cls.join_campaign_with_wallet(campaign, customer).participant
+
+    @classmethod
+    def join_campaign_with_wallet(
+        cls, campaign: Campaign, customer
+    ) -> CampaignJoinResult:
+        """Join a campaign and report only wallet cards created by this call."""
         if campaign.status != Campaign.Status.ACTIVE:
             raise JaqynAPIException(
                 "CAMPAIGN_NOT_ACTIVE", status_code=status.HTTP_409_CONFLICT
@@ -124,24 +142,35 @@ class CampaignProgressService:
             campaign=campaign, customer=customer
         ).first()
         if existing is not None:
-            return existing
+            wallet = LoyaltyMembershipService.join_active_programs_for_business(
+                campaign.business, customer
+            )
+            return CampaignJoinResult(
+                participant=existing, wallet_cards_added=wallet.created_count
+            )
         if not CampaignEligibilityService.check_participant_limit(campaign):
             raise JaqynAPIException(
                 "CAMPAIGN_FULL", status_code=status.HTTP_409_CONFLICT
             )
-        participant = CampaignParticipant.objects.create(
-            campaign=campaign,
-            customer=customer,
-            status=CampaignParticipant.Status.JOINED,
-            joined_at=timezone.now(),
-        )
+        with transaction.atomic():
+            participant = CampaignParticipant.objects.create(
+                campaign=campaign,
+                customer=customer,
+                status=CampaignParticipant.Status.JOINED,
+                joined_at=timezone.now(),
+            )
+            wallet = LoyaltyMembershipService.join_active_programs_for_business(
+                campaign.business, customer
+            )
         emit_event(
             "campaign_joined",
             business_id=str(campaign.business_id),
             customer_id=str(customer.id),
             campaign_id=str(campaign.id),
         )
-        return participant
+        return CampaignJoinResult(
+            participant=participant, wallet_cards_added=wallet.created_count
+        )
 
     @classmethod
     def auto_join_customer(cls, campaign: Campaign, customer) -> CampaignParticipant:

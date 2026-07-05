@@ -133,9 +133,13 @@ class CampaignJoinView(APIView):
 
     def post(self, request, campaign_id):
         campaign = CampaignService.get_discoverable(campaign_id)
-        participant = CampaignProgressService.join_campaign(campaign, request.user)
+        result = CampaignProgressService.join_campaign_with_wallet(
+            campaign, request.user
+        )
+        data = dict(CampaignProgressSerializer(result.participant).data)
+        data["wallet_cards_added"] = result.wallet_cards_added
         return success_response(
-            CampaignProgressSerializer(participant).data, status=201
+            data, status=201
         )
 
 

@@ -51,6 +51,7 @@ import type {
 } from "./types";
 
 export type LoginResolveResult = { method: "otp" | "password"; request_id?: string };
+export type CampaignJoinResult = { campaign: Campaign; walletCardsAdded: number };
 
 export interface CustomerApi {
   requestOtp(phone: string): Promise<RequestOtpResult>;
@@ -76,7 +77,7 @@ export interface CustomerApi {
   campaignNotices(): Promise<CampaignNotice[]>;
   markCampaignNoticesSeen(ids: string[]): Promise<{ seen: number }>;
   getCampaign(id: string): Promise<Campaign>;
-  joinCampaign(id: string): Promise<Campaign>;
+  joinCampaign(id: string): Promise<CampaignJoinResult>;
   campaignWallet(): Promise<CampaignWallet>;
   getCampaignVoucher(id: string): Promise<CampaignVoucher>;
   presentCampaignVoucher(id: string): Promise<CampaignVoucher>;
@@ -282,8 +283,11 @@ export const customerApi: CustomerApi = {
   // the campaign detail (which carries my_progress) so the hook caches a real
   // Campaign under the right key.
   joinCampaign: async (id) => {
-    await api.post<any>(`/api/customer/campaigns/${id}/join/`);
-    return api.get<any>(`/api/customer/campaigns/${id}/`).then(adaptCampaign);
+    const joined = await api.post<{ wallet_cards_added: number }>(
+      `/api/customer/campaigns/${id}/join/`,
+    );
+    const campaign = await api.get<any>(`/api/customer/campaigns/${id}/`).then(adaptCampaign);
+    return { campaign, walletCardsAdded: joined.wallet_cards_added };
   },
   campaignWallet: () =>
     api.get<Paginated<any>>("/api/customer/campaign-wallet/").then((d) => adaptCampaignWallet(d.results)),

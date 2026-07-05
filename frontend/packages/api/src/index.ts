@@ -8,7 +8,7 @@ export type { ApiEnvelope, ApiSuccess, ApiError, HealthData } from "./types";
 
 // ---- customer API layer ----
 export { customerApi, type CustomerApi } from "./customer/api";
-export type { LoginResolveResult } from "./customer/api";
+export type { CampaignJoinResult, LoginResolveResult } from "./customer/api";
 export * from "./customer/hooks";
 export type * from "./customer/types";
 export { postAuthRoute } from "./customer/postAuthRoute";

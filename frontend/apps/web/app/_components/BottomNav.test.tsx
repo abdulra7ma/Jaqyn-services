@@ -24,5 +24,9 @@ describe("BottomNav", () => {
     // Four labelled nav destinations remain links; the scan control is a button.
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(4);
+    expect(screen.getByRole("link", { name: "nav.loyalty" })).toHaveAttribute(
+      "data-wallet-target",
+      "true",
+    );
   });
 });

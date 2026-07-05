@@ -192,33 +192,38 @@ function parseMinutes(time: string): number | null {
 const DEFAULT_CHECKIN_WINDOW_MIN = 30;
 // Slot granularity for the visit-time picker (minutes). 30-min steps per the spec.
 const SLOT_STEP_MIN = 30;
+// Keep the decision lightweight; additional times are available through Custom.
+const MAX_VISIBLE_VISIT_SLOTS = 4;
 
 /**
- * Builds today's selectable visit-time slots, every {SLOT_STEP_MIN} minutes from
- * the active window start up to (window end − check-in window). Returns Date
- * objects for TODAY. Falls back to a single start slot when the window is too
- * tight, so the picker is never empty for an active group campaign.
+ * Builds at most four upcoming visit-time slots for today. Slots begin at the
+ * later of the offer opening and the next half-hour after ``now``, and stop at
+ * (window end − check-in window). Past times are never returned; the UI exposes
+ * a separate custom-time choice for customers who need another valid time.
  */
 export function buildVisitSlots(
   startTime: string,
   endTime: string,
   checkinWindowMin: number | null,
+  now = new Date(),
 ): Date[] {
   const start = parseMinutes(startTime);
   const end = parseMinutes(endTime);
   if (start == null || end == null) return [];
   const window = checkinWindowMin ?? DEFAULT_CHECKIN_WINDOW_MIN;
   const lastSlot = end - window;
+  const nowMinutes =
+    now.getHours() * 60 + now.getMinutes() + (now.getSeconds() > 0 ? 1 : 0);
+  const nextStep = Math.ceil(nowMinutes / SLOT_STEP_MIN) * SLOT_STEP_MIN;
+  const firstSlot = Math.max(start, nextStep);
   const slots: Date[] = [];
-  for (let m = start; m <= lastSlot; m += SLOT_STEP_MIN) {
-    const d = new Date();
+  for (
+    let m = firstSlot;
+    m <= lastSlot && slots.length < MAX_VISIBLE_VISIT_SLOTS;
+    m += SLOT_STEP_MIN
+  ) {
+    const d = new Date(now);
     d.setHours(Math.floor(m / 60), m % 60, 0, 0);
-    slots.push(d);
-  }
-  // Window too tight to fit a full check-in: still offer the start slot.
-  if (slots.length === 0) {
-    const d = new Date();
-    d.setHours(Math.floor(start / 60), start % 60, 0, 0);
     slots.push(d);
   }
   return slots;

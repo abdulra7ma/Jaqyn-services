@@ -1,6 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Campaign, GroupSession, MyGroup } from "@jaqyn/api";
 
 vi.mock("../../../_components/CustomerShell", () => ({
@@ -106,9 +105,13 @@ import GroupSessionPage from "./page";
 
 describe("Group route — create form (no active group)", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 5, 8, 0, 0));
     state.myGroups = [];
     state.startMock = vi.fn();
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it("renders the create form with time slots, name and note", () => {
     render(<GroupSessionPage />);
@@ -119,11 +122,12 @@ describe("Group route — create form (no active group)", () => {
     expect(screen.getByLabelText("cmp.group.create.note")).toBeInTheDocument();
   });
 
-  it("submitting calls useStartGroupSession with the campaign id and a visit time", async () => {
-    const user = userEvent.setup();
+  it("submitting calls useStartGroupSession with the campaign id and a visit time", () => {
     render(<GroupSessionPage />);
-    await user.type(screen.getByLabelText("cmp.group.create.name"), "Crew");
-    await user.click(screen.getByRole("button", { name: "cmp.group.create.submit" }));
+    fireEvent.change(screen.getByLabelText("cmp.group.create.name"), {
+      target: { value: "Crew" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "cmp.group.create.submit" }));
     expect(state.startMock).toHaveBeenCalledTimes(1);
     const arg = state.startMock.mock.calls[0]?.[0] as {
       campaignId: string;

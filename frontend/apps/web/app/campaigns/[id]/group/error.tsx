@@ -1,7 +1,7 @@
 "use client";
 
-import { SegmentError } from "../../../_components/segment";
+import { CampaignSheetError } from "../../../_components/CampaignRouteState";
 
 export default function GroupSessionError({ reset }: { error: Error; reset: () => void }) {
-  return <SegmentError reset={reset} />;
+  return <CampaignSheetError reset={reset} />;
 }

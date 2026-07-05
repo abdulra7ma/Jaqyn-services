@@ -10,6 +10,7 @@ import { BottomNav, CUSTOMER_NAV } from "./BottomNav";
 import { ScanIcon } from "./icons";
 import { UserAvatar } from "./kit";
 import { QrSheetProvider } from "./QrSheet";
+import { WalletJoinAnimation } from "./WalletJoinAnimation";
 
 /**
  * Page chrome for customer screens. Responsive, mirroring the business OwnerShell:
@@ -163,6 +164,7 @@ export function CustomerShell({
 
       {/* bottom nav (scan is the raised center button) — mobile, signed-in only */}
       {mobileNav && <BottomNav />}
+      <WalletJoinAnimation />
     </div>
     </QrSheetProvider>
   );
@@ -199,6 +201,7 @@ function DesktopSidebar() {
             <Link
               key={href}
               href={href}
+              data-wallet-target={href === "/loyalty" ? "true" : undefined}
               aria-current={active ? "page" : undefined}
               className={`flex items-center gap-3 rounded-[11px] px-3 py-2.5 text-sm font-semibold transition ${
                 active ? "bg-brand-muted text-brand" : "text-subtle hover:bg-board/40 hover:text-ink"

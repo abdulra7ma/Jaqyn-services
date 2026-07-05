@@ -37,6 +37,8 @@ export const qk = {
   myGroups: ["my-groups-list"] as const,
 };
 
+export const WALLET_CARD_ADDED_EVENT = "jaqyn:wallet-card-added";
+
 // ---- queries ----
 export const useMe = (enabled = true) =>
   useQuery({ queryKey: qk.me, queryFn: () => customerApi.me(), enabled, retry: false });
@@ -207,11 +209,22 @@ export const useJoinCampaign = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => customerApi.joinCampaign(id),
-    onSuccess: (campaign) => {
+    onSuccess: ({ campaign, walletCardsAdded }) => {
       qc.setQueryData(qk.campaign(campaign.id), campaign);
       // Prefix-match invalidates every filtered campaigns list + feed at once.
       qc.invalidateQueries({ queryKey: ["campaigns"] });
       qc.invalidateQueries({ queryKey: ["campaign-feed"] });
+      qc.invalidateQueries({ queryKey: ["loyalty"] });
+      if (walletCardsAdded > 0 && typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent(WALLET_CARD_ADDED_EVENT, {
+            detail: {
+              businessName: campaign.business.name,
+              logoUrl: campaign.business.logo_url,
+            },
+          }),
+        );
+      }
     },
   });
 };

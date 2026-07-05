@@ -46,6 +46,7 @@ function NavLink({ item, active, reduce }: { item: NavItem; active: boolean; red
   return (
     <Link
       href={item.href}
+      data-wallet-target={item.href === "/loyalty" ? "true" : undefined}
       aria-label={t(item.key)}
       aria-current={active ? "page" : undefined}
       className={`group relative flex min-h-[62px] flex-col items-center justify-center gap-0.5 py-1 ${

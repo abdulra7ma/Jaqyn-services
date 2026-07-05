@@ -16,6 +16,7 @@ import {
   HomeHeroCarousel,
   WalletSummary,
   WalletPeekRail,
+  NewCustomerHome,
 } from "./home";
 
 // vitest.setup.ts mocks @jaqyn/i18n → useT returns key identity.
@@ -28,6 +29,50 @@ describe("HeroCard — new-user variant", () => {
     expect(screen.getByText("home.startEarningSub")).toBeInTheDocument();
     const link = screen.getByRole("link");
     expect(link).toHaveAttribute("href", "/scan");
+  });
+});
+
+describe("NewCustomerHome", () => {
+  it("greets a first-time user and gives an empty discovery state a nearby action", () => {
+    render(<NewCustomerHome businesses={[]} name="Aida" />);
+
+    expect(screen.getByText("home.heyName")).toBeInTheDocument();
+    expect(screen.getByText("home.nearbyEmptyTitle")).toBeInTheDocument();
+    expect(screen.getByText("home.nearbyEmptyBody")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "home.exploreNearby" })[0]).toHaveAttribute(
+      "href",
+      "/nearby",
+    );
+  });
+
+  it("shows business names and an explore-more action when discovery has results", () => {
+    render(
+      <NewCustomerHome
+        name="Aida"
+        businesses={[
+          {
+            id: "b1",
+            name: "Manas Coffee",
+            category: "cafe",
+            description: null,
+            address: "Bishkek",
+            area: "Center",
+            phone: "",
+            instagram_url: null,
+            logo_url: null,
+            cover_url: null,
+            working_hours: {},
+            distance_km: 1.4,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Manas Coffee")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "home.exploreNearby" })).toHaveAttribute(
+      "href",
+      "/nearby",
+    );
   });
 });
 

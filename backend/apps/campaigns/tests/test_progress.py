@@ -14,6 +14,7 @@ from apps.campaigns.services import (
     CampaignProgressService,
 )
 from apps.campaigns.tests.helpers import make_business, make_campaign, make_customer
+from apps.loyalty.models import LoyaltyMembership, LoyaltyProgram
 from core.exceptions import JaqynAPIException
 
 
@@ -240,3 +241,37 @@ def test_join_campaign_is_idempotent():
         CampaignParticipant.objects.filter(campaign=campaign, customer=customer).count()
         == 1
     )
+
+
+def test_join_campaign_adds_active_business_cards_to_wallet_idempotently():
+    business = make_business()
+    customer = make_customer()
+    campaign = make_campaign(business)
+    active = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        status=LoyaltyProgram.Status.ACTIVE,
+        name="Coffee card",
+        required_count=6,
+        reward_title="Free coffee",
+    )
+    paused = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.VISIT,
+        status=LoyaltyProgram.Status.PAUSED,
+        name="Paused card",
+        required_count=4,
+        reward_title="Free pastry",
+    )
+
+    first_join = CampaignProgressService.join_campaign_with_wallet(campaign, customer)
+    second_join = CampaignProgressService.join_campaign_with_wallet(campaign, customer)
+
+    assert first_join.wallet_cards_added == 1
+    assert second_join.wallet_cards_added == 0
+    assert LoyaltyMembership.objects.filter(
+        customer=customer, program=active
+    ).count() == 1
+    assert not LoyaltyMembership.objects.filter(
+        customer=customer, program=paused
+    ).exists()

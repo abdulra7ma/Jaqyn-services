@@ -1,5 +1,5 @@
-import { SegmentLoading } from "../../_components/segment";
+import { CampaignSheetLoading } from "../../_components/CampaignRouteState";
 
 export default function CampaignDetailLoading() {
-  return <SegmentLoading />;
+  return <CampaignSheetLoading />;
 }
