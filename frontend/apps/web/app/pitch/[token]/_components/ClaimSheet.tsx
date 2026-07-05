@@ -20,9 +20,10 @@ export type ClaimSheetProps = {
 
 /**
  * Bottom sheet claim flow: email → 6-digit code → success.
- * After verify, stores tokens and routes directly to /business/dashboard
- * (a claimed pitch always yields a business owner; the verify response lacks the
- * area/full-User shape that postAuthRoute requires).
+ * After verify, stores tokens and routes directly to /business/onboarding
+ * (a claimed pitch always yields a business owner whose onboarding is IN_PROGRESS;
+ * the onboarding wizard is where they finish setup. The verify response lacks the
+ * area/full-User shape that postAuthRoute requires, so we route explicitly).
  */
 export function ClaimSheet({ token, businessName, goal, rewardText, open, onClose }: ClaimSheetProps) {
   const t = useT();
@@ -94,8 +95,8 @@ export function ClaimSheet({ token, businessName, goal, rewardText, open, onClos
           // response lacks the area field postAuthRoute requires, so route directly.
           tokenStore.set(result.access, result.refresh);
           setStep("success");
-          // Brief success pause, then navigate to dashboard
-          setTimeout(() => router.push("/business/dashboard"), 1200);
+          // Brief success pause, then send them into onboarding to finish setup
+          setTimeout(() => router.push("/business/onboarding"), 1200);
         },
       },
     );
