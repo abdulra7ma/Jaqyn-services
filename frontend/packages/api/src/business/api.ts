@@ -2,6 +2,7 @@
 // lists arrive as {results:[…]}). Screens consume only the hooks in ./hooks.
 // Campaign methods (apps.campaigns) map raw rows through ./adapters.
 import { API_URL, api } from "../client";
+import { ApiClientError } from "../errors";
 import { tokenStore } from "../tokens";
 import {
   adaptBusinessCampaign,
@@ -73,9 +74,26 @@ async function uploadBusinessImage(path: string, file: File): Promise<BusinessPr
   // Relative API_URL → same-origin (Next proxy); absolute → direct host.
   const baseUrl = API_URL.startsWith("http") ? API_URL : "";
   const res = await fetch(`${baseUrl}${path}`, { method: "POST", headers, body: form });
-  const json = (await res.json()) as { success?: boolean; data?: BusinessProfile };
+  let json: {
+    success?: boolean;
+    data?: BusinessProfile;
+    error?: { code?: string; message?: string; details?: unknown };
+  } | null = null;
+  try {
+    json = await res.json();
+  } catch {
+    throw new ApiClientError("VALIDATION_ERROR", `HTTP ${res.status}`, res.status);
+  }
   if (!json || json.success === false || !json.data) {
-    throw new Error("Business image upload failed");
+    // Preserve the backend envelope (code/message/details) so the UI can surface
+    // the exact field problem — e.g. details.image = ["Upload a valid image."].
+    const err = json?.error;
+    throw new ApiClientError(
+      err?.code ?? "VALIDATION_ERROR",
+      err?.message ?? `HTTP ${res.status}`,
+      res.status,
+      err?.details,
+    );
   }
   return json.data;
 }

@@ -6,6 +6,7 @@
 // their endpoints, and submits for verification. Visual language from Jaqyn.dc.html.
 
 import {
+  ApiClientError,
   useAddCatalogItem,
   useBusinessMe,
   useBusinessTypes,
@@ -33,6 +34,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LocationPicker } from "../../_components/LocationPicker";
 import { useRequireAuth } from "../../_lib/auth";
+import { useErrMessage } from "../../_lib/useErrMessage";
 import { MENU_STYLES, ROLE_HINT, STAFF_LIMIT, STAFF_ROLES, type StaffRole } from "./schema";
 
 const FIELD =
@@ -133,6 +135,19 @@ export function OnboardingFlow() {
   const deleteGalleryImage = useDeleteGalleryImage();
   const logoInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const errMessage = useErrMessage();
+  // Optimistic local previews (object URLs) shown the instant a file is picked,
+  // so the tile updates immediately instead of waiting on the upload round-trip.
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  // Per-field upload errors — rendered under the specific tile that failed.
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [coverError, setCoverError] = useState<string | null>(null);
+  // Release object URLs when they're replaced or the component unmounts (no leak
+  // if the wizard is left mid-upload). Separate effects so a cover change never
+  // revokes a logo preview that's still on screen.
+  useEffect(() => () => { if (logoPreview) URL.revokeObjectURL(logoPreview); }, [logoPreview]);
+  useEffect(() => () => { if (coverPreview) URL.revokeObjectURL(coverPreview); }, [coverPreview]);
 
   const [stage, setStage] = useState(1);
   const [f, setF] = useState<Form>(EMPTY);
@@ -284,15 +299,51 @@ export function OnboardingFlow() {
     });
   }
 
+  // Pull the most specific message the backend gave us. DRF puts field errors in
+  // `details` (e.g. {"image": ["Upload a valid image."]}); the top-level message is
+  // the generic "Validation error". Prefer the field detail so we can tell the owner
+  // exactly what's wrong, falling back to the localized code message.
+  function uploadErrorText(e: unknown): string {
+    if (e instanceof ApiClientError && e.details && typeof e.details === "object") {
+      for (const v of Object.values(e.details as Record<string, unknown>)) {
+        if (Array.isArray(v) && v.length && typeof v[0] === "string") return v[0];
+        if (typeof v === "string" && v) return v;
+      }
+    }
+    return errMessage(e);
+  }
+
   function onLogoPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) uploadLogo.mutate(file);
     e.target.value = "";
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setLogoError(null);
+    setLogoPreview(url); // show instantly, before the upload completes
+    uploadLogo.mutate(file, {
+      // Real logo_url is now in the `me` cache; dropping the preview reveals it.
+      // The URL is revoked by the cleanup effect keyed on logoPreview.
+      onSuccess: () => setLogoPreview(null),
+      onError: (err) => {
+        setLogoPreview(null);
+        setLogoError(uploadErrorText(err));
+      },
+    });
   }
   function onCoverPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) uploadCover.mutate(file);
     e.target.value = "";
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setCoverError(null);
+    setCoverPreview(url); // show instantly, before the upload completes
+    uploadCover.mutate(file, {
+      onSuccess: () => setCoverPreview(null),
+      onError: (err) => {
+        setCoverPreview(null);
+        setCoverError(uploadErrorText(err));
+      },
+    });
   }
 
   if (!ready || (enabled && (me.isLoading || state.isLoading))) {
@@ -432,10 +483,12 @@ export function OnboardingFlow() {
                   onLocationChange={(lat, lng, address) =>
                     set({ lat: String(lat), lng: String(lng), ...(address ? { address } : {}) })
                   }
-                  logoUrl={me.data?.logo_url ?? null}
-                  coverUrl={me.data?.cover_url ?? null}
+                  logoUrl={logoPreview ?? me.data?.logo_url ?? null}
+                  coverUrl={coverPreview ?? me.data?.cover_url ?? null}
                   logoUploading={uploadLogo.isPending}
                   coverUploading={uploadCover.isPending}
+                  logoError={logoError}
+                  coverError={coverError}
                   logoInputRef={logoInputRef}
                   coverInputRef={coverInputRef}
                   onLogoPick={onLogoPick}
@@ -625,6 +678,8 @@ function StageIdentity({
   coverUrl,
   logoUploading,
   coverUploading,
+  logoError,
+  coverError,
   logoInputRef,
   coverInputRef,
   onLogoPick,
@@ -637,6 +692,8 @@ function StageIdentity({
   coverUrl: string | null;
   logoUploading: boolean;
   coverUploading: boolean;
+  logoError: string | null;
+  coverError: string | null;
   logoInputRef: React.RefObject<HTMLInputElement>;
   coverInputRef: React.RefObject<HTMLInputElement>;
   onLogoPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -654,13 +711,11 @@ function StageIdentity({
             type="button"
             onClick={() => logoInputRef.current?.click()}
             disabled={logoUploading}
-            className={`flex h-24 w-24 flex-none flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl disabled:opacity-60 ${
+            className={`relative flex h-24 w-24 flex-none flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl ${
               logoUrl ? "border-[1.5px] border-brand bg-brand-muted" : "border-[1.5px] border-dashed border-line bg-cream"
             }`}
           >
-            {logoUploading ? (
-              <span className="text-[11px] font-semibold text-subtle">Uploading…</span>
-            ) : logoUrl ? (
+            {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logoUrl} alt="Business logo" className="h-full w-full object-cover" />
             ) : (
@@ -669,6 +724,11 @@ function StageIdentity({
                 <span className="text-[10.5px] font-semibold text-subtle">Logo *</span>
               </>
             )}
+            {logoUploading && (
+              <span className="absolute inset-0 flex items-center justify-center bg-black/25 text-[11px] font-semibold text-white">
+                Uploading…
+              </span>
+            )}
           </button>
           {/* Cover tile */}
           <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={onCoverPick} />
@@ -676,21 +736,27 @@ function StageIdentity({
             type="button"
             onClick={() => coverInputRef.current?.click()}
             disabled={coverUploading}
-            className={`flex h-24 flex-1 flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl disabled:opacity-60 ${
+            className={`relative flex h-24 flex-1 flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl ${
               coverUrl ? "border-[1.5px] border-brand" : "border-[1.5px] border-dashed border-line bg-cream"
             }`}
             style={coverUrl ? { background: `url(${coverUrl}) center/cover` } : undefined}
           >
-            {coverUploading ? (
-              <span className="text-[11px] font-semibold text-subtle">Uploading…</span>
-            ) : coverUrl ? null : (
+            {coverUrl ? null : (
               <>
                 <span className="text-xl text-[#C7B193]">＋</span>
                 <span className="text-[10.5px] font-semibold text-subtle">Cover image · optional</span>
               </>
             )}
+            {coverUploading && (
+              <span className="absolute inset-0 flex items-center justify-center bg-black/25 text-[11px] font-semibold text-white">
+                Uploading…
+              </span>
+            )}
           </button>
         </div>
+        {/* Per-field upload errors point the owner at the exact tile that failed. */}
+        {logoError && <div className="mt-2 text-[12px] font-semibold text-danger">Logo: {logoError}</div>}
+        {coverError && <div className="mt-1 text-[12px] font-semibold text-danger">Cover: {coverError}</div>}
       </div>
 
       <div className={CARD}>
