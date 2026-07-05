@@ -810,10 +810,22 @@ function InvalidSheet({ title, reason, onDismiss }: { title: string; reason: str
 
 // ─── camera-off state ───────────────────────────────────────────────────────────
 
-function CameraOff({ onEnable, onManual }: { onEnable: () => void; onManual: (code: string) => void }) {
+type CameraReason = "permission" | "https" | "none" | null;
+
+function CameraOff({
+  onEnable,
+  onManual,
+  reason = null,
+}: {
+  onEnable: () => void;
+  onManual: (code: string) => void;
+  reason?: CameraReason;
+}) {
   const t = useT();
   const [code, setCode] = useState("");
-  const [showManual, setShowManual] = useState(false);
+  // When there's a denial reason, open manual entry immediately — re-enabling
+  // the camera won't recover (iOS won't re-prompt; HTTP won't become HTTPS).
+  const [showManual, setShowManual] = useState(!!reason);
 
   // Test-only: upload a QR image and run it through the real scan flow.
   // Gated by env so it never ships to production staff devices.
@@ -858,20 +870,52 @@ function CameraOff({ onEnable, onManual }: { onEnable: () => void; onManual: (co
           <path d="M9.9 9.9A3 3 0 0 0 12 15a3 3 0 0 0 2.1-.9" />
         </svg>
       </div>
-      <div style={{ color: "#fff", font: "700 19px 'Bricolage Grotesque',sans-serif", marginTop: 18 }}>{t("staff.scan.cameraOff")}</div>
-      <div style={{ color: "rgba(255,255,255,.6)", fontSize: 13.5, marginTop: 8, lineHeight: 1.5, maxWidth: 240 }}>{t("staff.scan.cameraOffHint")}</div>
+
+      {/* Reason-specific title + hint, falling back to the generic camera-off copy. */}
+      <div style={{ color: "#fff", font: "700 19px 'Bricolage Grotesque',sans-serif", marginTop: 18 }}>
+        {reason === "permission" ? t("staff.scan.permDenied")
+          : reason === "https" ? t("staff.scan.httpsRequired")
+          : t("staff.scan.cameraOff")}
+      </div>
+      <div style={{ color: "rgba(255,255,255,.6)", fontSize: 13.5, marginTop: 8, lineHeight: 1.5, maxWidth: 260 }}>
+        {reason === "permission" ? t("staff.scan.permHint")
+          : reason === "https" ? t("staff.scan.httpsHint")
+          : t("staff.scan.cameraOffHint")}
+      </div>
+
+      {/* When permission was denied or HTTPS is missing the camera button won't
+          recover the session, so show it secondary. Without a reason it is the
+          primary CTA. */}
       <button
         onClick={onEnable}
-        style={{ marginTop: 22, padding: "15px 26px", border: "none", borderRadius: 15, background: "var(--accent, #C25E3C)", color: "#fff", font: "700 15px 'Hanken Grotesk',sans-serif", cursor: "pointer", boxShadow: "0 12px 26px -8px rgba(160,73,42,.6)" }}
+        style={{
+          marginTop: 22,
+          padding: reason ? "11px 22px" : "15px 26px",
+          border: reason ? "1.5px solid rgba(255,255,255,.22)" : "none",
+          borderRadius: 15,
+          background: reason ? "rgba(255,255,255,.08)" : "var(--accent, #C25E3C)",
+          color: reason ? "rgba(255,255,255,.7)" : "#fff",
+          font: `${reason ? "600" : "700"} ${reason ? "13.5" : "15"}px 'Hanken Grotesk',sans-serif`,
+          cursor: "pointer",
+          boxShadow: reason ? "none" : "0 12px 26px -8px rgba(160,73,42,.6)",
+        }}
       >
         {t("staff.scan.enableCamera")}
       </button>
 
+      {/* Manual-entry form: open by default when there's a denial reason
+          (camera won't recover); toggled via link otherwise. */}
       {showManual ? (
         <form
-          style={{ marginTop: 20, width: "100%", maxWidth: 280 }}
+          style={{ marginTop: reason ? 22 : 20, width: "100%", maxWidth: 280 }}
           onSubmit={(e) => { e.preventDefault(); if (code.trim()) onManual(code.trim()); }}
         >
+          {/* Prominent label when opened due to a denial reason */}
+          {reason && (
+            <div style={{ color: "rgba(255,255,255,.55)", fontSize: 12.5, marginBottom: 10, fontFamily: "'Hanken Grotesk',sans-serif", textTransform: "uppercase", letterSpacing: ".04em" }}>
+              {t("staff.scan.enterCodeInstead")}
+            </div>
+          )}
           <input
             autoFocus
             value={code}
@@ -933,6 +977,10 @@ export default function StaffScanPage() {
   // on success/error so a failed tap re-enables the row.
   const [pendingCampaignId, setPendingCampaignId] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
+  // Last denial reason from QrScanner (permission / https / none). Cleared when
+  // the staff member manually re-enables the camera. Used to drive reason-specific
+  // copy in the CameraOff state.
+  const [cameraReason, setCameraReason] = useState<CameraReason>(null);
   // Incremented on dismiss so QrScanner remounts and auto-restarts after each scan.
   const [scanKey, setScanKey] = useState(0);
   // The token most recently scanned — needed to confirm the visit against it.
@@ -1161,7 +1209,22 @@ export default function StaffScanPage() {
           <div className="absolute inset-0" style={{ background: "#14100B" }}>
             {/* Live camera feed — fills the container; video styled via global CSS */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              <QrScanner key={scanKey} onResult={handleScan} autoStart fill />
+              <QrScanner
+                key={scanKey}
+                onResult={handleScan}
+                onError={(r) => {
+                  // Camera denied or HTTPS missing — switch to CameraOff and
+                  // surface the reason so staff get specific recovery guidance.
+                  // CameraReason is a subset of QrScanner's Reason; unknown
+                  // values (e.g. "generic") render the generic camera-off copy.
+                  const known: CameraReason =
+                    r === "permission" || r === "https" || r === "none" ? r : null;
+                  setCameraReason(known);
+                  setCameraActive(false);
+                }}
+                autoStart
+                fill
+              />
             </div>
             {/* Dim everything except the central target a touch for legibility */}
             <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(120% 90% at 50% 42%, transparent 0%, transparent 26%, rgba(8,6,3,.55) 70%, rgba(8,6,3,.78) 100%)" }} />
@@ -1210,7 +1273,13 @@ export default function StaffScanPage() {
           </div>
         )}
 
-        {!cameraActive && <CameraOff onEnable={() => setCameraActive(true)} onManual={handleScan} />}
+        {!cameraActive && (
+          <CameraOff
+            onEnable={() => { setCameraReason(null); setCameraActive(true); }}
+            onManual={handleScan}
+            reason={cameraReason}
+          />
+        )}
 
         {/* ── Result sheets ── */}
         {overlay?.kind === "chooser" && (

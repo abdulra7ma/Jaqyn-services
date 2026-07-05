@@ -19,7 +19,7 @@ const SCAN_CONFIG = { fps: 10, qrbox: { width: 220, height: 220 } };
 // (e.g. staff scanner) overlays its own corner frame instead.
 const FILL_SCAN_CONFIG = { fps: 10 };
 
-type Reason = "https" | "permission" | "none" | "generic";
+export type Reason = "https" | "permission" | "none" | "generic";
 
 type Scanner = {
   start: (cam: unknown, cfg: unknown, onScan: (d: string) => void, onErr: () => void) => Promise<void>;
@@ -38,10 +38,14 @@ function secureContextOk(): boolean {
 
 export function QrScanner({
   onResult,
+  onError,
   autoStart = false,
   fill = false,
 }: {
   onResult: (token: string) => void;
+  // Called with the denial reason whenever the camera cannot start. The parent
+  // is responsible for any recovery UI (e.g. switching to manual-entry mode).
+  onError?: (reason: Reason) => void;
   autoStart?: boolean;
   // Full-bleed mode: video covers the parent, no library chrome or buttons. The
   // host page is responsible for its own target frame and start/stop controls.
@@ -53,6 +57,16 @@ export function QrScanner({
   const scannerRef = useRef<Scanner | null>(null);
   const onResultRef = useRef(onResult);
   onResultRef.current = onResult;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
+  // Notify the parent whenever a denial reason is set. Uses a ref so the
+  // callback identity never needs to be in the dependency array (mirrors the
+  // onResult pattern). Fires for both sync (https) and async (permission/none)
+  // reasons without touching scanner lifecycle or cleanup.
+  useEffect(() => {
+    if (reason) onErrorRef.current?.(reason);
+  }, [reason]);
 
   const start = () => {
     setReason(null);

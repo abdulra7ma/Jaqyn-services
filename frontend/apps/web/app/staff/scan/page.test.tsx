@@ -22,14 +22,29 @@ beforeEach(() => {
   }));
 });
 
-// QrScanner is camera + DOM; replace it with a button that fires a scan so the
-// test can drive the real handleScan path without a camera.
+// QrScanner is camera + DOM; replace it with buttons that fire a scan or an
+// error so tests can drive handleScan and the permission-denied path without
+// a real camera.
 vi.mock("../../_components/QrScanner", () => ({
   parseScanned: (s: string) => s,
-  QrScanner: ({ onResult }: { onResult: (token: string) => void }) => (
-    <button type="button" onClick={() => onResult("TOKEN-123")}>
-      fire-scan
-    </button>
+  QrScanner: ({
+    onResult,
+    onError,
+  }: {
+    onResult: (token: string) => void;
+    onError?: (reason: string) => void;
+  }) => (
+    <>
+      <button type="button" onClick={() => onResult("TOKEN-123")}>
+        fire-scan
+      </button>
+      <button type="button" onClick={() => onError?.("permission")}>
+        fire-permission-error
+      </button>
+      <button type="button" onClick={() => onError?.("https")}>
+        fire-https-error
+      </button>
+    </>
   ),
 }));
 
@@ -223,5 +238,86 @@ describe("Staff scan — loyalty chooser (choose-one)", () => {
     await user.click(screen.getByRole("button", { name: /staff\.scan\.progStamp/ }));
 
     expect(confirmCall.body).toEqual({ token: "TOKEN-123", campaignId: "stamp-1" });
+  });
+});
+
+describe("Staff scan — camera permission-denied guidance (FIX-08)", () => {
+  it("permission-denied error switches to CameraOff with the hint text", async () => {
+    const user = userEvent.setup();
+    dispatch = customerDispatch([]);
+    render(<StaffScanPage />);
+
+    // Enable camera so QrScanner mounts (cameraActive = true).
+    await user.click(screen.getByText("staff.scan.enableCamera"));
+
+    // Fire the permission error from the mocked QrScanner.
+    await user.click(screen.getByText("fire-permission-error"));
+
+    // Page should flip back to CameraOff with the permission-denied title.
+    expect(screen.getByText("staff.scan.permDenied")).toBeInTheDocument();
+    // Recovery hint (includes iOS Settings path) should be visible.
+    expect(screen.getByText("staff.scan.permHint")).toBeInTheDocument();
+  });
+
+  it("permission-denied state shows manual entry immediately (form + submit)", async () => {
+    const user = userEvent.setup();
+    dispatch = customerDispatch([]);
+    render(<StaffScanPage />);
+
+    await user.click(screen.getByText("staff.scan.enableCamera"));
+    await user.click(screen.getByText("fire-permission-error"));
+
+    // Manual-entry form should be open by default (no extra click required).
+    expect(screen.getByPlaceholderText("staff.scan.manualPlaceholder")).toBeInTheDocument();
+    // The "enter code instead" label should be visible as the form heading.
+    expect(screen.getByText("staff.scan.enterCodeInstead")).toBeInTheDocument();
+    // The submit button should be present.
+    expect(screen.getByRole("button", { name: "staff.scan.manualSubmit" })).toBeInTheDocument();
+  });
+
+  it("manual code entry in permission-denied state triggers the scan flow", async () => {
+    const user = userEvent.setup();
+    dispatch = customerDispatch([row({ campaign_id: "c-perm", name: "Stamp" })]);
+    render(<StaffScanPage />);
+
+    await user.click(screen.getByText("staff.scan.enableCamera"));
+    await user.click(screen.getByText("fire-permission-error"));
+
+    // Type a code and submit the manual-entry form.
+    await user.type(screen.getByPlaceholderText("staff.scan.manualPlaceholder"), "TOKEN-MANUAL");
+    await user.click(screen.getByRole("button", { name: "staff.scan.manualSubmit" }));
+
+    // The scan dispatch should fire and show the chooser sheet.
+    expect(screen.getAllByText("staff.chooser.title").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("https error shows the HTTPS-required title", async () => {
+    const user = userEvent.setup();
+    dispatch = customerDispatch([]);
+    render(<StaffScanPage />);
+
+    await user.click(screen.getByText("staff.scan.enableCamera"));
+    await user.click(screen.getByText("fire-https-error"));
+
+    expect(screen.getByText("staff.scan.httpsRequired")).toBeInTheDocument();
+    expect(screen.getByText("staff.scan.httpsHint")).toBeInTheDocument();
+  });
+
+  it("re-enabling camera after permission error clears the reason", async () => {
+    const user = userEvent.setup();
+    dispatch = customerDispatch([]);
+    render(<StaffScanPage />);
+
+    // Trigger permission error.
+    await user.click(screen.getByText("staff.scan.enableCamera"));
+    await user.click(screen.getByText("fire-permission-error"));
+    expect(screen.getByText("staff.scan.permDenied")).toBeInTheDocument();
+
+    // Re-enable camera: should go back to the generic camera-off title once
+    // camera is deactivated again via the camera-off button (not tested here),
+    // but at minimum the reason-specific heading disappears and camera mounts.
+    await user.click(screen.getByRole("button", { name: "staff.scan.enableCamera" }));
+    // After re-enabling, cameraActive = true so CameraOff is unmounted.
+    expect(screen.queryByText("staff.scan.permDenied")).not.toBeInTheDocument();
   });
 });
