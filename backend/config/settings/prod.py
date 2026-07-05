@@ -11,6 +11,10 @@ if DEV_LOGIN_OTP:  # noqa: F405  (imported via base.py wildcard)
 # H3: Console email backend silently drops all mail — require a real SMTP backend.
 if EMAIL_BACKEND.endswith("console.EmailBackend"):  # noqa: F405
     raise ImproperlyConfigured("EMAIL_BACKEND must be a real SMTP backend in production")
+
+# H4: Google sign-in cannot verify tokens without a configured client id.
+if not GOOGLE_OAUTH_CLIENT_ID:  # noqa: F405
+    raise ImproperlyConfigured("GOOGLE_OAUTH_CLIENT_ID must be set in production")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True

@@ -1,14 +1,42 @@
+from unittest.mock import patch
+
 import pytest
 from apps.accounts.models import User
+from core.exceptions import JaqynAPIException
 
 pytestmark = pytest.mark.django_db
 
 
-def test_resolve_email_is_password():
-    r = __import__("apps.accounts.services", fromlist=["resolve_login_method"]).resolve_login_method(
-        "owner@test.local", None
-    )
-    assert r["method"] == "password"
+def test_resolve_email_with_password_is_password():
+    User.objects.create_user(email="owner@test.local", password="pw12345678", role=User.Role.BUSINESS_OWNER)
+    from apps.accounts.services import resolve_login_method
+    assert resolve_login_method("owner@test.local", None)["method"] == "password"
+
+
+def test_resolve_unknown_email_sends_otp():
+    from apps.accounts.services import resolve_login_method
+    with patch("apps.accounts.tasks.send_email_otp_task.delay"):
+        r = resolve_login_method("new@test.local", None)  # unknown email → otp signup path
+    assert r["method"] == "otp"
+    assert r["request_id"]
+
+
+def test_resolve_email_without_password_sends_otp():
+    User.objects.create_user(email="passwordless@test.local", role=User.Role.CUSTOMER)
+    from apps.accounts.services import resolve_login_method
+    with patch("apps.accounts.tasks.send_email_otp_task.delay"):
+        r = resolve_login_method("passwordless@test.local", None)
+    assert r["method"] == "otp"
+    assert r["request_id"]
+
+
+def test_resolve_email_google_account_raises_instead_of_sending_otp():
+    User.objects.create(email="googler@test.local", role=User.Role.CUSTOMER, is_google_account=True)
+    from apps.accounts.services import resolve_login_method
+
+    with pytest.raises(JaqynAPIException) as exc:
+        resolve_login_method("googler@test.local", None)
+    assert exc.value.code == "GOOGLE_ACCOUNT_ONLY"
 
 
 def test_resolve_phone_with_password_is_password():

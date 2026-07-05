@@ -21,6 +21,21 @@ class SystemConfiguration(models.Model):
         help_text="Length of the free trial (days) applied to a business when it is approved.",
     )
 
+    # Branding shown in the footer of every outgoing email (see core/email.py
+    # branding_context). Admin-editable so support contact/socials can change
+    # without a deploy.
+    support_email = models.EmailField(
+        blank=True,
+        default="",
+        help_text="Support contact address shown in the footer of outgoing emails.",
+    )
+    instagram_url = models.URLField(
+        blank=True, default="", help_text="Instagram link shown in the footer of outgoing emails."
+    )
+    telegram_url = models.URLField(
+        blank=True, default="", help_text="Telegram link shown in the footer of outgoing emails."
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

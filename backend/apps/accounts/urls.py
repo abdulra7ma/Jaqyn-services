@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.accounts.views import (
     AvatarUploadView,
+    GoogleAuthView,
     LoginResolveView,
     LogoutView,
     MeView,
@@ -21,6 +22,7 @@ urlpatterns = [
     path("verify-otp/", VerifyOTPView.as_view(), name="verify-otp"),
     path("request-email-otp/", RequestEmailOTPView.as_view(), name="request-email-otp"),
     path("verify-email-otp/", VerifyEmailOTPView.as_view(), name="verify-email-otp"),
+    path("google/", GoogleAuthView.as_view(), name="google-auth"),
     path("login-password/", PasswordLoginView.as_view(), name="login-password"),
     path("request-password-reset/", RequestPasswordResetView.as_view(), name="request-password-reset"),
     path("reset-password/", ResetPasswordView.as_view(), name="reset-password"),

@@ -2,6 +2,7 @@
 
 import { ApiProvider } from "@jaqyn/api";
 import { I18nProvider } from "@jaqyn/i18n";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import { useEffect, type ReactNode } from "react";
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -20,8 +21,10 @@ export function Providers({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <ApiProvider>
-      <I18nProvider>{children}</I18nProvider>
-    </ApiProvider>
+    <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ""}>
+      <ApiProvider>
+        <I18nProvider>{children}</I18nProvider>
+      </ApiProvider>
+    </GoogleOAuthProvider>
   );
 }

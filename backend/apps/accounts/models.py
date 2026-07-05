@@ -36,6 +36,11 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     is_staff = models.BooleanField(default=False)
     is_phone_verified = models.BooleanField(default=False)
     is_email_verified = models.BooleanField(default=False)
+    # True only for accounts created via "Sign in with Google" (see
+    # authenticate_google). These have no usable password and no phone, so the
+    # regular OTP/password login must refuse them rather than silently emailing
+    # an OTP — Google is their only way in.
+    is_google_account = models.BooleanField(default=False)
     avatar = models.ImageField(upload_to="users/avatars/", blank=True, null=True)
     avatar_emoji = models.CharField(max_length=8, blank=True, default="")
 

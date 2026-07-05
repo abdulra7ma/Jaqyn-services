@@ -1,0 +1,7 @@
+{% block content %}{% endblock %}
+{% if support_email or instagram_url or telegram_url %}
+--
+{% if support_email %}{{ footer_questions }} {{ support_email }}
+{% endif %}{% if instagram_url %}Instagram: {{ instagram_url }}
+{% endif %}{% if telegram_url %}Telegram: {{ telegram_url }}
+{% endif %}{% endif %}

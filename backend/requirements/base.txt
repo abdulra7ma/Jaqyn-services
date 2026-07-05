@@ -20,6 +20,8 @@ sentry-sdk>=2.13,<2.14
 python-dotenv>=1.0,<1.1
 # Resend backend for transactional email (email confirmation, password reset).
 django-anymail[resend]>=11.1,<11.2
+# Verifies Google Identity Services ID tokens for "Sign in with Google".
+google-auth>=2.34,<2.35
 # Static-file serving middleware lives in base settings, so it must be importable
 # in every environment (dev/test/prod), not just prod.
 whitenoise>=6.7,<6.8

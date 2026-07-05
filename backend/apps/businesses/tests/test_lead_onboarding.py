@@ -312,3 +312,57 @@ class TestSendOwnerInviteEmailTask:
         send_owner_invite_email(invite_id=str(invite.id), raw_token=raw)
 
         assert business.name in mail.outbox[0].subject
+
+    def test_task_renders_in_business_default_language(self, settings):
+        """Subject/body are localized to business.default_language (ru here)."""
+        settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+        settings.FRONTEND_URL = "http://localhost:3000"
+        business = Business.objects.create(
+            name="Кафе Манас",
+            category="cafe",
+            pending_owner_name="Айзат",
+            pending_owner_email="aizat-ru@cafe.kg",
+            default_language="ru",
+        )
+        invite, raw = generate_owner_invite(business, email="aizat-ru@cafe.kg")
+
+        send_owner_invite_email(invite_id=str(invite.id), raw_token=raw)
+
+        sent = mail.outbox[0]
+        assert sent.subject == f"Вас пригласили настроить {business.name} в Jaqyn"
+        assert "Добро пожаловать, Айзат!" in sent.alternatives[0][0]
+
+    def test_task_falls_back_to_ru_for_unsupported_default_language(self, settings):
+        """An unsupported business.default_language falls back to ru, not a KeyError."""
+        settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+        settings.FRONTEND_URL = "http://localhost:3000"
+        business = Business.objects.create(
+            name="Unlocalized Cafe",
+            category="cafe",
+            pending_owner_name="Aizat",
+            pending_owner_email="unlocalized@cafe.kg",
+            default_language="fr",
+        )
+        invite, raw = generate_owner_invite(business, email="unlocalized@cafe.kg")
+
+        send_owner_invite_email(invite_id=str(invite.id), raw_token=raw)
+
+        assert "настроить" in mail.outbox[0].subject
+
+    def test_task_footer_includes_branding_from_system_configuration(self, settings):
+        """The shared email footer pulls support email + socials from SystemConfiguration."""
+        from apps.system.models import SystemConfiguration
+
+        settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+        settings.FRONTEND_URL = "http://localhost:3000"
+        config = SystemConfiguration.load()
+        config.support_email = "support@jaqyn.kg"
+        config.instagram_url = "https://instagram.com/jaqyn.kg"
+        config.save()
+        invite, raw, _ = self._setup_invite()
+
+        send_owner_invite_email(invite_id=str(invite.id), raw_token=raw)
+
+        html_body = mail.outbox[0].alternatives[0][0]
+        assert "support@jaqyn.kg" in html_body
+        assert "https://instagram.com/jaqyn.kg" in html_body

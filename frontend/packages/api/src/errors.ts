@@ -5,6 +5,11 @@ import type { Locale } from "@jaqyn/i18n";
 const ERROR_MESSAGES: Record<string, Record<Locale, string>> = {
   INVALID_OTP: { ru: "Неверный код", en: "Invalid code" },
   OTP_EXPIRED: { ru: "Код истёк", en: "Code expired" },
+  GOOGLE_ACCOUNT_ONLY: {
+    ru: "Этот аккаунт входит только через Google",
+    en: "This account signs in with Google only",
+  },
+  PHONE_TAKEN: { ru: "Этот номер уже используется", en: "This phone number is already in use" },
   BUSINESS_NOT_ACTIVE: { ru: "Бизнес не активен", en: "Business is not active" },
   INVALID_QR_TOKEN: { ru: "Недействительный QR-код", en: "Invalid QR code" },
   QR_TOKEN_EXPIRED: { ru: "QR-код истёк", en: "QR code expired" },

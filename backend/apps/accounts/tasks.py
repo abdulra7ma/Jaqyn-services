@@ -1,11 +1,10 @@
 import logging
 
 from celery import shared_task
-from django.conf import settings
-from django.core.mail import send_mail
 
-from apps.notifications.models import NotificationLog
 from apps.notifications.services import notifier
+from core.email import send_branded_email
+from core.email_i18n import OTP_EMAIL_STRINGS, PASSWORD_RESET_EMAIL_STRINGS, resolve_language
 
 logger = logging.getLogger(__name__)
 
@@ -17,46 +16,57 @@ def send_otp(phone, code):
 
 
 @shared_task(max_retries=3, default_retry_delay=5, time_limit=30)
-def send_email_otp_task(email: str, code: str) -> None:
-    """Send a 6-digit OTP to the given email address via Django's email backend."""
+def send_email_otp_task(email: str, code: str, language: str = "ru") -> None:
+    """Send a 6-digit OTP to the given email, in the caller's resolved language.
+
+    `language` is the customer's chosen language — CustomerProfile.language for an
+    existing account, otherwise whatever the client is currently displaying (see
+    apps.accounts.services.issue_email_otp) — and falls back to the platform
+    default (ru) for anything unsupported.
+    """
+    from django.conf import settings
+
+    lang = resolve_language(language)
+    strings = OTP_EMAIL_STRINGS[lang]
     expiry_minutes = getattr(settings, "OTP_TTL_SECONDS", 300) // 60
-    send_mail(
-        subject="Your Jaqyn verification code",
-        message=(
-            f"Your verification code is: {code}\n\n"
-            f"This code expires in {expiry_minutes} minutes.\n"
-            f"If you did not request this, you can ignore this email."
-        ),
-        html_message=(
-            f"<p>Your Jaqyn verification code is:</p>"
-            f"<p style='font-size:32px;letter-spacing:6px;font-weight:bold'>{code}</p>"
-            f"<p>This code expires in {expiry_minutes} minutes.</p>"
-            f"<p>If you did not request this, you can ignore this email.</p>"
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[email],
-        fail_silently=False,
+
+    send_branded_email(
+        subject=strings["subject"],
+        to=email,
+        template_base="emails/email_otp",
+        language=lang,
+        context={
+            "subject": strings["subject"],
+            "code": code,
+            "intro": strings["intro"],
+            "expiry": strings["expiry"].format(minutes=expiry_minutes),
+            "ignore": strings["ignore"],
+        },
     )
 
 
 @shared_task(max_retries=3, default_retry_delay=5, time_limit=30)
-def send_password_reset_otp_task(email: str, code: str) -> None:
-    """Send a 6-digit password-reset code to the given email via Django's email backend."""
+def send_password_reset_otp_task(email: str, code: str, language: str = "ru") -> None:
+    """Send a 6-digit password-reset code to the given email, in the caller's resolved language.
+
+    See send_email_otp_task for how `language` is resolved upstream.
+    """
+    from django.conf import settings
+
+    lang = resolve_language(language)
+    strings = PASSWORD_RESET_EMAIL_STRINGS[lang]
     expiry_minutes = getattr(settings, "OTP_TTL_SECONDS", 300) // 60
-    send_mail(
-        subject="Your Jaqyn password reset code",
-        message=(
-            f"Your password reset code is: {code}\n\n"
-            f"This code expires in {expiry_minutes} minutes.\n"
-            f"If you did not request this, you can ignore this email."
-        ),
-        html_message=(
-            f"<p>Your Jaqyn password reset code is:</p>"
-            f"<p style='font-size:32px;letter-spacing:6px;font-weight:bold'>{code}</p>"
-            f"<p>This code expires in {expiry_minutes} minutes.</p>"
-            f"<p>If you did not request this, you can ignore this email.</p>"
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[email],
-        fail_silently=False,
+
+    send_branded_email(
+        subject=strings["subject"],
+        to=email,
+        template_base="emails/password_reset_otp",
+        language=lang,
+        context={
+            "subject": strings["subject"],
+            "code": code,
+            "intro": strings["intro"],
+            "expiry": strings["expiry"].format(minutes=expiry_minutes),
+            "ignore": strings["ignore"],
+        },
     )

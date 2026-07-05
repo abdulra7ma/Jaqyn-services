@@ -18,13 +18,9 @@ def clear_cache():
     cache.clear()
 
 
-def _request_otp(client, email="test@example.com", name="Test User", password="password123"):
+def _request_otp(client, email="test@example.com"):
     with patch("apps.accounts.tasks.send_email_otp_task.delay"):
-        return client.post(
-            "/api/auth/request-email-otp/",
-            {"email": email, "name": name, "password": password},
-            format="json",
-        )
+        return client.post("/api/auth/request-email-otp/", {"email": email}, format="json")
 
 
 @pytest.mark.django_db
@@ -37,24 +33,9 @@ def test_request_email_otp_returns_200_and_request_id(client):
 
 
 @pytest.mark.django_db
-def test_request_email_otp_missing_name_returns_400(client):
+def test_request_email_otp_missing_email_returns_400(client):
     with patch("apps.accounts.tasks.send_email_otp_task.delay"):
-        res = client.post(
-            "/api/auth/request-email-otp/",
-            {"email": "test@example.com", "password": "password123"},
-            format="json",
-        )
-    assert res.status_code == 400
-
-
-@pytest.mark.django_db
-def test_request_email_otp_short_password_returns_400(client):
-    with patch("apps.accounts.tasks.send_email_otp_task.delay"):
-        res = client.post(
-            "/api/auth/request-email-otp/",
-            {"email": "test@example.com", "name": "Test", "password": "short"},
-            format="json",
-        )
+        res = client.post("/api/auth/request-email-otp/", {}, format="json")
     assert res.status_code == 400
 
 
@@ -66,7 +47,7 @@ def test_request_email_otp_no_auth_required(client):
 
 @pytest.mark.django_db
 def test_verify_email_otp_creates_user_returns_jwt(client):
-    _request_otp(client, email="new@example.com", name="New User")
+    _request_otp(client, email="new@example.com")
     payload = cache.get("email_otp:new@example.com")
     res = client.post(
         "/api/auth/verify-email-otp/",

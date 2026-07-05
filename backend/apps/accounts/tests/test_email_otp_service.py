@@ -14,9 +14,9 @@ def clear_cache():
     cache.clear()
 
 
-def _issue(email="user@example.com", name="Alice", password="secret123", phone=None, ip="1.2.3.4"):
+def _issue(email="user@example.com", ip="1.2.3.4"):
     with patch("apps.accounts.tasks.send_email_otp_task.delay"):
-        return issue_email_otp(email=email, name=name, password=password, phone=phone, ip_address=ip)
+        return issue_email_otp(email, ip)
 
 
 @pytest.mark.django_db
@@ -24,9 +24,7 @@ def test_issue_email_otp_stores_payload_in_cache():
     _issue()
     payload = cache.get("email_otp:user@example.com")
     assert payload is not None
-    assert payload["name"] == "Alice"
     assert len(payload["code"]) == 6
-    assert "password_hash" in payload
 
 
 @pytest.mark.django_db
@@ -34,6 +32,14 @@ def test_issue_email_otp_returns_request_id():
     request_id = _issue()
     assert request_id is not None
     assert len(request_id) == 36  # UUID format
+
+
+@pytest.mark.django_db
+def test_issue_email_otp_refuses_google_account():
+    User.objects.create(email="googler@example.com", role=User.Role.CUSTOMER, is_google_account=True)
+    with pytest.raises(JaqynAPIException) as exc:
+        _issue(email="googler@example.com")
+    assert exc.value.code == "GOOGLE_ACCOUNT_ONLY"
 
 
 @pytest.mark.django_db
@@ -50,13 +56,11 @@ def test_issue_email_otp_rate_limits_by_email(settings):
 
 @pytest.mark.django_db
 def test_verify_email_otp_creates_user_and_returns_tokens():
-    _issue(email="new@example.com", name="Bob", password="pass123", phone="+996700000000")
+    _issue(email="new@example.com")
     payload = cache.get("email_otp:new@example.com")
     user, is_new, access, refresh = verify_email_otp("new@example.com", payload["code"])
     assert is_new is True
     assert user.email == "new@example.com"
-    assert user.name == "Bob"
-    assert user.phone == "+996700000000"
     assert user.is_email_verified is True
     assert user.role == User.Role.CUSTOMER
     assert CustomerProfile.objects.filter(user=user).exists()
@@ -65,11 +69,11 @@ def test_verify_email_otp_creates_user_and_returns_tokens():
 
 
 @pytest.mark.django_db
-def test_verify_email_otp_password_is_usable():
-    _issue(email="pw@example.com", password="mypassword")
+def test_verify_email_otp_new_user_has_no_usable_password():
+    _issue(email="pw@example.com")
     payload = cache.get("email_otp:pw@example.com")
     user, _, _, _ = verify_email_otp("pw@example.com", payload["code"])
-    assert user.check_password("mypassword")
+    assert user.has_usable_password() is False
 
 
 @pytest.mark.django_db
@@ -102,7 +106,7 @@ def test_verify_email_otp_existing_user_logs_in_without_overwrite():
     user.save()
     CustomerProfile.objects.create(user=user)
 
-    _issue(email="existing@example.com", name="NewName", password="newpassword")
+    _issue(email="existing@example.com")
     payload = cache.get("email_otp:existing@example.com")
     returned_user, is_new, access, refresh = verify_email_otp("existing@example.com", payload["code"])
 
@@ -114,7 +118,7 @@ def test_verify_email_otp_existing_user_logs_in_without_overwrite():
 
 @pytest.mark.django_db
 def test_verify_email_otp_normalizes_email_case():
-    _issue(email="Mixed@Example.com", name="Case", password="password123")
+    _issue(email="Mixed@Example.com")
     # OTP issued under normalized key
     payload = cache.get("email_otp:mixed@example.com")
     assert payload is not None

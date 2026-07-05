@@ -44,6 +44,9 @@ class PasswordLoginSerializer(serializers.Serializer):
 class ProfileUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
     email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
+    phone = serializers.RegexField(
+        regex=r"^\+[1-9]\d{7,14}$", required=False, allow_blank=True, allow_null=True
+    )
     birthday = serializers.DateField(required=False, allow_null=True)
     language = serializers.ChoiceField(choices=CustomerProfile.Language.choices, required=False)
     marketing_opt_in = serializers.BooleanField(required=False)
@@ -53,10 +56,10 @@ class ProfileUpdateSerializer(serializers.Serializer):
 
 class RequestEmailOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
-    name = serializers.CharField(max_length=255)
-    password = serializers.CharField(min_length=8, max_length=128)
-    phone = serializers.RegexField(
-        regex=r"^\+[1-9]\d{7,14}$", required=False, allow_blank=True, allow_null=True
+    # Locale the client is currently displaying; an existing account's saved
+    # CustomerProfile.language wins over this (see issue_email_otp).
+    language = serializers.ChoiceField(
+        choices=CustomerProfile.Language.choices, required=False, default=CustomerProfile.Language.RU
     )
 
 
@@ -67,6 +70,11 @@ class VerifyEmailOTPSerializer(serializers.Serializer):
 
 class RequestPasswordResetSerializer(serializers.Serializer):
     email = serializers.EmailField()
+    # Locale the client is currently displaying; an existing account's saved
+    # CustomerProfile.language wins over this (see issue_password_reset_otp).
+    language = serializers.ChoiceField(
+        choices=CustomerProfile.Language.choices, required=False, default=CustomerProfile.Language.RU
+    )
 
 
 class ResetPasswordSerializer(serializers.Serializer):
@@ -77,3 +85,7 @@ class ResetPasswordSerializer(serializers.Serializer):
 
 class LoginResolveSerializer(serializers.Serializer):
     identifier = serializers.CharField(max_length=255)
+
+
+class GoogleAuthSerializer(serializers.Serializer):
+    id_token = serializers.CharField()

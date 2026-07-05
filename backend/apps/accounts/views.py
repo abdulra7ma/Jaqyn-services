@@ -3,8 +3,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.accounts.models import User
 from apps.accounts.serializers import (
     CustomerProfileSerializer,
+    GoogleAuthSerializer,
     LoginResolveSerializer,
     PasswordLoginSerializer,
     ProfileUpdateSerializer,
@@ -17,6 +19,7 @@ from apps.accounts.serializers import (
     VerifyOTPSerializer,
 )
 from apps.accounts.services import (
+    authenticate_google,
     authenticate_identifier,
     issue_email_otp,
     issue_otp,
@@ -93,15 +96,12 @@ class RequestEmailOTPView(APIView):
     def post(self, request):
         serializer = RequestEmailOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        d = serializer.validated_data
         from django.conf import settings
 
         request_id = issue_email_otp(
-            email=d["email"],
-            name=d["name"],
-            password=d["password"],
-            phone=d.get("phone") or None,
-            ip_address=request_ip(request),
+            serializer.validated_data["email"],
+            request_ip(request),
+            serializer.validated_data["language"],
         )
         return success_response({"request_id": request_id, "expires_in": settings.OTP_TTL_SECONDS})
 
@@ -116,6 +116,16 @@ class VerifyEmailOTPView(APIView):
             serializer.validated_data["email"],
             serializer.validated_data["code"],
         )
+        return success_response(_auth_payload(user, access, refresh, is_new=is_new))
+
+
+class GoogleAuthView(APIView):
+    permission_classes = [AllowAny]  # Public — the verified ID token is the credential
+
+    def post(self, request):
+        serializer = GoogleAuthSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user, is_new, access, refresh = authenticate_google(serializer.validated_data["id_token"])
         return success_response(_auth_payload(user, access, refresh, is_new=is_new))
 
 
@@ -137,7 +147,11 @@ class RequestPasswordResetView(APIView):
     def post(self, request):
         serializer = RequestPasswordResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        issue_password_reset_otp(serializer.validated_data["email"], request_ip(request))
+        issue_password_reset_otp(
+            serializer.validated_data["email"],
+            request_ip(request),
+            serializer.validated_data["language"],
+        )
         # Always the same response — never reveal whether the account exists.
         return success_response({"message": "If the account exists, a reset code was sent."})
 
@@ -215,7 +229,14 @@ class ProfileView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        for field in ("name", "email"):
+        if data.get("phone"):
+            from core.exceptions import JaqynAPIException
+
+            taken = User.objects.filter(phone=data["phone"]).exclude(pk=request.user.pk).exists()
+            if taken:
+                raise JaqynAPIException("PHONE_TAKEN", "Phone already in use", status_code=409)
+
+        for field in ("name", "email", "phone"):
             if field in data:
                 setattr(request.user, field, data[field])
         if "avatar_emoji" in data:

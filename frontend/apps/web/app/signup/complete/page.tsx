@@ -1,6 +1,6 @@
 "use client";
 
-import { useUpdateProfile } from "@jaqyn/api";
+import { useMe, useUpdateProfile } from "@jaqyn/api";
 import type { Language } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Button, Input } from "@jaqyn/ui";
@@ -16,15 +16,23 @@ export default function CompleteProfilePage() {
   const errMessage = useErrMessage();
   const router = useRouter();
   const { isAuthenticated, ready } = useRequireAuth();
+  const me = useMe(ready && isAuthenticated);
   const updateProfile = useUpdateProfile();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [birthday, setBirthday] = useState("");
   const [language, setLanguage] = useState<Language>("ru");
 
   // Don't render the form until we know the user is authed (avoids a flash).
-  if (!ready || !isAuthenticated) return null;
+  if (!ready || !isAuthenticated || !me.data) return null;
+
+  // Only ask for whichever contact channel the account doesn't already have —
+  // phone-originated signups get the optional email field, email-originated
+  // signups get the optional phone field.
+  const needsEmail = !me.data.user.email;
+  const needsPhone = !me.data.user.phone;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +40,7 @@ export default function CompleteProfilePage() {
       {
         name,
         ...(email ? { email } : {}),
+        ...(phone ? { phone } : {}),
         ...(birthday ? { birthday } : {}),
         language,
       },
@@ -77,15 +86,28 @@ export default function CompleteProfilePage() {
               onChange={(e) => setName(e.target.value)}
               required
             />
-            <Input
-              label={t("profile.complete.emailOptional")}
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              placeholder={t("auth.emailPlaceholder")}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            {needsEmail && (
+              <Input
+                label={t("profile.complete.emailOptional")}
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                placeholder={t("auth.emailPlaceholder")}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            )}
+            {needsPhone && (
+              <Input
+                label={t("profile.complete.phoneOptional")}
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder={t("auth.phonePlaceholder")}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            )}
             <Input
               label={t("profile.complete.birthdayOptional")}
               type="date"

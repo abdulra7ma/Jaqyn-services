@@ -33,6 +33,7 @@ import type {
   CampaignVoucher,
   CampaignWallet,
   EmailOtpResult,
+  GoogleAuthResult,
   GroupSession,
   Me,
   MyGroup,
@@ -56,6 +57,7 @@ export interface CustomerApi {
   verifyOtp(phone: string, code: string): Promise<VerifyOtpResult>;
   loginResolve(identifier: string): Promise<LoginResolveResult>;
   passwordLogin(identifier: string, password: string): Promise<PasswordLoginResult>;
+  googleAuth(idToken: string): Promise<GoogleAuthResult>;
   requestPasswordReset(email: string): Promise<{ message: string }>;
   resetPassword(email: string, code: string, newPassword: string): Promise<ResetPasswordResult>;
   requestEmailOtp(payload: RequestEmailOtpPayload): Promise<RequestOtpResult>;
@@ -138,6 +140,16 @@ export const customerApi: CustomerApi = {
     const res = await api.post<PasswordLoginResult>(
       "/api/auth/login-password/",
       { identifier, password },
+      { auth: false },
+    );
+    tokenStore.set(res.access, res.refresh);
+    session.setUserId(res.user.id);
+    return res;
+  },
+  googleAuth: async (idToken) => {
+    const res = await api.post<GoogleAuthResult>(
+      "/api/auth/google/",
+      { id_token: idToken },
       { auth: false },
     );
     tokenStore.set(res.access, res.refresh);

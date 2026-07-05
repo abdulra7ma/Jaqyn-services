@@ -1,11 +1,13 @@
-Hi {{ owner_name }},
+{% extends "emails/_base.txt" %}
+{% block content %}{{ greeting_txt }}
 
-You've been invited to set up {{ business_name }} on Jaqyn — a loyalty platform that helps your customers keep coming back.
+{{ body1_txt }}
 
-Click the link below to create your account and complete onboarding:
+{{ cta_txt }}
 
 {{ activation_url }}
 
-This link expires in {{ expires_days }} days. If you did not expect this invitation, you can ignore this email.
+{{ expiry_txt }}
 
-— The Jaqyn Team
+{{ sign_off }}
+{% endblock %}

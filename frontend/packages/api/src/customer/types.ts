@@ -463,9 +463,6 @@ export type StartGroupSessionInput = {
 
 export type RequestEmailOtpPayload = {
   email: string;
-  name: string;
-  password: string;
-  phone?: string;
 };
 
 export type EmailOtpResult = AuthResult;
@@ -503,9 +500,11 @@ export type AuthResult = {
 export type VerifyOtpResult = AuthResult;
 export type PasswordLoginResult = AuthResult;
 export type ResetPasswordResult = AuthResult;
+export type GoogleAuthResult = AuthResult;
 export type ProfilePatch = Partial<{
   name: string;
   email: string;
+  phone: string;
   birthday: string;
   language: Language;
   marketing_opt_in: boolean;

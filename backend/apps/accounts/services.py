@@ -1,18 +1,34 @@
 import secrets
 import uuid
 
-from django.contrib.auth.hashers import make_password as django_make_password
-
 from django.conf import settings
 from django.core.cache import cache
+from google.auth.exceptions import GoogleAuthError
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import CustomerProfile, User
 from apps.accounts.tasks import send_email_otp_task, send_otp, send_password_reset_otp_task
+from core.email_i18n import resolve_language
 from core.exceptions import JaqynAPIException
 from core.logging import emit_event
 from core.ratelimit import clear_limit, hit_limit
+
+
+def _resolve_user_email_language(user: User | None, requested_language: str) -> str:
+    """Prefer the account's saved CustomerProfile.language over the caller's request.
+
+    Falls back to `requested_language` (typically the locale the client is
+    currently displaying) for accounts with no profile yet — e.g. an email OTP
+    for a brand-new signup. Either way, resolve_language pins the result to a
+    supported code, defaulting to ru.
+    """
+    profile = getattr(user, "customer_profile", None) if user is not None else None
+    if profile is not None:
+        return resolve_language(profile.language)
+    return resolve_language(requested_language)
 
 
 def otp_key(phone):
@@ -80,22 +96,28 @@ def email_otp_attempt_key(email: str) -> str:
     return f"email_otp_attempts:{email}"
 
 
-def issue_email_otp(
-    email: str,
-    name: str,
-    password: str,
-    phone: str | None,
-    ip_address: str | None,
-) -> str:
-    """Issue a 6-digit OTP for email-based customer signup.
+def issue_email_otp(email: str, ip_address: str | None, language: str = "ru") -> str:
+    """Issue a 6-digit OTP for email-based sign-in/signup, mirroring ``issue_otp`` for phone.
 
-    Stores the pending registration payload (name, hashed password, phone) and
-    OTP code in Redis keyed by email with OTP_TTL_SECONDS TTL. Rate-limited to
+    Stores just the code and request_id in Redis keyed by email with OTP_TTL_SECONDS
+    TTL — no name/password is collected at this stage. Rate-limited to
     OTP_RATE_LIMIT_PER_PHONE per hour per email and OTP_RATE_LIMIT_PER_IP per IP.
-    Returns a request_id the client echoes back on verification.
-    Email is normalized to lowercase so cache keys and stored addresses are consistent.
+    Returns a request_id the client echoes back on verification. Email is normalized
+    to lowercase so cache keys and stored addresses are consistent. Unknown emails
+    fall through to the signup path in ``verify_email_otp``, matching phone's ``verify_otp``.
+    Refuses (GOOGLE_ACCOUNT_ONLY) an email already owned by a Google-only account —
+    defense in depth alongside ``resolve_login_method``'s same check, so this endpoint
+    can't be called directly to route around it.
+
+    ``language`` is the locale the client is currently displaying (ru/en/ky); an
+    existing account's saved CustomerProfile.language wins over it (see
+    ``_resolve_user_email_language``) so the OTP email matches the user's actual
+    preference, not just whatever locale they happen to be browsing in right now.
     """
     email = email.lower()
+    existing_user = User.objects.filter(email__iexact=email).select_related("customer_profile").first()
+    if existing_user is not None and existing_user.is_google_account:
+        raise JaqynAPIException("GOOGLE_ACCOUNT_ONLY", status_code=status.HTTP_401_UNAUTHORIZED)
     if hit_limit(f"email-otp-email:{email}", settings.OTP_RATE_LIMIT_PER_PHONE, 3600):
         raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
     if ip_address and hit_limit(f"email-otp-ip:{ip_address}", settings.OTP_RATE_LIMIT_PER_IP, 3600):
@@ -103,35 +125,25 @@ def issue_email_otp(
 
     code = f"{secrets.randbelow(1000000):06d}"
     request_id = str(uuid.uuid4())
-    cache.set(
-        email_otp_key(email),
-        {
-            "code": code,
-            "request_id": request_id,
-            "name": name,
-            # Hash before caching — never store a raw password in Redis.
-            "password_hash": django_make_password(password),
-            "phone": phone,
-        },
-        settings.OTP_TTL_SECONDS,
-    )
+    cache.set(email_otp_key(email), {"code": code, "request_id": request_id}, settings.OTP_TTL_SECONDS)
     cache.delete(email_otp_attempt_key(email))
-    send_email_otp_task.delay(email, code)
+    resolved_language = _resolve_user_email_language(existing_user, language)
+    send_email_otp_task.delay(email, code, resolved_language)
     return request_id
 
 
 def verify_email_otp(email: str, code: str) -> tuple[User, bool, str, str]:
     """Verify an email OTP and return (user, is_new, access_token, refresh_token).
 
-    On success: creates the user from the cached registration payload if they
-    don't exist yet; marks is_email_verified=True; creates CustomerProfile for
-    new customers and sets profile_completed=True (email signups supply name
-    upfront so the gate is satisfied at creation); emits customer_signed_up for
-    new users. Clears OTP from cache on success. Raises JaqynAPIException on
-    expired/invalid/rate-limited. If a user with this email already exists, they
-    are logged in without overwriting their existing profile data.
-    Email is normalized to lowercase so the cache lookup, DB query, and stored
-    address are all consistent regardless of how the caller supplied the address.
+    Mirrors ``verify_otp`` for phone: on success, creates a bare user (email only,
+    no usable password) if they don't exist yet; marks is_email_verified=True;
+    creates CustomerProfile for new customers with profile_completed left False
+    (name isn't collected at this stage — the ``/signup/complete`` gate handles
+    it); emits customer_signed_up for new users. Clears OTP from cache on success.
+    Raises JaqynAPIException on expired/invalid/rate-limited. If a user with this
+    email already exists, they are logged in without overwriting their existing
+    profile data. Email is normalized to lowercase so the cache lookup, DB query,
+    and stored address are all consistent regardless of how the caller supplied it.
     """
     email = email.lower()
     payload = cache.get(email_otp_key(email))
@@ -149,15 +161,8 @@ def verify_email_otp(email: str, code: str) -> tuple[User, bool, str, str]:
     existing = User.objects.filter(email__iexact=email).first()
     is_new = existing is None
     if is_new:
-        user = User(
-            email=email,
-            name=payload.get("name"),
-            phone=payload.get("phone") or None,
-            role=User.Role.CUSTOMER,
-            is_email_verified=True,
-        )
-        # Assign the pre-hashed password directly to avoid double-hashing.
-        user.password = payload["password_hash"]
+        user = User(email=email, role=User.Role.CUSTOMER, is_email_verified=True)
+        user.set_unusable_password()
         user.save()
     else:
         user = existing
@@ -165,19 +170,79 @@ def verify_email_otp(email: str, code: str) -> tuple[User, bool, str, str]:
         user.save(update_fields=["is_email_verified", "updated_at"])
 
     if user.role == User.Role.CUSTOMER:
-        profile, _ = CustomerProfile.objects.get_or_create(user=user)
-        # Email signups arrive with name + email already, so the completion gate
-        # is satisfied at creation. Only flip it for new users — never re-open it
-        # for a returning user who may have intentionally left it as-is.
-        if is_new and not profile.profile_completed:
-            profile.profile_completed = True
-            profile.save(update_fields=["profile_completed", "updated_at"])
+        CustomerProfile.objects.get_or_create(user=user)
 
     if is_new:
         emit_event("customer_signed_up", user_id=str(user.id), email=email)
 
     cache.delete(email_otp_key(email))
     cache.delete(email_otp_attempt_key(email))
+    refresh = RefreshToken.for_user(user)
+    return user, is_new, str(refresh.access_token), str(refresh)
+
+
+def verify_google_id_token(id_token_str: str) -> dict:
+    """Verify a Google Identity Services ID token and return its decoded claims.
+
+    Delegates to google-auth's verify_oauth2_token, which checks the token's
+    signature against Google's published JWKS, its expiry/issued-at window, and
+    that the issuer is exactly accounts.google.com. We additionally pass
+    audience=settings.GOOGLE_OAUTH_CLIENT_ID so a token minted for a different
+    OAuth client is rejected. Any failure raises GOOGLE_TOKEN_INVALID without
+    revealing which specific check failed.
+    """
+    try:
+        return google_id_token.verify_oauth2_token(
+            id_token_str, google_requests.Request(), settings.GOOGLE_OAUTH_CLIENT_ID
+        )
+    except (ValueError, GoogleAuthError):
+        raise JaqynAPIException("GOOGLE_TOKEN_INVALID", status_code=status.HTTP_401_UNAUTHORIZED)
+
+
+def authenticate_google(id_token_str: str) -> tuple[User, bool, str, str]:
+    """Sign in/up a customer via a verified Google ID token. Returns (user, is_new, access, refresh).
+
+    Mirrors ``verify_email_otp``: matches an existing user by email__iexact; if
+    none exists, creates a bare user (no usable password) with role=CUSTOMER,
+    since Google has already verified the address. Requires the token's
+    email_verified claim (GOOGLE_EMAIL_UNVERIFIED otherwise) — the same trust
+    bar as a confirmed email OTP. Existing users are logged in without
+    overwriting their profile data, with is_email_verified flipped True if it
+    wasn't already. CustomerProfile is get_or_create'd for CUSTOMER role with
+    profile_completed left False, routing new users through /signup/complete
+    same as email OTP. Emits customer_signed_up only for new users.
+
+    New users are flagged is_google_account=True — since they have no usable
+    password and no phone, Google is their only way in. ``resolve_login_method``
+    refuses these accounts (GOOGLE_ACCOUNT_ONLY) rather than emailing them an
+    OTP they didn't ask for. Existing users authenticating via Google keep
+    whatever is_google_account value they already had (unaffected).
+    """
+    claims = verify_google_id_token(id_token_str)
+    if not claims.get("email_verified"):
+        raise JaqynAPIException("GOOGLE_EMAIL_UNVERIFIED", status_code=status.HTTP_401_UNAUTHORIZED)
+    email = claims["email"].lower()
+
+    existing = User.objects.filter(email__iexact=email).first()
+    is_new = existing is None
+    if is_new:
+        user = User(
+            email=email, role=User.Role.CUSTOMER, is_email_verified=True, is_google_account=True
+        )
+        user.set_unusable_password()
+        user.save()
+    else:
+        user = existing
+        if not user.is_email_verified:
+            user.is_email_verified = True
+            user.save(update_fields=["is_email_verified", "updated_at"])
+
+    if user.role == User.Role.CUSTOMER:
+        CustomerProfile.objects.get_or_create(user=user)
+
+    if is_new:
+        emit_event("customer_signed_up", user_id=str(user.id), email=email)
+
     refresh = RefreshToken.for_user(user)
     return user, is_new, str(refresh.access_token), str(refresh)
 
@@ -190,13 +255,16 @@ def pwreset_otp_attempt_key(email: str) -> str:
     return f"pwreset_otp_attempts:{email}"
 
 
-def issue_password_reset_otp(email: str, ip_address: str | None) -> None:
+def issue_password_reset_otp(email: str, ip_address: str | None, language: str = "ru") -> None:
     """Issue a 6-digit password-reset code to an email address.
 
     Rate-limited per email and per IP (OTP_RATE_LIMIT_PER_PHONE / _PER_IP, 3600s).
     To avoid account enumeration this returns normally whether or not an account
     exists: a code is only generated, cached, and emailed when a user with a
     usable password is found for the (lowercased) email; otherwise it is a no-op.
+
+    ``language`` is the locale the client is currently displaying; the account's
+    saved CustomerProfile.language wins over it, same as ``issue_email_otp``.
     """
     email = email.lower()
     if hit_limit(f"pwreset-email:{email}", settings.OTP_RATE_LIMIT_PER_PHONE, 3600):
@@ -204,7 +272,7 @@ def issue_password_reset_otp(email: str, ip_address: str | None) -> None:
     if ip_address and hit_limit(f"pwreset-ip:{ip_address}", settings.OTP_RATE_LIMIT_PER_IP, 3600):
         raise JaqynAPIException("RATE_LIMITED", status_code=status.HTTP_429_TOO_MANY_REQUESTS)
 
-    user = User.objects.filter(email__iexact=email, is_active=True).first()
+    user = User.objects.filter(email__iexact=email, is_active=True).select_related("customer_profile").first()
     if user is None or not user.has_usable_password():
         # Silent no-op — never reveal whether the address has an account.
         return
@@ -217,7 +285,8 @@ def issue_password_reset_otp(email: str, ip_address: str | None) -> None:
         settings.OTP_TTL_SECONDS,
     )
     cache.delete(pwreset_otp_attempt_key(email))
-    send_password_reset_otp_task.delay(email, code)
+    resolved_language = _resolve_user_email_language(user, language)
+    send_password_reset_otp_task.delay(email, code, resolved_language)
 
 
 def reset_password(email: str, code: str, new_password: str) -> tuple[User, str, str]:
@@ -256,17 +325,33 @@ def reset_password(email: str, code: str, new_password: str) -> tuple[User, str,
 
 
 def resolve_login_method(identifier: str, ip_address: str | None) -> dict[str, str]:
-    """Decide how ``identifier`` signs in: OTP or password.
+    """Decide how ``identifier`` signs in/up: OTP or password.
 
-    Email (contains ``@``) → password. Phone → password when the matched user
-    has a usable password (staff/owner); otherwise OTP: the code is sent now and
-    the ``request_id`` returned (unknown phones fall through to the OTP signup
-    path, matching ``verify_otp``). Note this reveals whether an identifier is
-    password-backed — an accepted, throttled enumeration tradeoff.
+    Symmetric for email and phone: password when the matched user has a usable
+    password; otherwise OTP — the code is sent now and the ``request_id``
+    returned. Unknown identifiers (email or phone) fall through to the OTP
+    signup path, matching ``verify_otp``/``verify_email_otp``. Note this reveals
+    whether an identifier is password-backed — an accepted, throttled
+    enumeration tradeoff (it does not reveal whether the account exists at all,
+    since unknown and known-passwordless identifiers get the identical response).
+
+    Accounts created via "Sign in with Google" (``is_google_account``) are
+    refused here with GOOGLE_ACCOUNT_ONLY before any OTP is sent — they have no
+    usable password and Google is their only way in, so silently emailing them
+    an OTP would be the wrong fallback.
     """
     if "@" in identifier:
-        return {"method": "password"}
+        email = identifier.lower()
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
+        if user is not None and user.is_google_account:
+            raise JaqynAPIException("GOOGLE_ACCOUNT_ONLY", status_code=status.HTTP_401_UNAUTHORIZED)
+        if user is not None and user.has_usable_password():
+            return {"method": "password"}
+        request_id = issue_email_otp(email, ip_address)
+        return {"method": "otp", "request_id": request_id}
     user = User.objects.filter(phone=identifier, is_active=True).first()
+    if user is not None and user.is_google_account:
+        raise JaqynAPIException("GOOGLE_ACCOUNT_ONLY", status_code=status.HTTP_401_UNAUTHORIZED)
     if user is not None and user.has_usable_password():
         return {"method": "password"}
     request_id = issue_otp(identifier, ip_address)

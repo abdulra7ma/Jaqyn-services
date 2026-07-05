@@ -507,6 +507,11 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Jaqyn <noreply@mail.jaqyn.
 # Resend instead of raw SMTP/console.
 ANYMAIL = {"RESEND_API_KEY": os.getenv("RESEND_API_KEY", "")}
 
+# Google OAuth Client ID for "Sign in with Google" (GIS ID-token flow). Same
+# value is exposed to the frontend as NEXT_PUBLIC_GOOGLE_CLIENT_ID — this one
+# is the audience we verify incoming ID tokens against.
+GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").split(",")

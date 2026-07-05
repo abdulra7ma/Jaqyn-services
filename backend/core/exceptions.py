@@ -8,6 +8,9 @@ from core.response import error_response
 ERROR_MESSAGES = {
     "INVALID_OTP": "The OTP code is invalid",
     "OTP_EXPIRED": "The OTP code has expired",
+    "GOOGLE_TOKEN_INVALID": "The Google sign-in token is invalid or expired",
+    "GOOGLE_EMAIL_UNVERIFIED": "Your Google account's email is not verified",
+    "GOOGLE_ACCOUNT_ONLY": "This account uses Google sign-in. Please continue with Google.",
     "BUSINESS_NOT_ACTIVE": "The business is not active",
     "INVALID_QR_TOKEN": "The QR token is invalid",
     "QR_TOKEN_EXPIRED": "The QR token has expired",

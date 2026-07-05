@@ -311,6 +311,14 @@ export const usePasswordLogin = () => {
   });
 };
 
+export const useGoogleAuth = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (idToken: string) => customerApi.googleAuth(idToken),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.me }),
+  });
+};
+
 export const useRequestPasswordReset = () =>
   useMutation({ mutationFn: (email: string) => customerApi.requestPasswordReset(email) });
 

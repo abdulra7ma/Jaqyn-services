@@ -1,12 +1,22 @@
 "use client";
 
 import type { AuthResult } from "@jaqyn/api";
-import { postAuthRoute, useLoginResolve, usePasswordLogin, useRequestOtp, useVerifyOtp } from "@jaqyn/api";
+import {
+  postAuthRoute,
+  useGoogleAuth,
+  useLoginResolve,
+  usePasswordLogin,
+  useRequestEmailOtp,
+  useRequestOtp,
+  useVerifyEmailOtp,
+  useVerifyOtp,
+} from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { Button, Input } from "@jaqyn/ui";
+import { GoogleLogin } from "@react-oauth/google";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { ConsentNote } from "../_components/ConsentNote";
 import { useErrMessage } from "../_lib/useErrMessage";
 
@@ -22,10 +32,28 @@ function LoginFlow() {
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
 
+  const isEmail = identifier.includes("@");
+
   const resolve = useLoginResolve();
   const requestOtp = useRequestOtp();
   const verifyOtp = useVerifyOtp();
+  const requestEmailOtp = useRequestEmailOtp();
+  const verifyEmailOtp = useVerifyEmailOtp();
   const passwordLogin = usePasswordLogin();
+  const googleAuth = useGoogleAuth();
+
+  // GoogleLogin's `width` takes a fixed px number, not "100%" — measure the
+  // card so the button spans edge-to-edge like every other button here.
+  const googleWrapRef = useRef<HTMLDivElement>(null);
+  const [googleWidth, setGoogleWidth] = useState(320);
+  useEffect(() => {
+    const el = googleWrapRef.current;
+    if (!el) return;
+    const measure = () => setGoogleWidth(Math.round(el.offsetWidth));
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
 
   const go = (r: AuthResult) => router.replace(postAuthRoute(r, returnTo));
 
@@ -102,7 +130,11 @@ function LoginFlow() {
                 className="flex flex-col gap-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  verifyOtp.mutate({ phone: identifier, code }, { onSuccess: (r) => go(r) });
+                  if (isEmail) {
+                    verifyEmailOtp.mutate({ email: identifier, code }, { onSuccess: (r) => go(r) });
+                  } else {
+                    verifyOtp.mutate({ phone: identifier, code }, { onSuccess: (r) => go(r) });
+                  }
                 }}
               >
                 <p className="text-sm text-subtle">
@@ -118,14 +150,25 @@ function LoginFlow() {
                   onChange={(e) => setCode(e.target.value)}
                   required
                 />
-                {verifyOtp.isError && <p className="text-sm text-danger">{errMessage(verifyOtp.error)}</p>}
-                <Button type="submit" disabled={verifyOtp.isPending || code.length < 4}>
-                  {verifyOtp.isPending ? t("common.loading") : t("auth.verify")}
+                {(isEmail ? verifyEmailOtp : verifyOtp).isError && (
+                  <p className="text-sm text-danger">
+                    {errMessage((isEmail ? verifyEmailOtp : verifyOtp).error)}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  disabled={(isEmail ? verifyEmailOtp : verifyOtp).isPending || code.length < 4}
+                >
+                  {(isEmail ? verifyEmailOtp : verifyOtp).isPending
+                    ? t("common.loading")
+                    : t("auth.verify")}
                 </Button>
                 <button
                   type="button"
                   className="text-sm font-semibold text-brand"
-                  onClick={() => requestOtp.mutate(identifier)}
+                  onClick={() =>
+                    isEmail ? requestEmailOtp.mutate({ email: identifier }) : requestOtp.mutate(identifier)
+                  }
                 >
                   {t("auth.resend")}
                 </button>
@@ -167,41 +210,34 @@ function LoginFlow() {
             )}
           </div>
 
-          {/* social auth — coming soon */}
+          {/* social auth */}
           <div className="mt-6 flex items-center gap-3">
             <span className="h-px flex-1 bg-line" />
             <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-subtle">{t("auth.or")}</span>
             <span className="h-px flex-1 bg-line" />
           </div>
-          <div className="mt-4 flex flex-col gap-2.5">
-            {[
-              { key: "google", labelKey: "signup.option.google", glyph: "G" },
-              { key: "apple", labelKey: "signup.option.apple", glyph: "" },
-            ].map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                disabled
-                title={t("auth.social.comingSoon")}
-                className="flex cursor-not-allowed items-center justify-center gap-2.5 rounded-xl border border-line bg-card/60 py-3 text-sm font-semibold text-subtle"
-              >
-                <span className="font-display text-[15px]">{p.glyph}</span>
-                {t(p.labelKey)}
-                <span className="ml-1 rounded-full bg-board/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.04em] text-subtle">
-                  {t("auth.social.soon")}
-                </span>
-              </button>
-            ))}
+          <div className="mt-4 flex flex-col items-center gap-2.5">
+            {/* Google's iframe draws its own chrome (brand guidelines fix the
+                colors) — shape/size/width are the only knobs we have, so we
+                match those to the Apple button's rounded-xl/44px footprint and
+                clip the corners to the same 14px radius. */}
+            <div ref={googleWrapRef} className="w-full overflow-hidden rounded-xl">
+              <GoogleLogin
+                shape="rectangular"
+                theme="outline"
+                size="large"
+                width={googleWidth}
+                onSuccess={(cred) => {
+                  if (!cred.credential) return;
+                  googleAuth.mutate(cred.credential, { onSuccess: (r) => go(r) });
+                }}
+                useOneTap={false}
+              />
+            </div>
+            {googleAuth.isError && <p className="text-sm text-danger">{errMessage(googleAuth.error)}</p>}
           </div>
         </div>
 
-        <p className="mt-5 text-center text-[12.5px] text-subtle">{t("auth.social.comingSoon")}</p>
-        <p className="mt-2 text-center text-[12.5px] text-subtle">
-          {t("auth.noAccount")}{" "}
-          <Link href="/signup" className="font-semibold text-brand hover:underline">
-            {t("auth.signup")}
-          </Link>
-        </p>
         <ConsentNote />
       </div>
     </div>

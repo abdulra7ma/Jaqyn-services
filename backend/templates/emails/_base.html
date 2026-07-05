@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="{{ email_language|default:"ru" }}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Jaqyn{% endblock %}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Hanken+Grotesk:wght@400;600;700&display=swap');
+    body { margin: 0; padding: 0; background: #FBF6EE; font-family: 'Hanken Grotesk', -apple-system, Helvetica, Arial, sans-serif; }
+    .wrapper { max-width: 560px; margin: 40px auto; background: #FFFFFF; border-radius: 14px; padding: 40px; border: 1px solid #EFE3D1; }
+    .logo { font-family: 'Bricolage Grotesque', Georgia, serif; font-size: 24px; font-weight: 800; color: #C25E3C; margin-bottom: 24px; }
+    h1 { font-family: 'Bricolage Grotesque', Georgia, serif; font-size: 20px; color: #2E241D; margin: 0 0 16px; }
+    p { font-size: 15px; color: #2E241D; line-height: 1.6; margin: 0 0 16px; }
+    .code { font-family: 'Bricolage Grotesque', Georgia, serif; font-size: 32px; letter-spacing: 6px;
+            font-weight: 800; color: #2E241D; }
+    .btn { display: inline-block; background: #C25E3C; color: #ffffff !important; text-decoration: none;
+           padding: 12px 28px; border-radius: 99px; font-size: 15px; font-weight: 700;
+           margin: 8px 0 24px; font-family: 'Hanken Grotesk', sans-serif; }
+    .muted { color: #8C7A6A; }
+    .footer { font-size: 13px; color: #8C7A6A; margin-top: 24px; padding-top: 24px; border-top: 1px solid #EFE3D1; }
+    .link-fallback { word-break: break-all; color: #8C7A6A; font-size: 13px; }
+    .social { color: #C25E3C; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="logo">Jaqyn</div>
+    {% block content %}{% endblock %}
+    {% if support_email or instagram_url or telegram_url %}
+    <div class="footer">
+      {% if support_email %}
+      <p>{{ footer_questions }} <a class="social" href="mailto:{{ support_email }}">{{ support_email }}</a></p>
+      {% endif %}
+      {% if instagram_url or telegram_url %}
+      <p>
+        {% if instagram_url %}<a class="social" href="{{ instagram_url }}">Instagram</a>{% endif %}
+        {% if instagram_url and telegram_url %} · {% endif %}
+        {% if telegram_url %}<a class="social" href="{{ telegram_url }}">Telegram</a>{% endif %}
+      </p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</body>
+</html>
