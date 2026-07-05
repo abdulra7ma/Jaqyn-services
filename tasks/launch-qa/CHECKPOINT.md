@@ -31,6 +31,10 @@ Status legend: TODO · WIP · BLOCKED · DONE
   NOT live-tested (unit-tested only): FIX-08 camera-denial (needs real
   device), full scan→earn→redeem money loop (needs staff camera/QR at
   counter — do on-device before launch per LAUNCH.md §4)
+- 2026-07-05 (later) · FIX-05 SUPERSEDED by product decision "staff only
+  scans — no need for code": entire approval-code system removed (commit
+  2f43036, migration qr/0004). The endpoint+UI FIX-05 added are gone with
+  it; live-verified /business/more has no code block.
 - [ ] User confirmed → folder deleted (final `chore:` commit)
 
 ## Notes log
