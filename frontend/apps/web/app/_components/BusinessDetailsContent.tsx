@@ -336,7 +336,7 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
             {b.catalog_sections && b.catalog_sections.length > 0 && (
               <Card>
                 <p className="font-display text-sm font-bold text-ink">
-                  {t("biz.detail.menu")}
+                  {t(`catalog.heading.${b.catalog_sections[0]?.items[0]?.module ?? "menu"}`)}
                 </p>
                 <div className="mt-3 flex flex-col gap-4">
                   {b.catalog_sections.map((section) => (
