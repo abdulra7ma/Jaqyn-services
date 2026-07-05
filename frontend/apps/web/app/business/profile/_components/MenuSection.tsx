@@ -4,21 +4,24 @@
 // optional image) / remove / re-image — each persists through its own mutation
 // (no section Save).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useAddCatalogItem,
+  useBusinessMe,
+  useBusinessTypes,
   useCatalog,
   useRemoveCatalogItem,
   useUploadCatalogItemImage,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
+import { labelSuggestions, resolveModule } from "../../_lib/catalogModule";
 import { FIELD, LABEL, SectionCard, type Notify } from "./parts";
-
-const MENU_GROUPS = ["Coffee", "Kitchen", "Desserts", "Menu"];
 
 export function MenuSection({ notify }: { notify: Notify }) {
   const t = useT();
   const catalog = useCatalog();
+  const me = useBusinessMe();
+  const types = useBusinessTypes();
   const addItem = useAddCatalogItem();
   const removeItem = useRemoveCatalogItem();
   const uploadCatalogImage = useUploadCatalogItemImage();
@@ -26,9 +29,13 @@ export function MenuSection({ notify }: { notify: Notify }) {
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const addFileRef = useRef<HTMLInputElement>(null);
 
+  // Adapt to the business's catalog module (menu / services / products / plans)
+  // so a non-cafe business isn't mislabelled "Menu" and items store the right module.
+  const catalogModule = resolveModule(me.data?.business_type, types.data);
+
   const [draft, setDraft] = useState<{ name: string; group: string; price: string; file: File | null }>({
     name: "",
-    group: "Coffee",
+    group: "",
     price: "",
     file: null,
   });
@@ -39,6 +46,12 @@ export function MenuSection({ notify }: { notify: Notify }) {
   }, [preview]);
 
   const items = catalog.data ?? [];
+  // Section-label suggestions: module defaults + labels already in use. A new
+  // typed value is a new label.
+  const labels = useMemo(
+    () => labelSuggestions(catalogModule, items.map((i) => i.category)),
+    [catalogModule, items],
+  );
 
   function stageAddImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -62,9 +75,9 @@ export function MenuSection({ notify }: { notify: Notify }) {
   function addMenu() {
     if (!draft.name.trim()) return;
     const file = draft.file;
-    const group = draft.group;
+    const group = draft.group.trim() || labels[0] || "Featured";
     addItem.mutate(
-      { name: draft.name.trim(), category: group, price: draft.price.trim(), module: "menu" },
+      { name: draft.name.trim(), category: group, price: draft.price.trim(), module: catalogModule },
       {
         onSuccess: (created) => {
           // Upload the staged image now that the item has an id.
@@ -89,7 +102,7 @@ export function MenuSection({ notify }: { notify: Notify }) {
 
   return (
     <SectionCard
-      title={t("owner.profile.menu")}
+      title={t(`catalog.heading.${catalogModule}`)}
       action={<span className="text-xs text-subtle">{t("owner.profile.menuHint")}</span>}
     >
       <div className="mt-3.5 flex flex-wrap items-end gap-2.5">
@@ -117,13 +130,19 @@ export function MenuSection({ notify }: { notify: Notify }) {
         </label>
         <label className="min-w-[120px] flex-1">
           <span className={LABEL}>{t("owner.profile.section")}</span>
-          <select value={draft.group} onChange={(e) => setDraft({ ...draft, group: e.target.value })} className={`${FIELD} mt-1.5`}>
-            {MENU_GROUPS.map((g) => (
-              <option key={g} value={g}>
-                {t(`owner.profile.menuGroup.${g.toLowerCase()}`)}
-              </option>
+          {/* Pick a suggested section or type a brand-new label (datalist). */}
+          <input
+            list="menu-section-labels"
+            value={draft.group}
+            onChange={(e) => setDraft({ ...draft, group: e.target.value })}
+            placeholder={labels[0] ?? "Featured"}
+            className={`${FIELD} mt-1.5`}
+          />
+          <datalist id="menu-section-labels">
+            {labels.map((g) => (
+              <option key={g} value={g} />
             ))}
-          </select>
+          </datalist>
         </label>
         <label className="w-[92px] flex-none">
           <span className={LABEL}>{t("owner.profile.price")}</span>

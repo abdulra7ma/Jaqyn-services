@@ -44,6 +44,7 @@ import {
 import { useRequireAuth } from "../../_lib/auth";
 import { useErrMessage } from "../../_lib/useErrMessage";
 import { MENU_STYLES, ROLE_HINT, STAFF_LIMIT, STAFF_ROLES, type StaffRole } from "./schema";
+import { MODULE_META, labelSuggestions, type CatalogModule } from "../_lib/catalogModule";
 
 const FIELD =
   "w-full rounded-xl border-[1.5px] border-line bg-card px-3 py-3 text-sm font-semibold text-ink outline-none transition focus:border-brand";
@@ -70,13 +71,6 @@ const STEP_SUB: Record<number, string> = {
   3: "Add what customers will see — you can edit anytime from the dashboard.",
   4: "Optional — invite up to 5 teammates now or add them later.",
   5: "Check everything, then send to Jaqyn for verification.",
-};
-
-const MODULE_META: Record<string, { plural: string; noun: string }> = {
-  menu: { plural: "Menu", noun: "menu item" },
-  services: { plural: "Services", noun: "service" },
-  products: { plural: "Products", noun: "product" },
-  plans: { plural: "Plans", noun: "plan" },
 };
 
 type Form = {
@@ -257,16 +251,18 @@ export function OnboardingFlow() {
   const on = (k: keyof Form) => (e: { target: { value: string } }) => set({ [k]: e.target.value } as Partial<Form>);
 
   const selType = types.data?.find((t) => t.key === f.businessType) ?? null;
-  const catalogModule = selType?.module ?? "services";
-  const meta = MODULE_META[catalogModule] ?? MODULE_META.services!;
+  const catalogModule: CatalogModule = selType?.module ?? "services";
+  const meta = MODULE_META[catalogModule];
   const showDuration = catalogModule === "services" || catalogModule === "plans";
   const showMenuStyle = catalogModule === "menu";
-  const catType = useMemo(() => {
-    // category options from the seeded business types are not exposed; offer a free pick
-    return ["Featured", "Coffee", "Kitchen", "Desserts", "Hair", "Nails", "Mains", "Starters", "General"];
-  }, []);
 
   const items = catalog.data ?? [];
+  // Section-label suggestions for the datalist: module defaults + labels already
+  // used by this business. The owner can still type a brand-new label.
+  const catType = useMemo(
+    () => labelSuggestions(catalogModule, items.map((i) => i.category)),
+    [catalogModule, items],
+  );
   const staffList = team.data?.members ?? [];
   const staffUsed = staffList.length;
   const completion = state.data?.completion_score ?? 0;
@@ -1072,14 +1068,20 @@ function StageSetup(props: {
           <Field label="Name" className="min-w-[160px] flex-[2]">
             <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Cappuccino" className={FIELD} />
           </Field>
-          <Field label="Category" className="min-w-[120px] flex-1">
-            <select value={draft.category || categories[0]} onChange={(e) => setDraft({ ...draft, category: e.target.value })} className={FIELD}>
+          {/* Section label — pick a suggestion or type a brand-new one (datalist). */}
+          <Field label="Section" className="min-w-[120px] flex-1">
+            <input
+              list="onb-catalog-labels"
+              value={draft.category}
+              onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+              placeholder={categories[0] ?? "Featured"}
+              className={FIELD}
+            />
+            <datalist id="onb-catalog-labels">
               {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
+                <option key={c} value={c} />
               ))}
-            </select>
+            </datalist>
           </Field>
         </div>
         <div className="mt-3 flex flex-wrap items-end gap-2.5">
