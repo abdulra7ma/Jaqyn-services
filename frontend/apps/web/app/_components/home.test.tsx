@@ -3,8 +3,8 @@
  * Tests call pickHero() directly and render individual components so they don't
  * need to mock the five data hooks.
  */
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import {
   CollectingList,
   carouselIndex,
@@ -96,7 +96,8 @@ describe("HeroCard — progress variant", () => {
     );
     expect(screen.getByText("Free coffee")).toBeInTheDocument();
     expect(screen.getByLabelText("4 / 6")).toBeInTheDocument();
-    expect(screen.getByText(/home\.openCard/)).toBeInTheDocument();
+    expect(screen.getByText("home.loyaltyCard")).toBeInTheDocument();
+    expect(screen.getByText(/home\.viewCard/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Free coffee — Cafe C" })).toHaveAttribute(
       "href",
       "/loyalty/p1",
@@ -163,31 +164,14 @@ describe("HeroCard — map variant", () => {
 });
 
 describe("HomeHeroCarousel", () => {
-  it("renders one standalone pager dot per slide", () => {
+  it("uses a larger peeking rail without pager navigation", () => {
     render(
       <HomeHeroCarousel
         heroes={[{ kind: "new-user" }, { kind: "new-user" }, { kind: "new-user" }]}
       />,
     );
-    expect(screen.getByRole("tablist", { name: "home.carouselPagination" })).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(3);
-  });
-
-  it("smoothly moves to the card represented by an inactive dot", () => {
-    render(
-      <HomeHeroCarousel
-        heroes={[{ kind: "new-user" }, { kind: "new-user" }, { kind: "new-user" }]}
-      />,
-    );
-    const rail = screen.getByRole("list");
-    const scrollTo = vi.fn();
-    Object.defineProperty(rail, "clientWidth", { configurable: true, value: 300 });
-    Object.defineProperty(rail, "scrollTo", { configurable: true, value: scrollTo });
-
-    fireEvent.click(screen.getAllByRole("tab")[1]!);
-
-    expect(scrollTo).toHaveBeenCalledWith({ left: 312, behavior: "smooth" });
-    expect(screen.getAllByRole("tab")[1]).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.getByRole("list").firstElementChild).toHaveClass("w-[300px]");
   });
 
   it("calculates the next snap position including the card gap", () => {
@@ -202,6 +186,13 @@ describe("HomeHeroCarousel", () => {
     const rail = screen.getByRole("list");
     expect(rail.className).toContain("touch-pan-x");
     expect(rail.className).not.toContain("touch-pan-y");
+  });
+
+  it("appends a wallet tail card when more qualifying cards exist", () => {
+    render(<HomeHeroCarousel heroes={[{ kind: "new-user" }]} collectingCount={8} />);
+    const tail = screen.getByRole("link", { name: /home\.viewAllWallet/ });
+    expect(tail).toHaveAttribute("href", "/loyalty");
+    expect(screen.getByText("home.cardsCollecting")).toBeInTheDocument();
   });
 });
 
@@ -265,7 +256,7 @@ describe("WalletPeekRail", () => {
       .find((link) => link.getAttribute("href") === "/loyalty?business=b1");
     expect(cardLink).toBeDefined();
     expect(screen.getByRole("img", { name: "3 / 6" })).toBeInTheDocument();
-    expect(screen.queryByText("3 / 6")).not.toBeInTheDocument();
+    expect(screen.getByText("3 / 6")).toBeInTheDocument();
   });
 
   it("uses business logos in the wallet summary and collecting list", () => {
@@ -276,7 +267,7 @@ describe("WalletPeekRail", () => {
         <CollectingList cards={[card]} />
       </>,
     );
-    expect(screen.getAllByAltText("Cafe A")).toHaveLength(2);
+    expect(screen.getAllByAltText("Cafe A")).toHaveLength(1);
   });
 });
 

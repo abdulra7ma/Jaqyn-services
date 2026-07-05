@@ -67,7 +67,46 @@ def test_owner_create_and_customer_cards(api_actors):
     assert cards.status_code == 200
     assert cards.data["data"]["results"][0]["points_balance"] == 25
     assert cards.data["data"]["results"][0]["min_redeem_points"] == 10
+    assert cards.data["data"]["results"][0]["last_activity_at"] is None
     assert str(cards.data["data"]["results"][0]["business_id"]) == str(business.id)
+
+
+@pytest.mark.django_db
+def test_customer_cards_are_ordered_by_recent_activity(api_actors):
+    """Home receives recently used cards first and the activity timestamp."""
+    _, customer, _, business = api_actors
+    older_program = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Older card",
+        required_count=6,
+    )
+    newer_program = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Newer card",
+        required_count=6,
+    )
+    now = timezone.now()
+    LoyaltyMembership.objects.create(
+        program=older_program,
+        customer=customer,
+        last_activity_at=now - timedelta(days=2),
+    )
+    LoyaltyMembership.objects.create(
+        program=newer_program,
+        customer=customer,
+        last_activity_at=now,
+    )
+
+    client = APIClient()
+    client.force_authenticate(customer)
+    response = client.get("/api/customer/loyalty/cards/")
+
+    assert response.status_code == 200
+    rows = response.data["data"]["results"]
+    assert [row["name"] for row in rows] == ["Newer card", "Older card"]
+    assert rows[0]["last_activity_at"] is not None
 
 
 @pytest.mark.django_db

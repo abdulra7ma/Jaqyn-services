@@ -47,6 +47,12 @@ class, not the hex. Mapping from the tokens below:
 | shadow Sheet (top) | `0 -20px 40px -24px rgba(20,16,11,.5)` | `shadow-sheet` |
 | shadow Modal | `0 30px 60px -24px rgba(20,16,11,.6)` | `shadow-modal` |
 | brand gradient | — | `bg-brand-gradient` |
+| progress card wash | `162deg, #FFFFFF → #FBF1E8` | `bg-reward-progress` |
+| ready card wash | `162deg, #FFFFFF → #EEF5EE` | `bg-reward-ready` |
+| ready card border | `#D6E6D8` | `border-reward-ready-border` |
+| progress pill fill | `#FBEEE7` | `bg-reward-warm` |
+| reward card shadow | `0 16px 34px -20px rgba(46,30,18,.42)` | `shadow-reward-card` |
+| reward CTA shadow | `0 10px 22px -10px rgba(160,73,42,.6)` | `shadow-reward-cta` |
 
 **Known gaps** (extend the preset, don't hardcode, when you hit these):
 - Status / voucher tints (§1) — not yet in the preset.

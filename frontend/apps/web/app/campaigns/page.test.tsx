@@ -17,7 +17,6 @@ import type {
   LoyaltyHomeSummary,
   LoyaltyVoucherWallet,
   MyGroup,
-  PatchesSummary,
 } from "@jaqyn/api";
 
 // Minimal shell stub.
@@ -73,10 +72,6 @@ const emptyLoyaltyWallet: LoyaltyVoucherWallet = { active: [], used: [], expired
 
 const emptyGroups: MyGroup[] = [];
 
-const emptyPatches: PatchesSummary = {
-  earned_count: 0, total: 15, board_seen: false, next: null, unseen_earned: [], patches: [],
-};
-
 // ---- Mock @jaqyn/api ---------------------------------------------------------
 
 const mockState = {
@@ -86,7 +81,6 @@ const mockState = {
   wallet: emptyWallet as CampaignWallet,
   loyaltyWallet: emptyLoyaltyWallet as LoyaltyVoucherWallet,
   groups: emptyGroups as MyGroup[],
-  patches: emptyPatches as PatchesSummary,
 };
 
 vi.mock("@jaqyn/api", () => ({
@@ -97,7 +91,6 @@ vi.mock("@jaqyn/api", () => ({
   useLoyaltyVouchers: () => ({ data: mockState.loyaltyWallet, isLoading: false, isError: false }),
   useMyGroups: () => ({ data: mockState.groups, isLoading: false, isError: false }),
   useNearby: () => ({ data: [], isLoading: false, isError: false }),
-  usePatches: () => ({ data: mockState.patches, isLoading: false, isError: false }),
   useJoinCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -112,7 +105,6 @@ describe("CampaignsPage — 3 states", () => {
     mockState.wallet = emptyWallet;
     mockState.loyaltyWallet = emptyLoyaltyWallet;
     mockState.groups = [];
-    mockState.patches = emptyPatches;
   });
 
   describe("new / empty user", () => {
@@ -178,6 +170,11 @@ describe("CampaignsPage — 3 states", () => {
     it("shows in-progress list", () => {
       render(<CampaignsPage />);
       expect(screen.getByText("Coffee Challenge")).toBeInTheDocument();
+    });
+
+    it("does not show the patches entry", () => {
+      render(<CampaignsPage />);
+      expect(screen.queryByText("cmp.home.patches.title")).not.toBeInTheDocument();
     });
   });
 

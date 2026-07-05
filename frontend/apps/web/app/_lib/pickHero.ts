@@ -1,5 +1,6 @@
 import type { Business, CampaignVoucher, Campaign, LoyaltyCardView, LoyaltyVoucher } from "@jaqyn/api";
 import { resolveAccent } from "../loyalty/_lib/wallet";
+import { isOpenNow } from "./hours";
 
 /**
  * Priority logic for the home hero card. Pure — no React, no side effects.
@@ -23,6 +24,7 @@ export type HeroResult =
       href: string;
       title: string;
       business: string;
+      businessLogoUrl?: string | null;
       urgencyLabel: string;
     }
   | {
@@ -31,6 +33,7 @@ export type HeroResult =
       href: string;
       title: string;
       business: string;
+      businessLogoUrl?: string | null;
       remaining: number;
       total: number;
       current: number;
@@ -46,6 +49,7 @@ export type HeroResult =
       source: "loyalty";
       href: string;
       business: string;
+      businessLogoUrl?: string | null;
       businessId: string;
       amount: number;
       progressPct: number | null;
@@ -80,8 +84,6 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
     loyaltyCards,
     followed,
     featuredCampaignIds = [],
-    nearbyBusinesses = [],
-    promoteMap = false,
   } = inputs;
 
   const heroes: HeroResult[] = [];
@@ -123,8 +125,8 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
   // --- Priority 2: closest to reward ---
 
   type Candidate =
-    | { source: "loyalty"; remaining: number; total: number; current: number; href: string; title: string; business: string; businessId: string; businessArea: string; businessHours: Record<string, [string, string]>; accentClass: string; mechanic: "stamp" | "visit" }
-    | { source: "campaign"; remaining: number; total: number; current: number; href: string; title: string; business: string; accentClass: string; mechanic: "campaign" };
+    | { source: "loyalty"; remaining: number; total: number; current: number; href: string; title: string; business: string; businessLogoUrl: string | null; businessId: string; businessArea: string; businessHours: Record<string, [string, string]>; accentClass: string; mechanic: "stamp" | "visit"; lastActivityAt: string | null }
+    | { source: "campaign"; remaining: number; total: number; current: number; href: string; title: string; business: string; businessLogoUrl: string | null; accentClass: string; mechanic: "campaign" };
 
   const candidates: Candidate[] = [];
   const secondaryCandidates: Candidate[] = [];
@@ -136,7 +138,7 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
     if (card.required_count == null) continue;
     const current = card.type === "stamp" ? card.stamps_count : card.visits_count;
     const remaining = card.required_count - current;
-    if (remaining < 1) continue; // already at goal or over
+    if (remaining < 0) continue;
     const candidate: Candidate = {
       source: "loyalty",
       remaining,
@@ -146,11 +148,13 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
       href: `/loyalty?business=${encodeURIComponent(card.business_id)}`,
       title: card.reward_summary,
       business: card.business_name,
+      businessLogoUrl: card.business_logo_url,
       businessId: card.business_id,
       businessArea: card.business_area,
       businessHours: card.business_hours,
       // Use the card accent for the hero gradient.
       accentClass: `bg-wallet-${resolveAccent(card.business_id, card.business_card_accent)}`,
+      lastActivityAt: card.last_activity_at ?? null,
     };
     (card.type === "stamp" ? candidates : secondaryCandidates).push(candidate);
   }
@@ -160,7 +164,7 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
     const p = campaign.my_progress;
     if (!p || p.target_count == null) continue;
     const remaining = p.target_count - p.current_count;
-    if (remaining < 1) continue;
+    if (remaining < 0) continue;
     candidates.push({
       source: "campaign",
       remaining,
@@ -170,6 +174,7 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
       href: `/campaigns/${campaign.id}`,
       title: campaign.reward.title,
       business: campaign.business.name,
+      businessLogoUrl: campaign.business.logo_url,
       accentClass: "bg-brand-gradient",
     });
   }
@@ -191,6 +196,9 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
         }
       }
       if (a.remaining !== b.remaining) return a.remaining - b.remaining;
+      if (a.source === "loyalty" && b.source === "loyalty") {
+        return (Date.parse(b.lastActivityAt ?? "") || 0) - (Date.parse(a.lastActivityAt ?? "") || 0);
+      }
       return 0;
     });
     heroes.push(
@@ -200,6 +208,7 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
         href: candidate.href,
         title: candidate.title,
         business: candidate.business,
+        businessLogoUrl: candidate.businessLogoUrl,
         remaining: candidate.remaining,
         total: candidate.total,
         current: candidate.current,
@@ -227,6 +236,7 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
       source: "loyalty",
       href: `/loyalty?business=${encodeURIComponent(card.business_id)}`,
       business: card.business_name,
+      businessLogoUrl: card.business_logo_url,
       businessId: card.business_id,
       amount,
       progressPct:
@@ -241,7 +251,13 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
     });
   }
 
-  secondaryCandidates.sort((a, b) => a.remaining - b.remaining);
+  secondaryCandidates.sort((a, b) => {
+    if (a.remaining !== b.remaining) return a.remaining - b.remaining;
+    if (a.source === "loyalty" && b.source === "loyalty") {
+      return (Date.parse(b.lastActivityAt ?? "") || 0) - (Date.parse(a.lastActivityAt ?? "") || 0);
+    }
+    return 0;
+  });
   heroes.push(
     ...secondaryCandidates.map((candidate) => ({
       kind: "progress" as const,
@@ -249,6 +265,7 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
       href: candidate.href,
       title: candidate.title,
       business: candidate.business,
+      businessLogoUrl: candidate.businessLogoUrl,
       remaining: candidate.remaining,
       total: candidate.total,
       current: candidate.current,
@@ -264,11 +281,16 @@ export function pickHomeHeroes(inputs: PickHeroInputs, now: Date = new Date()): 
     })),
   );
 
-  if (heroes.length === 0) return [{ kind: "new-user" }];
-
-  const ranked: HeroResult[] = heroes.slice(0, 3);
-  const mapHero: HeroResult = { kind: "map", businesses: nearbyBusinesses };
-  if (promoteMap) ranked.splice(Math.min(1, ranked.length), 0, mapHero);
-  else ranked.push(mapHero);
-  return ranked;
+  const progressHeroes = heroes
+    .filter((hero): hero is Extract<HeroResult, { kind: "progress" }> => hero.kind === "progress")
+    .sort((a, b) => {
+      const aOpen = a.businessHours ? isOpenNow(a.businessHours) !== false : true;
+      const bOpen = b.businessHours ? isOpenNow(b.businessHours) !== false : true;
+      if (aOpen !== bOpen) return aOpen ? -1 : 1;
+      const progressDelta = b.current / b.total - a.current / a.total;
+      if (progressDelta !== 0) return progressDelta;
+      return a.remaining - b.remaining;
+    })
+    .slice(0, 4);
+  return progressHeroes.length > 0 ? progressHeroes : [{ kind: "new-user" }];
 }

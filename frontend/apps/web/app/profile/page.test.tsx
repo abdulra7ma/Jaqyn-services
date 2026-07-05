@@ -69,5 +69,9 @@ describe("ProfilePage", () => {
 
     expect(screen.getByRole("link", { name: "3 profile.rewardsEarned" })).toHaveAttribute("href", "/rewards");
     expect(screen.getByRole("link", { name: "1 profile.cardsActive" })).toHaveAttribute("href", "/loyalty");
+    expect(screen.getByRole("link", { name: /profile\.patches\.firstTitle/ })).toHaveAttribute(
+      "href",
+      "/campaigns/patches",
+    );
   });
 });

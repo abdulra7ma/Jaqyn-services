@@ -1,6 +1,6 @@
 "use client";
 
-import type { Business, CampaignNotice, CampaignVoucher, LoyaltyCardView, LoyaltyVoucher } from "@jaqyn/api";
+import type { Business, Campaign, CampaignNotice, CampaignVoucher, LoyaltyCardView, LoyaltyVoucher } from "@jaqyn/api";
 import { useI18n, useT } from "@jaqyn/i18n";
 import { Sheet } from "@jaqyn/ui";
 import Link from "next/link";
@@ -140,52 +140,41 @@ export function HeroCard({ hero }: { hero: HeroResult }) {
   }
 
   // progress variant
-  const pct = hero.total > 0 ? Math.min(100, Math.round((hero.current / hero.total) * 100)) : 0;
-  const isStamp = hero.mechanic === "stamp";
-  const halfway = hero.current / hero.total <= 0.5;
-  const stampBackground = halfway ? "bg-ink" : hero.accentClass;
-  const progressLabel = hero.remaining === 1 ? t("home.almostThere") : halfway ? t("home.halfway") : t("home.keepGoing");
+  const complete = hero.current >= hero.total;
   const open = hero.businessHours ? isOpenNow(hero.businessHours) !== false : true;
   return (
     <Link
-      href={hero.href}
-      className={`relative flex min-h-64 flex-col overflow-hidden rounded-modal ${isStamp ? stampBackground : hero.accentClass} p-6 text-white shadow-glow`}
+      href={complete ? "/rewards" : hero.href}
+      className={`relative flex h-[300px] flex-col overflow-hidden rounded-reward-card border p-reward-card text-ink shadow-reward-card ${complete ? "border-reward-ready-border bg-reward-ready" : "border-line bg-reward-progress"}`}
       aria-label={`${hero.title} — ${hero.business}`}
     >
-      <div className="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-white/10" />
-      {isStamp && <span className="absolute -bottom-8 -right-5 text-8xl opacity-10" aria-hidden>{halfway ? "☕" : "🫖"}</span>}
-      {isStamp ? (
-        <div className="relative flex items-center justify-between gap-3 text-xs font-extrabold uppercase tracking-wider text-white/90">
-          <span>{progressLabel}</span>
-          <span className="rounded-pill bg-white/20 px-3 py-1 normal-case tracking-normal">{hero.current} / {hero.total}</span>
-        </div>
-      ) : (
-        <p className="relative text-sm font-semibold text-white/80">{hero.business}</p>
-      )}
-      <p className="relative mt-6 font-display text-2xl font-bold leading-tight">{hero.title}</p>
-      {isStamp && hero.total <= 8 ? (
-        <div className="relative mt-6 flex gap-2" aria-label={`${hero.current} / ${hero.total}`}>
-          {Array.from({ length: hero.total }, (_, index) => (
-            <span
-              key={index}
-              className={`flex h-10 w-10 items-center justify-center rounded-xl text-base font-extrabold ${index < hero.current ? "bg-white text-brand" : "border-2 border-dashed border-white/70 text-transparent"}`}
-              aria-hidden
-            >
-              ✓
+      <div className="relative flex items-start justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-3">
+          <BusinessLogo name={hero.business} url={hero.businessLogoUrl ?? null} size="medium" />
+          <span className="min-w-0">
+            <span className={`mb-1 inline-flex w-fit items-center gap-1 rounded-pill px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${hero.source === "loyalty" ? "bg-tile text-subtle" : "bg-brand-muted text-amber-deep"}`}>
+              <span aria-hidden>{hero.source === "loyalty" ? "↻" : "⚡"}</span>
+              {t(hero.source === "loyalty" ? "home.loyaltyCard" : "home.campaignCard")}
             </span>
-          ))}
-        </div>
-      ) : (
-        <div className="relative mt-6 h-2.5 w-full overflow-hidden rounded-pill bg-white/20">
-          <div className="h-full rounded-pill bg-white" style={{ width: `${pct}%` }} />
-        </div>
-      )}
-      <div className="relative mt-auto flex items-end justify-between gap-3 pt-6 text-sm font-semibold text-white/90">
-        <span className="min-w-0">{open ? t("nearby.open") : t("nearby.closed")} · {hero.businessArea || hero.business}</span>
-        <span className="inline-flex min-h-12 min-w-32 flex-none items-center justify-center rounded-pill bg-white px-5 py-3 text-center font-bold leading-tight text-ink shadow-card">
-          {t(hero.source === "campaign" ? "home.openCampaign" : "home.openCard")} ›
+            <span className="block truncate text-base font-bold">{hero.business}</span>
+            <span className={`block truncate text-sm font-semibold ${open ? "text-sage" : "text-subtle"}`}>
+              {t(open ? "nearby.open" : "nearby.closed")} · {hero.businessArea || hero.business}
+            </span>
+          </span>
         </span>
+        <span className={`flex-none whitespace-nowrap rounded-pill px-3 py-1.5 text-sm font-extrabold ${complete ? "bg-sage-soft text-sage" : "bg-reward-warm text-brand"}`}>{hero.current} / {hero.total}</span>
       </div>
+      <p className="relative mt-4 font-display text-xl font-bold leading-snug">{hero.title}</p>
+      {complete && <span className="relative mt-2 inline-flex w-fit items-center gap-1.5 rounded-pill bg-sage-soft px-3 py-1 text-xs font-bold text-sage"><span className="h-1.5 w-1.5 rounded-full bg-sage" />{t("home.readyToRedeem")}</span>}
+      <div className="relative mb-5 mt-4 flex items-center gap-1.5" aria-label={`${hero.current} / ${hero.total}`}>
+        {Array.from({ length: Math.min(hero.total, 8) }, (_, index) => (
+          <span key={index} aria-hidden className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-extrabold ${index < hero.current ? "bg-brand-gradient text-white shadow-card" : "border border-dashed border-handle bg-cream text-transparent"}`}>✓</span>
+        ))}
+        {hero.total > 8 && <span className="ml-1 text-xs font-bold text-subtle">{hero.current} / {hero.total}</span>}
+      </div>
+      <span className={`relative mt-auto flex min-h-14 w-full items-center justify-center rounded-xl border px-4 text-base font-bold ${complete ? "border-brand bg-brand text-white shadow-reward-cta" : open ? "border-[1.5px] border-ink bg-card text-ink" : "border-line bg-tile text-subtle"}`}>
+        {t(complete ? "home.redeemNow" : open ? "home.viewCard" : "home.remindMe")}
+      </span>
     </Link>
   );
 }
@@ -195,7 +184,13 @@ export function HeroCard({ hero }: { hero: HeroResult }) {
 // ---------------------------------------------------------------------------
 
 export function HeroSkeleton() {
-  return <div className="h-40 animate-pulse rounded-2xl bg-tile" />;
+  const t = useT();
+  return (
+    <section>
+      <h2 className="mb-3 text-xs font-extrabold uppercase tracking-wider text-subtle">{t("home.almostThere")}</h2>
+      <div className="h-[300px] animate-pulse rounded-reward-card bg-tile" />
+    </section>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -465,9 +460,10 @@ export function carouselIndex(scrollLeft: number, clientWidth: number, count: nu
   );
 }
 
-export function HomeHeroCarousel({ heroes }: { heroes: HeroResult[] }) {
+export function HomeHeroCarousel({ heroes, collectingCount = heroes.length }: { heroes: HeroResult[]; collectingCount?: number }) {
   const t = useT();
-  const [active, setActive] = useState(0);
+  const showWalletTail = collectingCount > heroes.length;
+  const slideCount = heroes.length + (showWalletTail ? 1 : 0);
   const rail = useRef<HTMLUListElement>(null);
   const drag = useRef({ pointerId: -1, startX: 0, startScroll: 0, moved: false });
   const suppressClick = useRef(false);
@@ -476,26 +472,26 @@ export function HomeHeroCarousel({ heroes }: { heroes: HeroResult[] }) {
 
   function settleRail(node: HTMLUListElement) {
     if (node.clientWidth === 0) return;
-    const step = node.clientWidth + HERO_GAP_PX;
-    const index = carouselIndex(node.scrollLeft, node.clientWidth, heroes.length);
+    const card = node.querySelector<HTMLElement>("[data-home-hero]");
+    const step = (card?.offsetWidth || node.clientWidth) + HERO_GAP_PX;
+    const index = carouselIndex(node.scrollLeft, card?.offsetWidth || node.clientWidth, slideCount);
     goToSlide(index, step);
   }
 
   function goToSlide(index: number, knownStep?: number) {
     const node = rail.current;
     if (!node) return;
-    const step = knownStep ?? node.clientWidth + HERO_GAP_PX;
+    const card = node.querySelector<HTMLElement>("[data-home-hero]");
+    const step = knownStep ?? (card?.offsetWidth || node.clientWidth) + HERO_GAP_PX;
     const target = index * step;
     programmaticTarget.current = index;
     node.style.scrollSnapType = "none";
-    setActive(index);
     node.scrollTo({ left: target, behavior: "smooth" });
     clearTimeout(snapTimer.current);
     // Matches the carousel's smooth motion, then locks exactly to the card edge.
     snapTimer.current = setTimeout(() => {
       node.style.scrollSnapType = "x mandatory";
       node.scrollLeft = target;
-      setActive(index);
       programmaticTarget.current = null;
     }, 420);
   }
@@ -545,10 +541,10 @@ export function HomeHeroCarousel({ heroes }: { heroes: HeroResult[] }) {
   }
 
   return (
-    <section aria-label={t("home.closestRewards")}>
+    <section aria-label={t("home.almostThere")}>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-xs font-extrabold uppercase tracking-wider text-subtle">
-          {t("home.closestRewards")}
+        <h2 className="font-display text-xl font-bold text-ink">
+          {t("home.almostThere")}
         </h2>
       </div>
       <ul
@@ -563,46 +559,29 @@ export function HomeHeroCarousel({ heroes }: { heroes: HeroResult[] }) {
           event.preventDefault();
           event.stopPropagation();
         }}
-        onScroll={() => {
-          const node = rail.current;
-          if (!node || node.clientWidth === 0) return;
-          if (programmaticTarget.current != null) return;
-          setActive(
-            carouselIndex(node.scrollLeft, node.clientWidth, heroes.length),
-          );
-        }}
         className="flex cursor-grab snap-x snap-mandatory select-none gap-3 overflow-x-auto touch-pan-x active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {heroes.map((hero, index) => (
-          <li key={`${hero.kind}-${index}`} className="w-full flex-none snap-start">
+          <li
+            key={`${hero.kind}-${index}`}
+            data-home-hero
+            className="w-[300px] flex-none snap-start"
+          >
             <HeroCard hero={hero} />
           </li>
         ))}
+        {showWalletTail && (
+          <li data-home-hero className="w-[300px] flex-none snap-start">
+            <Link href="/loyalty" className="flex h-[300px] flex-col items-center justify-center rounded-reward-card border border-line bg-reward-progress p-reward-card text-center shadow-reward-card">
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-tile text-brand" aria-hidden>
+                <WalletIcon className="h-6 w-6" />
+              </span>
+              <span className="mt-4 font-display text-base font-bold text-brand">{t("home.viewAllWallet")}</span>
+              <span className="mt-1 text-xs text-subtle">{t("home.cardsCollecting").replace("{count}", String(collectingCount))}</span>
+            </Link>
+          </li>
+        )}
       </ul>
-      {heroes.length > 1 && (
-        <div
-          className="mx-auto mt-1 flex w-fit items-center justify-center"
-          role="tablist"
-          aria-label={t("home.carouselPagination")}
-        >
-          {heroes.map((_, index) => (
-            <button
-              key={index}
-              type="button"
-              role="tab"
-              aria-selected={index === active}
-              aria-label={t("home.goToReward").replace("{count}", String(index + 1))}
-              onClick={() => goToSlide(index)}
-              className="flex h-11 w-11 items-center justify-center rounded-full"
-            >
-              <span
-                aria-hidden
-                className={`h-2 rounded-pill transition-all ${index === active ? "w-6 bg-brand" : "w-2 bg-handle"}`}
-              />
-            </button>
-          ))}
-        </div>
-      )}
     </section>
   );
 }
@@ -616,11 +595,12 @@ export function CampaignNoticeBanner({
 }) {
   const t = useT();
   return (
-    <aside className="flex items-center gap-3 rounded-xl border border-line bg-card p-3 shadow-card">
+    <aside className="relative rounded-xl border border-line bg-reward-progress p-4 shadow-card">
+      <p className="mb-3 text-xs font-extrabold uppercase tracking-wider text-brand">{t("home.newCampaign")}</p>
       <Link
         href={`/campaigns/${notice.campaign_id}`}
         onClick={() => onSeen(notice.id)}
-        className="flex min-w-0 flex-1 items-center gap-3"
+        className="flex min-w-0 items-center gap-3 pr-10"
       >
         <BusinessLogo
           name={notice.business_name}
@@ -628,25 +608,67 @@ export function CampaignNoticeBanner({
           size="medium"
         />
         <span className="min-w-0 flex-1">
-          <span className="block text-xs font-bold uppercase tracking-wide text-amber-deep">
-            {t("home.newCampaign")}
-          </span>
           <span className="block truncate text-sm font-bold text-ink">
-            {notice.campaign_name}
+            {notice.business_name}
           </span>
-          <span className="block truncate text-xs text-subtle">
-            {notice.business_name} · {notice.reward_title}
-          </span>
+          <span className="block truncate text-sm font-semibold text-brand">{notice.reward_title}</span>
+          <span className="mt-0.5 block truncate text-xs text-subtle">{notice.campaign_name}</span>
         </span>
+        <span className="ml-auto text-xl text-subtle" aria-hidden>›</span>
       </Link>
       <button
         type="button"
         onClick={() => onSeen(notice.id)}
-        className="flex h-11 w-11 flex-none items-center justify-center rounded-full text-xl text-subtle"
+        className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-tile text-xl text-subtle"
         aria-label={t("home.dismissCampaignNotice")}
       >
         ×
       </button>
+    </aside>
+  );
+}
+
+export function NearbyDiscoveryCard({ business }: { business: Business }) {
+  const t = useT();
+  const [visible, setVisible] = useState(true);
+  if (!visible || !business.reward) return null;
+  const open = isOpenNow(business.working_hours) !== false;
+  return (
+    <aside className="relative rounded-xl border border-line bg-reward-progress p-4 shadow-card">
+      <p className="mb-3 text-xs font-extrabold uppercase tracking-wider text-brand">{t("home.newCampaign")}</p>
+      <Link href={`/nearby/${business.id}`} className="flex min-w-0 items-center gap-3 pr-10">
+        <BusinessLogo name={business.name} url={business.logo_url} size="medium" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-bold text-ink">{business.name}</span>
+          <span className="block truncate text-sm font-semibold text-brand">{business.reward}</span>
+          <span className="mt-0.5 block truncate text-xs text-subtle">
+            {t(open ? "nearby.open" : "nearby.closed")}{business.distance_km != null ? ` · ${business.distance_km} ${t("nearby.distance")}` : business.area ? ` · ${business.area}` : ""}
+          </span>
+        </span>
+        <span className="text-xl text-subtle" aria-hidden>›</span>
+      </Link>
+      <button type="button" onClick={() => setVisible(false)} className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-tile text-xl text-subtle" aria-label={t("home.dismissCampaignNotice")}>×</button>
+    </aside>
+  );
+}
+
+export function CampaignDiscoveryCard({ campaign }: { campaign: Campaign }) {
+  const t = useT();
+  const [visible, setVisible] = useState(true);
+  if (!visible) return null;
+  return (
+    <aside className="relative rounded-xl border border-line bg-reward-progress p-4 shadow-card">
+      <p className="mb-3 text-xs font-extrabold uppercase tracking-wider text-brand">{t("home.newCampaign")}</p>
+      <Link href={`/campaigns/${campaign.id}`} className="flex min-w-0 items-center gap-3 pr-10">
+        <BusinessLogo name={campaign.business.name} url={campaign.business.logo_url} size="medium" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-bold text-ink">{campaign.business.name}</span>
+          <span className="block truncate text-sm font-semibold text-brand">{campaign.reward.title}</span>
+          <span className="mt-0.5 block truncate text-xs text-subtle">{campaign.business.area}</span>
+        </span>
+        <span className="text-xl text-subtle" aria-hidden>›</span>
+      </Link>
+      <button type="button" onClick={() => setVisible(false)} className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-tile text-xl text-subtle" aria-label={t("home.dismissCampaignNotice")}>×</button>
     </aside>
   );
 }
@@ -777,29 +799,23 @@ export function WalletSummary({ cards, readyVouchers }: { cards: LoyaltyCardView
   const t = useT();
   const shops = buildWallet(cards.filter((card) => card.joined));
   const ready = shops.filter((shop) => shop.ready).length + readyVouchers;
-  if (shops.length === 0 && ready === 0) return null;
+  const cashback = cards.reduce((sum, card) => {
+    if (!card.joined || card.type !== "points") return sum;
+    return sum + Math.round(card.points_balance * Number(card.cashback_per_point ?? 1));
+  }, 0);
+  if (ready === 0 && cashback === 0) return null;
 
   return (
     <Link
       href="/loyalty"
       className="flex items-center gap-3 rounded-xl border border-line bg-card p-4 shadow-card transition active:scale-[.99]"
     >
-      <div className="flex -space-x-3">
-        {shops.slice(0, 3).map((shop) => (
-          <BusinessLogo
-            key={shop.businessId}
-            name={shop.businessName}
-            url={shop.businessLogoUrl}
-            size="small"
-            bordered
-          />
-        ))}
-      </div>
+      <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-sage-soft text-sage"><GiftIcon className="h-5 w-5" /></span>
       <div className="min-w-0 flex-1">
-        <p className="font-bold text-ink">{t("home.yourWallet")}</p>
-        <p className="text-xs text-subtle">
-          {t("home.walletCards").replace("{count}", String(shops.length))}
-          {ready > 0 && <span className="font-bold text-sage"> · {t("home.readyToUse").replace("{count}", String(ready))}</span>}
+        <p className="text-sm font-bold text-ink">
+          {ready > 0 && <span className="text-sage">{t("home.rewardsReady").replace("{count}", String(ready))}</span>}
+          {ready > 0 && cashback > 0 && <span> · </span>}
+          {cashback > 0 && <span>{t("home.cashbackSom").replace("{count}", String(cashback))}</span>}
         </p>
       </div>
       <span className="text-xl text-subtle" aria-hidden>›</span>
@@ -808,22 +824,23 @@ export function WalletSummary({ cards, readyVouchers }: { cards: LoyaltyCardView
 }
 
 function MiniProgressIcons({ current, total }: { current: number; total: number }) {
-  // Six compact cells fit the trailing row without squeezing business/reward
-  // copy. Larger goals are proportionally condensed into the same six cells.
-  const units = Math.min(total, 6);
-  const filled = total > 0 ? Math.round((Math.min(current, total) / total) * units) : 0;
+  // The handoff keeps the literal stamp count through eight. Larger programs
+  // switch to count-only so the row never lies by proportionally condensing it.
+  if (total > 8) {
+    return <span className="flex-none text-xs font-extrabold text-ink">{current} / {total}</span>;
+  }
   return (
     <span
       role="img"
       aria-label={`${current} / ${total}`}
-      className="grid flex-none grid-cols-3 gap-1"
+      className="flex flex-none items-center gap-1"
     >
-      {Array.from({ length: units }, (_, index) => (
+      {Array.from({ length: total }, (_, index) => (
         <span
           key={index}
           aria-hidden
-          className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-extrabold ${
-            index < filled
+          className={`flex h-4 w-4 items-center justify-center rounded text-[9px] font-extrabold ${
+            index < current
               ? "bg-brand text-white"
               : "border border-dashed border-handle bg-tile text-transparent"
           }`}
@@ -831,49 +848,74 @@ function MiniProgressIcons({ current, total }: { current: number; total: number 
           ✓
         </span>
       ))}
+      <span className="ml-1 whitespace-nowrap text-[11px] font-bold text-subtle">{current} / {total}</span>
     </span>
   );
 }
 
 export function CollectingList({ cards, excludeProgramId }: { cards: LoyaltyCardView[]; excludeProgramId?: string }) {
   const t = useT();
-  const visible = cards
-    .filter((card) => card.joined && !programReady(card) && card.program_id !== excludeProgramId)
-    .slice(0, 3);
-  if (visible.length === 0) return null;
+  const visible = cards.filter((card) => card.joined && card.required_count != null && !programReady(card) && card.program_id !== excludeProgramId);
+  const merchants = Array.from(
+    visible.reduce((groups, card) => {
+      const existing = groups.get(card.business_id) ?? [];
+      existing.push(card);
+      groups.set(card.business_id, existing);
+      return groups;
+    }, new Map<string, LoyaltyCardView[]>()),
+  )
+    .map(([businessId, programs]) => ({ businessId, programs }))
+    .sort((a, b) => {
+      const aOpen = isOpenNow(a.programs[0]!.business_hours) !== false;
+      const bOpen = isOpenNow(b.programs[0]!.business_hours) !== false;
+      if (aOpen !== bOpen) return aOpen ? -1 : 1;
+      const progress = (programs: LoyaltyCardView[]) => Math.max(...programs.map((card) => {
+        const current = card.type === "stamp" ? card.stamps_count : card.type === "visit" ? card.visits_count : card.points_balance;
+        return card.required_count ? current / card.required_count : 0;
+      }));
+      return progress(b.programs) - progress(a.programs);
+    });
+  if (merchants.length === 0) return null;
 
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-display text-lg font-bold text-ink">{t("home.keepCollecting")}</h2>
-        <Link href="/loyalty" className="text-sm font-bold text-brand">{t("home.all")}</Link>
+        <Link href="/loyalty" className="text-sm font-bold text-brand">{t("home.seeAll")}</Link>
       </div>
       <div className="flex flex-col gap-2.5">
-        {visible.map((card) => {
-          const current = card.type === "stamp" ? card.stamps_count : card.type === "visit" ? card.visits_count : card.points_balance;
+        {merchants.map(({ businessId, programs }) => {
+          const merchant = programs[0]!;
+          const open = isOpenNow(merchant.business_hours) !== false;
           return (
-            <Link key={card.program_id} href={`/loyalty?business=${encodeURIComponent(card.business_id)}`} className="flex items-center gap-3 rounded-xl border border-line bg-card p-3.5">
-              <BusinessLogo
-                name={card.business_name}
-                url={card.business_logo_url}
-                size="medium"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-bold text-ink">{card.business_name}</span>
-                <span className="mt-1 block truncate text-xs text-subtle">{card.reward_summary}</span>
-              </span>
-              {card.required_count ? (
-                <MiniProgressIcons current={current} total={card.required_count} />
-              ) : (
-                <span
-                  role="img"
-                  aria-label={t("cmp.loyalty.points").replace("{count}", String(current))}
-                  className="flex-none text-sage"
-                >
-                  <GiftIcon className="h-5 w-5" />
+            <article key={businessId} className="overflow-hidden rounded-xl border border-line bg-card shadow-card">
+              <Link href={`/loyalty?business=${encodeURIComponent(businessId)}`} className="flex items-center gap-3 p-3.5">
+                <BusinessLogo name={merchant.business_name} url={merchant.business_logo_url} size="medium" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold text-ink">{merchant.business_name}</span>
+                  <span className={`mt-0.5 block text-[11px] font-semibold ${open ? "text-sage" : "text-subtle"}`}>
+                    {t(open ? "nearby.open" : "nearby.closed")} · {merchant.business_area}
+                  </span>
                 </span>
-              )}
-            </Link>
+                <span className="text-lg text-subtle" aria-hidden>›</span>
+              </Link>
+              <div className="border-t border-line px-3.5">
+                {programs
+                  .sort((a, b) => {
+                    const current = (card: LoyaltyCardView) => card.type === "stamp" ? card.stamps_count : card.type === "visit" ? card.visits_count : card.points_balance;
+                    return current(b) - current(a);
+                  })
+                  .map((card) => {
+                    const current = card.type === "stamp" ? card.stamps_count : card.type === "visit" ? card.visits_count : card.points_balance;
+                    return (
+                      <Link key={card.program_id} href={`/loyalty?business=${encodeURIComponent(businessId)}`} className="flex min-h-12 items-center gap-2 border-b border-line py-2.5 last:border-b-0">
+                        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">{card.name || card.reward_summary}</span>
+                        {card.required_count ? <MiniProgressIcons current={current} total={card.required_count} /> : <span className="text-xs font-bold text-subtle">{current}</span>}
+                      </Link>
+                    );
+                  })}
+              </div>
+            </article>
           );
         })}
       </div>
@@ -881,7 +923,7 @@ export function CollectingList({ cards, excludeProgramId }: { cards: LoyaltyCard
   );
 }
 
-export function NewCustomerHome({ businesses, userLocation }: { businesses: Business[]; userLocation: { lat: number; lng: number } | null }) {
+export function NewCustomerHome({ businesses }: { businesses: Business[]; userLocation: { lat: number; lng: number } | null }) {
   const t = useT();
   const openBusinesses = businesses.filter((business) => isOpenNow(business.working_hours) !== false);
   const visibleBusinesses = openBusinesses.length > 0 ? openBusinesses : businesses;
@@ -889,54 +931,33 @@ export function NewCustomerHome({ businesses, userLocation }: { businesses: Busi
 
   return (
     <div className="flex flex-col gap-6">
-      <section>
-        <p className="flex items-center gap-1 text-sm font-semibold text-subtle"><PinIcon className="h-4 w-4 text-brand" />{t("home.bishkek")}</p>
-        <h1 className="mt-1 font-display text-2xl font-bold leading-tight text-ink">
-          {t("home.nearRewards").replace("{count}", String(businesses.length))}
+      <section className="relative overflow-hidden rounded-modal bg-brand-gradient p-6 text-white shadow-glow">
+        <span className="absolute -right-10 -top-12 h-40 w-40 rounded-full bg-white/5" aria-hidden />
+        <span className="relative text-xs font-extrabold uppercase tracking-wider text-white/85">{t("home.startHere")}</span>
+        <h1 className="relative mt-3 max-w-xs font-display text-2xl font-extrabold leading-tight">
+          {t("home.scanCollectFirst")}
         </h1>
-        <div className="relative mt-4 h-48 overflow-hidden rounded-modal shadow-card">
-          <MiniMap
-            bare
-            userLocation={userLocation}
-            pins={businesses.map((business, index) => ({
-              id: business.id,
-              initial: business.glyph || business.name.slice(0, 1).toUpperCase(),
-              name: business.name,
-              closest: index === 0,
-              lat: business.latitude ? Number(business.latitude) : null,
-              lng: business.longitude ? Number(business.longitude) : null,
-              logoUrl: business.logo_url,
-              reward: business.reward ?? undefined,
-              open: isOpenNow(business.working_hours),
-            }))}
-          />
-          <Link href="/nearby" className="absolute inset-x-3 bottom-3 z-10 rounded-xl bg-card py-3 text-center text-sm font-bold text-ink shadow-card">
-            {t("home.exploreMap")}
-          </Link>
+        <p className="relative mt-3 text-sm leading-relaxed text-white/80">{t("home.scanCollectHelp")}</p>
+        <div className="relative mt-4 flex gap-1.5" aria-hidden>
+          {Array.from({ length: 6 }, (_, index) => <span key={index} className="h-7 w-7 rounded-lg border border-dashed border-white/60" />)}
         </div>
+        <Link href="/scan" className="relative mt-5 flex min-h-14 w-full items-center justify-center rounded-xl bg-card px-5 text-sm font-bold text-ink shadow-card">
+          {t("home.scanFirst")}
+        </Link>
       </section>
-
-      <ol className="grid grid-cols-3 gap-2" aria-label={t("home.howItWorks")}>
-        {["home.stepDiscover", "home.stepScan", "home.stepCollect"].map((key, index) => (
-          <li key={key} className={`rounded-xl border border-line bg-card p-3 text-center ${index > 0 ? "opacity-60" : ""}`}>
-            <span className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full font-display text-sm font-extrabold ${index === 0 ? "bg-brand text-white" : "bg-tile text-subtle"}`}>{index + 1}</span>
-            <span className="mt-2 block text-xs font-bold text-ink">{t(key)}</span>
-          </li>
-        ))}
-      </ol>
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold text-ink">{t(hasOpenBusinesses ? "home.openNearYou" : "home.placesNearYou")}</h2>
+          <h2 className="font-display text-lg font-bold text-ink">{t("home.popularNearYou")}</h2>
           {hasOpenBusinesses && <span className="rounded-pill bg-sage-soft px-3 py-1 text-xs font-bold text-sage">{t("home.live")}</span>}
         </div>
         <div className="flex flex-col gap-2.5">
           {visibleBusinesses.slice(0, 3).map((business) => (
             <Link key={business.id} href={`/nearby/${business.id}`} className="flex items-center gap-3 rounded-xl border border-line bg-card p-3.5">
-              <span className="flex h-12 w-12 flex-none items-center justify-center rounded-xl bg-tile font-display font-bold text-brand">{business.glyph || business.name.slice(0, 1).toUpperCase()}</span>
+              <BusinessLogo name={business.name} url={business.logo_url} size="medium" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-bold text-ink">{business.name}</span>
-                <span className="mt-0.5 block text-xs text-subtle">{business.category}{business.distance_km != null ? ` · ${business.distance_km} ${t("nearby.distance")}` : ""} · {t(isOpenNow(business.working_hours) === false ? "nearby.closed" : "nearby.open")}</span>
+                <span className={`mt-0.5 block text-xs font-semibold ${isOpenNow(business.working_hours) === false ? "text-subtle" : "text-sage"}`}>{t(isOpenNow(business.working_hours) === false ? "nearby.closed" : "nearby.open")}{business.distance_km != null ? ` · ${business.distance_km} ${t("nearby.distance")}` : business.area ? ` · ${business.area}` : ""}</span>
                 {business.reward && <span className="mt-1 block truncate text-xs font-semibold text-brand">{business.reward}</span>}
               </span>
               <span className="text-xl text-subtle" aria-hidden>›</span>

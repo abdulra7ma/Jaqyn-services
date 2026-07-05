@@ -31,6 +31,8 @@ module.exports = {
         tile: "#F4ECDF",
         // sheet grab-handle tone (design-system §10 bottom-sheet grabber #E0D3BF)
         handle: "#E0D3BF",
+        "reward-warm": "#FBEEE7",
+        "reward-ready-border": "#D6E6D8",
       },
       fontFamily: {
         display: ["var(--font-display)", "Bricolage Grotesque", "system-ui", "sans-serif"],
@@ -41,6 +43,10 @@ module.exports = {
         modal: "24px", // centered modal / dialog radius (design-system §3 / §10)
         sheet: "24px 24px 0 0", // bottom-sheet top corners (design-system §10 / .dc.html)
         pill: "99px",
+        "reward-card": "22px",
+      },
+      spacing: {
+        "reward-card": "17px",
       },
       boxShadow: {
         glow: "0 12px 24px -8px rgba(160,73,42,.5)",
@@ -54,9 +60,13 @@ module.exports = {
         // object (landing hero cards use the same two-layer recipe): a deep soft
         // cast far below + a tighter contact shadow just under the edge.
         "card-float": "0 28px 50px -18px rgba(46,30,18,.5), 0 10px 20px -12px rgba(46,30,18,.42)",
+        "reward-card": "0 16px 34px -20px rgba(46,30,18,.42)",
+        "reward-cta": "0 10px 22px -10px rgba(160,73,42,.6)",
       },
       backgroundImage: {
         "brand-gradient": "linear-gradient(150deg, #C25E3C, #A2492A)",
+        "reward-progress": "linear-gradient(162deg, #FFFFFF, #FBF1E8)",
+        "reward-ready": "linear-gradient(162deg, #FFFFFF, #EEF5EE)",
         // Wallet card-face accents (loyalty wallet, design-system §8 "Featured
         // card"). Each value pulls from the §1 core palette + voucher cues; a
         // card's accent is chosen deterministically by business id, so these are

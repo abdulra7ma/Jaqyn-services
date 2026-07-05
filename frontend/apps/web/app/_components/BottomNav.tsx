@@ -43,17 +43,16 @@ const RIGHT_ITEMS: NavItem[] = [CUSTOMER_NAV[2]!, CUSTOMER_NAV[4]!];
 
 function NavLink({ item, active, reduce }: { item: NavItem; active: boolean; reduce: boolean }) {
   const t = useT();
-  // Icon-only: the label is the accessible name via aria-label (no visible text).
   return (
     <Link
       href={item.href}
       aria-label={t(item.key)}
       aria-current={active ? "page" : undefined}
-      className={`group relative flex items-center justify-center py-3 ${
+      className={`group relative flex min-h-[62px] flex-col items-center justify-center gap-0.5 py-1 ${
         active ? "text-brand" : "text-subtle"
       }`}
     >
-      <span className="relative flex h-[38px] w-[38px] items-center justify-center">
+      <span className="relative flex h-8 w-[38px] items-center justify-center">
         {/* Animated active indicator — a soft pill that glides between slots via
             a shared layoutId. `prefers-reduced-motion` makes it jump instantly. */}
         {active && (
@@ -68,6 +67,7 @@ function NavLink({ item, active, reduce }: { item: NavItem; active: boolean; red
           <item.Icon className="h-[23px] w-[23px]" />
         </motion.span>
       </span>
+      <span className="text-[10px] font-bold leading-none">{t(item.key)}</span>
     </Link>
   );
 }
@@ -87,7 +87,7 @@ export function BottomNav() {
           <NavLink key={item.href} item={item} active={item.match(pathname)} reduce={reduce} />
         ))}
         {/* raised center scan button (icon only) */}
-        <div className="relative flex min-h-[58px] justify-center">
+        <div className="relative flex min-h-[62px] flex-col items-center justify-end pb-1">
           <motion.button
             type="button"
             onClick={openQr}
@@ -98,6 +98,7 @@ export function BottomNav() {
             <span className="absolute inset-1 rounded-full border border-white/20" aria-hidden="true" />
             <ScanIcon className="relative h-7 w-7" />
           </motion.button>
+          <span className="text-[10px] font-bold leading-none text-brand">{t("nav.scan")}</span>
         </div>
         {RIGHT_ITEMS.map((item) => (
           <NavLink key={item.href} item={item} active={item.match(pathname)} reduce={reduce} />

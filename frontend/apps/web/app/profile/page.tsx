@@ -7,7 +7,6 @@ import {
   useUpdateProfile,
   useUploadAvatar,
   type Language,
-  type PatchOut,
 } from "@jaqyn/api";
 import { useI18n, useT, type Locale } from "@jaqyn/i18n";
 import { Button, Input } from "@jaqyn/ui";
@@ -20,7 +19,6 @@ import { MyQrButton } from "../_components/QrSheet";
 import { QueryBoundary } from "../_components/QueryBoundary";
 import { UserAvatar } from "../_components/kit";
 import { PatchBadge } from "../campaigns/patches/PatchBadge";
-import { ShareCard } from "../campaigns/patches/ShareCard";
 import { useErrMessage } from "../_lib/useErrMessage";
 import { useAuth, useRequireAuth } from "../_lib/auth";
 
@@ -38,7 +36,6 @@ export default function ProfilePage() {
   const patches = usePatches();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [shareTarget, setShareTarget] = useState<PatchOut | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   // Latest owned patches — earned only, most recently earned first, capped so the
@@ -47,6 +44,7 @@ export default function ProfilePage() {
     .filter((p) => p.earned)
     .sort((a, b) => (b.earned_at ?? "").localeCompare(a.earned_at ?? ""))
     .slice(0, 3);
+  const latestPatch = latestPatches[0];
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -130,6 +128,18 @@ export default function ProfilePage() {
                     <p className="mt-0.5 text-xs opacity-75">{data.user.phone}</p>
                     <p className="mt-2 text-[10.5px] font-extrabold uppercase tracking-wide text-amber">{t("profile.member")}</p>
                   </div>
+                  {patches.isLoading ? (
+                    <span className="h-14 w-14 flex-none animate-pulse rounded-full bg-white/10" aria-hidden />
+                  ) : latestPatch ? (
+                    <Link href="/campaigns/patches" aria-label={`${t("profile.patches.latest")}: ${latestPatch.name}`} className="relative flex h-16 w-16 flex-none items-center justify-center rounded-full border border-white/15 bg-white/10 shadow-card transition active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber">
+                      <PatchBadge shape={latestPatch.shape} colors={{ light: latestPatch.light, color: latestPatch.color, deep: latestPatch.deep }} icon={latestPatch.icon} size={48} shadow="soft" />
+                    </Link>
+                  ) : (
+                    <Link href="/campaigns/patches" aria-label={t("profile.patches.firstTitle")} className="relative flex h-16 w-16 flex-none items-center justify-center rounded-full border border-dashed border-white/30 bg-white/10 text-2xl text-amber transition active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber">
+                      <span aria-hidden>✦</span>
+                      <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-xs font-bold text-white shadow-card" aria-hidden>+</span>
+                    </Link>
+                  )}
                 </div>
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
               </section>
@@ -145,26 +155,6 @@ export default function ProfilePage() {
                 <span className="min-w-0 flex-1"><span className="block font-display text-[15px] font-bold text-ink">{t("qr.myQrTitle")}</span><span className="mt-0.5 block text-xs text-subtle">{t("profile.qrHint")}</span></span>
                 <span className="text-xl text-subtle" aria-hidden>›</span>
               </MyQrButton>
-
-              {latestPatches.length > 0 && (
-                <section className="rounded-[20px] border border-line bg-card p-4 shadow-card" aria-label={t("profile.patches.title")}>
-                  <div className="flex items-center justify-between">
-                    <span className="font-display text-[15px] font-bold text-ink">{t("profile.patches.title")}</span>
-                    <Link href="/campaigns/patches" className="text-xs font-bold text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
-                      {t("profile.patches.viewAll")}
-                    </Link>
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    {latestPatches.map((patch) => (
-                      <PatchShareTile key={patch.slug} patch={patch} onShare={() => setShareTarget(patch)} />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {shareTarget && (
-                <ShareCard patch={shareTarget} user={data.user} onClose={() => setShareTarget(null)} />
-              )}
 
               <form
                 onSubmit={(e) => {
@@ -248,30 +238,6 @@ export default function ProfilePage() {
         </QueryBoundary>
       )}
     </CustomerShell>
-  );
-}
-
-/** One latest-patch tile: badge + name, tap to open the share card. */
-function PatchShareTile({ patch, onShare }: { patch: PatchOut; onShare: () => void }) {
-  const t = useT();
-  // `t()` echoes the key on a miss — fall back to the backend name (same rule as
-  // the patches board's usePatchName helper).
-  const nameKey = `patch.def.${patch.slug}.name`;
-  const rawName = t(nameKey);
-  const name = rawName === nameKey ? patch.name : rawName;
-  return (
-    <button
-      type="button"
-      onClick={onShare}
-      aria-label={`${t("patch.share")}: ${name}`}
-      className="flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-xl p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-    >
-      <span className="relative">
-        <PatchBadge shape={patch.shape} colors={{ light: patch.light, color: patch.color, deep: patch.deep }} icon={patch.icon} size={64} shadow="soft" />
-        <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-[11px] text-white shadow-card" aria-hidden>↗</span>
-      </span>
-      <span className="w-full truncate text-center text-[11px] font-semibold leading-tight text-ink">{name}</span>
-    </button>
   );
 }
 

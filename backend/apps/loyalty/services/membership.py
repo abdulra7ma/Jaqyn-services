@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -32,6 +33,9 @@ class LoyaltyCardView:
     # sheet's "Expires" row; cashback balances don't expire, so the UI renders
     # "No expiry" for points cards regardless of this value.
     reward_expiry_days: int
+    # Most recent earn/redeem activity. Home uses this as the final tie-breaker
+    # after reward proximity so the same card order is stable across requests.
+    last_activity_at: datetime | None
     joined: bool
     stamps_count: int
     visits_count: int
@@ -96,6 +100,7 @@ class LoyaltyMembershipService:
             reward_summary=program.reward_title
             or ("Cashback" if program.type == LoyaltyProgram.Type.POINTS else "Reward"),
             reward_expiry_days=program.reward_expiry_days,
+            last_activity_at=membership.last_activity_at if membership else None,
             joined=membership is not None,
             stamps_count=membership.stamps_count if membership else 0,
             visits_count=membership.visits_count if membership else 0,
@@ -112,9 +117,11 @@ class LoyaltyMembershipService:
     @staticmethod
     def cards_for_customer(customer: User) -> list[LoyaltyCardView]:
         """Return all joined cards with program and business loaded in two queries."""
-        memberships: QuerySet[LoyaltyMembership] = LoyaltyMembership.objects.filter(
-            customer=customer
-        ).select_related("program__business")
+        memberships: QuerySet[LoyaltyMembership] = (
+            LoyaltyMembership.objects.filter(customer=customer)
+            .select_related("program__business")
+            .order_by("-last_activity_at", "-joined_at", "id")
+        )
         return [
             LoyaltyMembershipService.card_view(row.program, customer, row)
             for row in memberships

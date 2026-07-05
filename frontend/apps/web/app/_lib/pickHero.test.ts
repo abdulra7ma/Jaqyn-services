@@ -142,8 +142,8 @@ function nearbyBusiness(index: number): Business {
   };
 }
 
-describe("pickHero — priority 1: expiring voucher", () => {
-  it("campaign voucher with expiring_soon beats everything", () => {
+describe("pickHero — progress-only carousel", () => {
+  it("keeps expiring vouchers in the balance/wallet flow, not the card carousel", () => {
     const result = pickHero(
       {
         campaignVouchers: [campaignVoucher({ expiring_soon: true })],
@@ -153,14 +153,10 @@ describe("pickHero — priority 1: expiring voucher", () => {
       },
       NOW,
     );
-    expect(result.kind).toBe("voucher");
-    if (result.kind === "voucher") {
-      expect(result.source).toBe("campaign");
-      expect(result.href).toBe("/campaign-wallet");
-    }
+    expect(result.kind).toBe("progress");
   });
 
-  it("loyalty voucher expiring within 3 days shows as urgency", () => {
+  it("does not turn an expiring voucher into a progress card", () => {
     // expires_at 2 days from NOW → within 3-day window
     const expiresAt = new Date(NOW.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
     const result = pickHero(
@@ -172,11 +168,7 @@ describe("pickHero — priority 1: expiring voucher", () => {
       },
       NOW,
     );
-    expect(result.kind).toBe("voucher");
-    if (result.kind === "voucher") {
-      expect(result.source).toBe("loyalty");
-      expect(result.href).toBe("/rewards");
-    }
+    expect(result.kind).toBe("new-user");
   });
 
   it("loyalty voucher expiring in 4 days does NOT trigger urgency", () => {
@@ -202,7 +194,7 @@ describe("pickHero — priority 1: expiring voucher", () => {
     expect(result.kind).toBe("new-user");
   });
 
-  it("campaign urgency beats loyalty urgency (campaign voucher checked first)", () => {
+  it("keeps both voucher kinds out of the progress carousel", () => {
     const expiresAt = new Date(NOW.getTime() + 1 * 24 * 60 * 60 * 1000).toISOString();
     const result = pickHero(
       {
@@ -213,11 +205,7 @@ describe("pickHero — priority 1: expiring voucher", () => {
       },
       NOW,
     );
-    expect(result.kind).toBe("voucher");
-    if (result.kind === "voucher") {
-      expect(result.source).toBe("campaign");
-      expect(result.title).toBe("Campaign reward");
-    }
+    expect(result.kind).toBe("new-user");
   });
 });
 
@@ -255,7 +243,7 @@ describe("pickHero — priority 2: closest to reward", () => {
     expect(result.kind).toBe("new-user");
   });
 
-  it("card already at goal (remaining = 0) is excluded", () => {
+  it("includes a complete card so its CTA can become Redeem now", () => {
     const result = pickHero(
       {
         campaignVouchers: [],
@@ -265,7 +253,7 @@ describe("pickHero — priority 2: closest to reward", () => {
       },
       NOW,
     );
-    expect(result.kind).toBe("new-user");
+    expect(result).toMatchObject({ kind: "progress", remaining: 0, current: 6, total: 6 });
   });
 
   it("joined campaign wins a tie over standing loyalty", () => {
@@ -373,7 +361,7 @@ describe("pickHero — priority 3: new user", () => {
 });
 
 describe("pickHomeHeroes", () => {
-  it("returns three ranked rewards followed by map discovery", () => {
+  it("returns only progress cards, ordered by completion", () => {
     const heroes = pickHomeHeroes(
       {
         campaignVouchers: [campaignVoucher({ expiring_soon: true })],
@@ -387,12 +375,12 @@ describe("pickHomeHeroes", () => {
       NOW,
     );
 
-    expect(heroes).toHaveLength(4);
-    expect(heroes.map((hero) => hero.kind)).toEqual(["voucher", "progress", "progress", "map"]);
-    expect(heroes[1]).toMatchObject({ kind: "progress", remaining: 1 });
+    expect(heroes).toHaveLength(2);
+    expect(heroes.map((hero) => hero.kind)).toEqual(["progress", "progress"]);
+    expect(heroes[0]).toMatchObject({ kind: "progress", remaining: 1 });
   });
 
-  it("places ready cashback after stamp momentum and deep-links to its wallet card", () => {
+  it("keeps cashback in the conditional balance strip", () => {
     const heroes = pickHomeHeroes(
       {
         campaignVouchers: [],
@@ -414,17 +402,11 @@ describe("pickHomeHeroes", () => {
       NOW,
     );
 
-    expect(heroes[1]).toMatchObject({
-      kind: "cashback",
-      amount: 180,
-      progressPct: 72,
-      rewardLabel: "5% cashback",
-      ready: false,
-      href: "/loyalty?business=cash",
-    });
+    expect(heroes).toHaveLength(1);
+    expect(heroes[0]).toMatchObject({ kind: "progress", businessId: "tea" });
   });
 
-  it("promotes a populated map after the first reward when more than ten places are nearby", () => {
+  it("does not insert map discovery above the balance or collecting zones", () => {
     const businesses = Array.from({ length: 11 }, (_, index) => nearbyBusiness(index));
     const heroes = pickHomeHeroes(
       {
@@ -438,6 +420,7 @@ describe("pickHomeHeroes", () => {
       NOW,
     );
 
-    expect(heroes[1]).toMatchObject({ kind: "map", businesses });
+    expect(heroes).toHaveLength(1);
+    expect(heroes[0]).toMatchObject({ kind: "progress" });
   });
 });

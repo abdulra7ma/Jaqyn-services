@@ -5,7 +5,7 @@
  *
  * Three states:
  *   returning  — streak header, claimable banner, vessel hero, stats strip,
- *                patches row, in-progress list, earned shelf, popular teasers.
+ *                in-progress list, earned shelf, popular teasers.
  *   early      — same but stats strip hidden (rewards_earned === 0), streak "1 wk".
  *   empty/new  — starter mission: pick 1 of 3 nearby joinable cards → show QR.
  *
@@ -22,7 +22,6 @@ import {
   useLoyaltyVouchers,
   useMyGroups,
   useNearby,
-  usePatches,
   useJoinCampaign,
   type Campaign,
   type CampaignVoucher,
@@ -157,59 +156,6 @@ function StatsStrip({ rewardsEarned, somSaved, streakWeeks }: StatsStripProps) {
         <p className="mt-0.5 text-[11px] text-subtle leading-tight">{t("cmp.home.stats.streak").replace("{n}", "")}</p>
       </div>
     </div>
-  );
-}
-
-// --- Patches row --------------------------------------------------------------
-
-function PatchesRow() {
-  const t = useT();
-  const patches = usePatches({ refetchInterval: 60_000 });
-  const summary = patches.data;
-  if (!summary) return null;
-
-  return (
-    <Link
-      href="/campaigns/patches"
-      className="flex items-center gap-3 rounded-2xl border border-line bg-card p-4 transition active:scale-[.99]"
-    >
-      {/* Mini patch grid preview (first 3 earned) */}
-      <div className="flex -space-x-1" aria-hidden>
-        {summary.patches
-          .filter((p) => p.earned)
-          .slice(0, 3)
-          .map((p) => (
-            <span
-              key={p.slug}
-              className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-card text-base"
-              style={{ background: p.light, color: p.deep }}
-            >
-              {p.icon}
-            </span>
-          ))}
-        {summary.patches.filter((p) => p.earned).length === 0 && (
-          <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-dashed border-subtle/40 text-subtle text-xs">
-            ?
-          </span>
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-[14px] text-ink">{t("cmp.home.patches.title")}</p>
-        <p className="mt-0.5 text-[12px] text-subtle">
-          {t("cmp.home.patches.count")
-            .replace("{earned}", String(summary.earned_count))
-            .replace("{total}", String(summary.total))}
-        </p>
-      </div>
-      <div className="flex items-center gap-2">
-        {!summary.board_seen && (
-          <span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-            {t("cmp.home.patches.new")}
-          </span>
-        )}
-        <span className="text-subtle" aria-hidden>›</span>
-      </div>
-    </Link>
   );
 }
 
@@ -555,9 +501,6 @@ export default function CampaignsPage() {
                 streakWeeks={streakWeeks}
               />
             )}
-
-            {/* Patches row */}
-            <PatchesRow />
 
             {/* In-progress list */}
             {inProgressCampaigns.length > 0 && (

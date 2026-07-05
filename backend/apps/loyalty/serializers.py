@@ -97,6 +97,7 @@ class LoyaltyCardSerializer(serializers.Serializer):
     name = serializers.CharField()
     reward_summary = serializers.CharField()
     reward_expiry_days = serializers.IntegerField()
+    last_activity_at = serializers.DateTimeField(allow_null=True)
     joined = serializers.BooleanField()
     stamps_count = serializers.IntegerField()
     visits_count = serializers.IntegerField()

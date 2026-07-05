@@ -20,6 +20,7 @@ export type LoyaltyCardView = {
   name: string;
   reward_summary: string;
   reward_expiry_days: number;
+  last_activity_at?: string | null;
   joined: boolean;
   stamps_count: number;
   visits_count: number;
