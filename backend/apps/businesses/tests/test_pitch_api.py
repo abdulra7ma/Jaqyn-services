@@ -45,6 +45,11 @@ def test_claim_flow_end_to_end(api_client):
     assert r2.data["data"]["access"]
     b.refresh_from_db()
     assert b.owner is not None
+    # The prospect's customized (non-default) goal/reward must persist onto the
+    # claimed invite — this is the edit-carries-through promise of the pitch page.
+    invite = b.pitch_invites.get()
+    assert invite.chosen_goal == 8
+    assert invite.chosen_reward_text == "кофе"
 
 
 def test_verify_wrong_code_400(api_client):
