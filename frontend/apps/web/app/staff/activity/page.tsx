@@ -41,7 +41,7 @@ function fmtRelative(iso: string): string {
 // Filter chip spec: All → no kind param; others map directly.
 type FilterKey = "all" | ActivityEventKind;
 
-const FILTER_CHIPS: FilterKey[] = ["all", "redeem", "stamp", "visit"];
+const FILTER_CHIPS: FilterKey[] = ["all", "redeem", "stamp", "visit", "points", "social"];
 
 export default function StaffActivityPage() {
   const t = useT();

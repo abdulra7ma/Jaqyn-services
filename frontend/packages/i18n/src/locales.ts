@@ -900,6 +900,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     "staff.activity.filter.redeem": "Выдано",
     "staff.activity.filter.stamp": "Штампы",
     "staff.activity.filter.visit": "Визиты",
+    "staff.activity.filter.points": "Баллы",
+    "staff.activity.filter.social": "Соцсети",
     // F3 section label
     "staff.activity.recent": "НЕДАВНЕЕ",
     // F3 event kind labels (icon + fallback)
@@ -2694,6 +2696,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     "staff.activity.filter.redeem": "Redeemed",
     "staff.activity.filter.stamp": "Stamps",
     "staff.activity.filter.visit": "Visits",
+    "staff.activity.filter.points": "Points",
+    "staff.activity.filter.social": "Social",
     // F3 section label
     "staff.activity.recent": "RECENT",
     // F3 event kind labels (icon + fallback)
