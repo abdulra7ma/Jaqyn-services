@@ -184,11 +184,19 @@ export function GuestLanding() {
                   // CSS background instead of next/image: covers come from the API
                   // host at runtime (R2/media), same idiom as BusinessDetailsContent.
                   <div
-                    className="h-24 bg-gradient-to-br from-brand/15 to-amber/15"
+                    className="relative h-24 bg-gradient-to-br from-brand/15 to-amber/15"
                     style={{ background: `url('${encodeURI(b.cover_url)}') center/cover` }}
                     role="img"
                     aria-label={b.name}
-                  />
+                  >
+                    {b.logo_url && (
+                      <span
+                        className="absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card shadow-card"
+                        style={{ background: `url('${encodeURI(b.logo_url)}') center/cover` }}
+                        aria-hidden
+                      />
+                    )}
+                  </div>
                 ) : (
                   <div className="flex h-24 items-center justify-center bg-gradient-to-br from-brand/15 to-amber/15 text-4xl">{emoji(b.category)}</div>
                 )}
