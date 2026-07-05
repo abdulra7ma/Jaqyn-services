@@ -180,7 +180,18 @@ export function GuestLanding() {
                 className="group animate-[jqIn_.5s_ease_both] overflow-hidden rounded-2xl border border-line bg-card/80 backdrop-blur-sm transition hover:border-brand hover:shadow-card"
                 style={{ animationDelay: `${i * 70}ms` }}
               >
-                <div className="flex h-24 items-center justify-center bg-gradient-to-br from-brand/15 to-amber/15 text-4xl">{emoji(b.category)}</div>
+                {b.cover_url ? (
+                  // CSS background instead of next/image: covers come from the API
+                  // host at runtime (R2/media), same idiom as BusinessDetailsContent.
+                  <div
+                    className="h-24 bg-gradient-to-br from-brand/15 to-amber/15"
+                    style={{ background: `url('${encodeURI(b.cover_url)}') center/cover` }}
+                    role="img"
+                    aria-label={b.name}
+                  />
+                ) : (
+                  <div className="flex h-24 items-center justify-center bg-gradient-to-br from-brand/15 to-amber/15 text-4xl">{emoji(b.category)}</div>
+                )}
                 <div className="p-4">
                   <div className="flex items-center justify-between gap-2">
                     <div className="truncate font-display text-[15px] font-bold text-ink">{b.name}</div>
