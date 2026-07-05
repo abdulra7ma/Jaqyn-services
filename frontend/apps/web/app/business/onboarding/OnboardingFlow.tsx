@@ -29,10 +29,18 @@ import {
   type TeamRow,
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
-import { AlertDialog } from "@jaqyn/ui";
+import { AlertDialog, Dialog } from "@jaqyn/ui";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LocationPicker } from "../../_components/LocationPicker";
+import {
+  WeekHoursEditor,
+  formatWeek,
+  initialWeek,
+  readWeek,
+  weekToPayload,
+  type Week,
+} from "../_components/WeekHoursEditor";
 import { useRequireAuth } from "../../_lib/auth";
 import { useErrMessage } from "../../_lib/useErrMessage";
 import { MENU_STYLES, ROLE_HINT, STAFF_LIMIT, STAFF_ROLES, type StaffRole } from "./schema";
@@ -79,7 +87,7 @@ type Form = {
   pubEmail: string;
   website: string;
   instagram: string;
-  hours: string;
+  week: Week;
   address: string;
   city: string;
   country: string;
@@ -99,7 +107,7 @@ const EMPTY: Form = {
   pubEmail: "",
   website: "",
   instagram: "",
-  hours: "",
+  week: readWeek(undefined),
   address: "",
   city: "",
   country: "Kyrgyzstan",
@@ -180,7 +188,7 @@ export function OnboardingFlow() {
       pubEmail: b.public_email ?? "",
       website: b.website_url ?? "",
       instagram: b.instagram_url ?? "",
-      hours: (b.working_hours as Record<string, string> | null)?.display ?? "",
+      week: initialWeek(b.working_hours),
       address: b.address ?? "",
       city: b.city ?? "",
       country: b.country ?? "Kyrgyzstan",
@@ -222,7 +230,7 @@ export function OnboardingFlow() {
           default_currency: next.currency,
           business_type: next.businessType,
           menu_style: next.menuStyle,
-          working_hours: { display: next.hours },
+          working_hours: weekToPayload(next.week),
         },
         { onError: () => showToast("Auto-save failed — check your connection") },
       );
@@ -483,6 +491,7 @@ export function OnboardingFlow() {
                   onLocationChange={(lat, lng, address) =>
                     set({ lat: String(lat), lng: String(lng), ...(address ? { address } : {}) })
                   }
+                  onWeekChange={(week) => set({ week })}
                   logoUrl={logoPreview ?? me.data?.logo_url ?? null}
                   coverUrl={coverPreview ?? me.data?.cover_url ?? null}
                   logoUploading={uploadLogo.isPending}
@@ -674,6 +683,7 @@ function StageIdentity({
   f,
   on,
   onLocationChange,
+  onWeekChange,
   logoUrl,
   coverUrl,
   logoUploading,
@@ -688,6 +698,7 @@ function StageIdentity({
   f: FormShape;
   on: (k: keyof FormShape) => (e: { target: { value: string } }) => void;
   onLocationChange: (lat: number, lng: number, address?: string) => void;
+  onWeekChange: (week: Week) => void;
   logoUrl: string | null;
   coverUrl: string | null;
   logoUploading: boolean;
@@ -699,6 +710,10 @@ function StageIdentity({
   onLogoPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onCoverPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
+  const t = useT();
+  const [hoursOpen, setHoursOpen] = useState(false);
+  // Same per-day summary the profile settings shows; empty until a day is set.
+  const hoursSummary = formatWeek(f.week, (d) => t(`owner.settings.day.${d}`));
   return (
     <div className="flex animate-[jqIn_.3s_ease] flex-col gap-4">
       <div className={CARD}>
@@ -779,8 +794,20 @@ function StageIdentity({
           </Field>
         </div>
         <div className="mt-3.5 flex gap-3">
+          {/* Per-day hours — summary opens the same editor as profile settings. */}
           <Field label="Working hours" className="flex-1">
-            <input value={f.hours} onChange={on("hours")} placeholder="08:00 – 22:00" className={FIELD} />
+            <button
+              type="button"
+              onClick={() => setHoursOpen(true)}
+              className={`${FIELD} flex items-center justify-between gap-2 text-left`}
+            >
+              <span className={`truncate ${hoursSummary ? "" : "text-subtle"}`}>
+                {hoursSummary || t("owner.settings.hours.notSet")}
+              </span>
+              <span aria-hidden className="flex-none text-subtle">
+                ✎
+              </span>
+            </button>
           </Field>
           <Field label="Website · optional" className="flex-1">
             <input value={f.website} onChange={on("website")} placeholder="https://manas.kg" className={FIELD} />
@@ -803,14 +830,16 @@ function StageIdentity({
             onChange={onLocationChange}
           />
         </div>
-        <div className="mt-3.5 flex gap-3">
-          <Field label="Latitude" className="flex-1">
-            <input value={f.lat} onChange={on("lat")} inputMode="decimal" placeholder="42.8746" className={FIELD} />
-          </Field>
-          <Field label="Longitude" className="flex-1">
-            <input value={f.lng} onChange={on("lng")} inputMode="decimal" placeholder="74.5698" className={FIELD} />
-          </Field>
-        </div>
+        {/* Coordinates are set by the map above (search / drag / tap), never typed —
+            shown read-only, matching the profile settings. */}
+        {f.lat && f.lng ? (
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-pill bg-tile px-3 py-1.5 text-[12.5px] font-semibold text-subtle">
+            <span aria-hidden>📍</span>
+            {f.lat}, {f.lng}
+          </div>
+        ) : (
+          <div className="mt-2 text-[12.5px] text-subtle">{t("owner.settings.coordsEmpty")}</div>
+        )}
         <div className="mt-3.5 flex gap-3">
           <Field label="City" className="flex-1">
             <input value={f.city} onChange={on("city")} placeholder="Bishkek" className={FIELD} />
@@ -828,6 +857,22 @@ function StageIdentity({
           </Field>
         </div>
       </div>
+
+      <Dialog
+        open={hoursOpen}
+        onOpenChange={setHoursOpen}
+        title={t("owner.profile.hours")}
+        ariaLabel={t("owner.profile.hours")}
+      >
+        <WeekHoursEditor value={f.week} onChange={onWeekChange} />
+        <button
+          type="button"
+          onClick={() => setHoursOpen(false)}
+          className="mt-4 w-full rounded-[14px] bg-brand py-3 text-[14px] font-bold text-brand-fg shadow-glow transition hover:brightness-105"
+        >
+          {t("common.close")}
+        </button>
+      </Dialog>
     </div>
   );
 }
@@ -1203,6 +1248,8 @@ function StageReview(props: {
   logoUploaded: boolean;
 }) {
   const { f, meta, missing, canSubmit, goStage } = props;
+  const t = useT();
+  const hoursSummary = formatWeek(f.week, (d) => t(`owner.settings.day.${d}`));
   const cards = [
     {
       title: "Business identity",
@@ -1212,7 +1259,7 @@ function StageReview(props: {
         ["Description", f.desc || "—"],
         ["Phone", f.phone || "—"],
         ["Public email", f.pubEmail || "—"],
-        ["Working hours", f.hours || "—"],
+        ["Working hours", hoursSummary || "—"],
         ["Logo", props.logoUploaded ? "Uploaded" : "Missing — required"],
       ],
     },

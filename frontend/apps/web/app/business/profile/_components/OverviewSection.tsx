@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useBusinessMe, useCatalog, useOnboardingState, useSubmitOnboarding } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import { CARD, LABEL, SectionCard, type Notify } from "./parts";
-import { formatWeek } from "./WeekHoursEditor";
+import { formatWeek } from "../../_components/WeekHoursEditor";
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (

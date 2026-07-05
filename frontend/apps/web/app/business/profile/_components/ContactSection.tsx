@@ -9,7 +9,7 @@ import { useT } from "@jaqyn/i18n";
 import { Dialog } from "@jaqyn/ui";
 import { LocationPicker } from "../../../_components/LocationPicker";
 import { FIELD, LABEL, SaveButton, SectionCard, useHydratedForm, type Notify } from "./parts";
-import { WeekHoursEditor, formatWeek, initialWeek, weekToPayload } from "./WeekHoursEditor";
+import { WeekHoursEditor, formatWeek, initialWeek, weekToPayload } from "../../_components/WeekHoursEditor";
 
 // Clamp a coordinate to the model's 6 decimal places (DecimalField
 // max_digits=9, decimal_places=6) — the map picker emits higher precision, which
