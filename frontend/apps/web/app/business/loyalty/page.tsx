@@ -173,6 +173,10 @@ export default function BusinessLoyaltyPage() {
           query={query}
           isEmpty={(rows) => rows.length === 0}
           emptyMessage={t("loyalty.biz.empty")}
+          emptyAction={{
+            label: `+ ${t("loyalty.biz.new")}`,
+            onClick: () => router.push("/business/loyalty/new"),
+          }}
         >
           {(rows) => {
             const filtered = rows.filter(

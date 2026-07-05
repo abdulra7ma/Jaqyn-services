@@ -18,11 +18,14 @@ export function QueryBoundary<T>({
   query,
   isEmpty,
   emptyMessage,
+  emptyAction,
   children,
 }: {
   query: QueryLike<T>;
   isEmpty?: (data: T) => boolean;
   emptyMessage?: string;
+  /** Empty states must offer a next step — pass the obvious action when one exists. */
+  emptyAction?: { label: string; onClick: () => void };
   children: (data: T) => ReactNode;
 }) {
   const t = useT();
@@ -40,7 +43,13 @@ export function QueryBoundary<T>({
   }
   if (query.data === undefined) return <Loading label={t("common.loading")} />;
   if (isEmpty?.(query.data)) {
-    return <Empty message={emptyMessage ?? t("common.empty")} />;
+    return (
+      <Empty
+        message={emptyMessage ?? t("common.empty")}
+        actionLabel={emptyAction?.label}
+        onAction={emptyAction?.onClick}
+      />
+    );
   }
   return <>{children(query.data)}</>;
 }

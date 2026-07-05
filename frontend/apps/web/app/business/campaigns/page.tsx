@@ -211,6 +211,10 @@ export default function BusinessCampaignsPage() {
           query={list}
           isEmpty={(d) => d.campaigns.length === 0}
           emptyMessage={t("cmp.biz.empty")}
+          emptyAction={{
+            label: `+ ${t("cmp.biz.create")}`,
+            onClick: () => router.push("/business/campaigns/new"),
+          }}
         >
           {(data) => (
             <>

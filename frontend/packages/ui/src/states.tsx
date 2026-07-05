@@ -12,11 +12,29 @@ export function Loading({ label = "Loading…" }: { label?: string }) {
   );
 }
 
-export function Empty({ message, icon }: { message: string; icon?: ReactNode }) {
+// Empty states must not be dead ends: when the screen has an obvious next
+// action (create the first item, discover content), pass actionLabel/onAction
+// so the state offers it instead of a bare message.
+export function Empty({
+  message,
+  icon,
+  actionLabel,
+  onAction,
+}: {
+  message: string;
+  icon?: ReactNode;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
-    <div className="flex flex-col items-center gap-2 py-10 text-center text-subtle">
+    <div className="flex flex-col items-center gap-4 py-10 text-center text-subtle">
       {icon}
       <p>{message}</p>
+      {actionLabel && onAction && (
+        <Button onClick={onAction} className="px-7">
+          {actionLabel}
+        </Button>
+      )}
     </div>
   );
 }

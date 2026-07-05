@@ -2,6 +2,7 @@
 
 import { useCampaignWallet, type CampaignWallet } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
+import { useRouter } from "next/navigation";
 import { CustomerShell } from "../_components/CustomerShell";
 import { QueryBoundary } from "../_components/QueryBoundary";
 import { VoucherCard, VoucherRow } from "../_components/campaigns";
@@ -20,6 +21,7 @@ function SectionLabel({ children }: { children: string }) {
 
 export default function CampaignWalletPage() {
   const t = useT();
+  const router = useRouter();
   const { isAuthenticated } = useRequireAuth();
   // Poll so a staff redemption flips a voucher from Active → Used live.
   const wallet = useCampaignWallet({ refetchInterval: 4000 });
@@ -27,7 +29,15 @@ export default function CampaignWalletPage() {
   return (
     <CustomerShell title={t("cmp.wallet.title")} back="/campaigns" hideChromeTitle>
       {!isAuthenticated ? null : (
-        <QueryBoundary query={wallet} isEmpty={isWalletEmpty} emptyMessage={t("cmp.wallet.empty")}>
+        <QueryBoundary
+          query={wallet}
+          isEmpty={isWalletEmpty}
+          emptyMessage={t("cmp.wallet.empty")}
+          emptyAction={{
+            label: t("cmp.wallet.emptyCta"),
+            onClick: () => router.push("/campaigns/discover"),
+          }}
+        >
           {(w) => (
             <>
               <PageTitle>{t("cmp.wallet.title")}</PageTitle>

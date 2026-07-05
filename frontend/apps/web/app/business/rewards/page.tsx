@@ -8,12 +8,14 @@
 import { useBusinessCampaigns } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { OwnerShell } from "../_components/OwnerShell";
 import { KpiCard, StatusPill, TypeBadge, TYPE_GLYPH } from "../_components/campaigns";
 import { QueryBoundary } from "../../_components/QueryBoundary";
 
 export default function RewardsRedemptionsPage() {
   const t = useT();
+  const router = useRouter();
   const list = useBusinessCampaigns();
 
   return (
@@ -23,6 +25,10 @@ export default function RewardsRedemptionsPage() {
           query={list}
           isEmpty={(d) => d.campaigns.length === 0}
           emptyMessage={t("cmp.biz.empty")}
+          emptyAction={{
+            label: `+ ${t("cmp.biz.create")}`,
+            onClick: () => router.push("/business/campaigns/new"),
+          }}
         >
           {(data) => (
             <>

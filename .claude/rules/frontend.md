@@ -105,6 +105,10 @@ Router) + React 18 + TypeScript 5 (`strict: true`) + TanStack Query 5 + Tailwind
 - Server/client boundary is explicit and intentional (see App Router section).
 - **Accessibility is not optional:** semantic HTML, labelled controls, keyboard
   operability, visible focus, correct roles. Interactive divs are a defect.
+- **Empty states are never dead ends.** Every empty screen names the obvious
+  next action — create the first item, discover content, show the QR — via
+  `Empty`'s `actionLabel`/`onAction` (or `QueryBoundary`'s `emptyAction`).
+  A bare "nothing here yet" message is a review block when an action exists.
 
 ## QR features (`html5-qrcode`, `react-qr-code`)
 - The scanner touches the **camera and the DOM** — it is client-only. `'use client'` +
