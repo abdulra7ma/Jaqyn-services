@@ -61,6 +61,27 @@ These are binding, not advisory. Follow them exactly.
 - Make the change observable end-to-end (API + UI) before claiming done.
 - State test results plainly. If something is skipped or failing, say so.
 
+## Model selection (subagents / delegated tasks)
+Pick the cheapest model that reliably finishes the task. Judge complexity
+BEFORE spawning: how many files touched, does it need design judgment, is a
+wrong answer expensive to detect?
+
+| Model | Use for | Never for |
+|---|---|---|
+| **haiku** | Mechanical sweeps: renames, i18n key extraction, lint/format fixes, grep-and-list audits, doc frontmatter updates, single obvious edits | Anything needing judgment or multi-file reasoning |
+| **sonnet** | **Default.** Standard implementation: one endpoint + test, one component/screen from a clear spec, straightforward bug with known repro, test writing, file-level refactors | Ambiguous scope, cross-service changes |
+| **opus** | Multi-file/cross-layer changes (API + UI in one change), debugging without a repro, migrations touching data, service-layer refactors, perf work | Simple lookups (waste) |
+| **fable** (top tier) | Architecture decisions, security-sensitive flows (auth, tokens, payments), final review/verification passes, plans other agents execute | Routine implementation — delegate down after the plan exists |
+
+Context rules (token efficiency):
+- Give the agent ONLY the files/paths it needs — never "read the whole app".
+- Search with a cheap Explore/haiku agent first; implement with sonnet using
+  the found paths. Don't make an expensive model do its own discovery.
+- Backend task → include the relevant `services/` + rule doc pointer, not the
+  whole app. UI task → point at the screen file + `docs/design-system.md`.
+- One agent = one responsibility. Split "find + fix + verify" into stages;
+  verification can be a cheaper model with a precise checklist.
+
 ## Commands
 - Common tasks live in the `Makefile` (run `make` to list).
 - Frontend: `pnpm` + `turbo` (`build`, `lint`, `typecheck`, `test`) from `frontend/`.
