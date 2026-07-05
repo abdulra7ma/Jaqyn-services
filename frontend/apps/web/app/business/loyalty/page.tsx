@@ -157,6 +157,18 @@ export default function BusinessLoyaltyPage() {
   return (
     <OwnerShell title={t("owner.nav.loyalty")}>
       <div className="animate-[jqIn_.3s_ease]">
+        {/* Header lives outside the QueryBoundary so the create button stays
+            reachable when there are zero programs (empty state is not a dead end). */}
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <p className="text-[13.5px] text-subtle">{t("loyalty.biz.subtitle")}</p>
+          <button
+            onClick={() => router.push("/business/loyalty/new")}
+            className="flex flex-none items-center gap-2 rounded-xl bg-brand px-[18px] py-3 text-[13.5px] font-bold text-brand-fg shadow-glow transition active:scale-[.99]"
+          >
+            + {t("loyalty.biz.new")}
+          </button>
+        </div>
+
         <QueryBoundary
           query={query}
           isEmpty={(rows) => rows.length === 0}
@@ -174,19 +186,6 @@ export default function BusinessLoyaltyPage() {
             const redeemed = rows.reduce((s, r) => s + (r.redeemed ?? 0), 0);
             return (
               <>
-                <div className="mb-5 flex items-start justify-between gap-4">
-                  <p className="text-[13.5px] text-subtle">
-                    {t("loyalty.biz.subtitle")} — {active} {t("loyalty.biz.activeWord")} {t("loyalty.biz.kpi.ofTotal")}{" "}
-                    {rows.length}.
-                  </p>
-                  <button
-                    onClick={() => router.push("/business/loyalty/new")}
-                    className="flex flex-none items-center gap-2 rounded-xl bg-brand px-[18px] py-3 text-[13.5px] font-bold text-brand-fg shadow-glow transition active:scale-[.99]"
-                  >
-                    + {t("loyalty.biz.new")}
-                  </button>
-                </div>
-
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                   <Kpi
                     glyph="🎴"
