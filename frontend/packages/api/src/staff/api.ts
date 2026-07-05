@@ -24,7 +24,6 @@ import type {
   ScanDispatchResult,
   UnifiedScanResult,
   StaffTodayStats,
-  TodayCode,
 } from "./types";
 
 // A voucher-scan error code (raised by validate_reward_voucher) → the invalid
@@ -48,7 +47,6 @@ export const staffApi = {
   // (replacing the owner-issued one-time password) and flip profile_completed.
   completeProfile: (body: { name: string; new_password: string }) =>
     api.post<{ profile_completed: boolean }>("/api/staff/profile/complete/", body),
-  todayCode: () => api.get<TodayCode>("/api/staff/today-code/"),
   stats: () => api.get<StaffTodayStats>("/api/staff/stats/"),
   recentActivity: (kind?: ActivityEventKind) =>
     api.get<RecentActivityPage>(

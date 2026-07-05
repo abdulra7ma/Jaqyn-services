@@ -11,7 +11,6 @@ ERROR_MESSAGES = {
     "BUSINESS_NOT_ACTIVE": "The business is not active",
     "INVALID_QR_TOKEN": "The QR token is invalid",
     "QR_TOKEN_EXPIRED": "The QR token has expired",
-    "INVALID_APPROVAL_CODE": "The approval code is invalid or expired",
     "SCAN_LIMIT_REACHED": "Scan limit reached",
     "REWARD_ALREADY_REDEEMED": "Reward has already been redeemed",
     "REWARD_EXPIRED": "Reward has expired",

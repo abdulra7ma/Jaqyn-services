@@ -44,7 +44,6 @@ urlpatterns = [
     path("api/staff/scan/", UnifiedStaffScanView.as_view()),
     path("api/staff/", include("apps.staff.urls")),
     path("api/qr/", include("apps.qr.urls")),
-    path("api/merchant/", include("apps.qr.merchant_urls")),
     path("api/businesses/", include("apps.businesses.public_urls")),
     path("api/customer/", include("apps.qr.customer_urls")),
     path("api/business/campaigns/", include("apps.campaigns.business_urls")),

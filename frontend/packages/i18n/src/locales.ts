@@ -611,8 +611,6 @@ export const messages: Record<Locale, Record<string, string>> = {
 
     "qr.title": "Накопить награду",
     "qr.collect": "Накопить",
-    "qr.approvalCode": "Код сотрудника",
-    "qr.approvalHint": "Попросите код у сотрудника заведения",
     "qr.collected": "Засчитано!",
     "qr.unlocked": "Награда разблокирована!",
     "qr.scanned": "Сканировано",
@@ -684,8 +682,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "groups.haveInvite": "Присоединиться по ссылке или QR",
     "groups.pasteInvite": "Вставьте код или ссылку-приглашение",
     "groups.invalidInvite": "Вставьте полную ссылку-приглашение, а не короткий код",
-    "groups.approvalCode": "Код сотрудника",
-    "groups.approvalCodePlaceholder": "Введите код сотрудника",
     "groups.showQr": "Показать QR",
     "groups.scanQr": "Сканировать QR",
     "groups.linkTab": "Ссылка",
@@ -835,11 +831,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "biz.customers.empty": "Пока нет клиентов",
     "biz.reports.title": "Отчёты",
     "biz.more.title": "Настройки",
-    "biz.staffCode.title": "Код сотрудника (сегодня)",
-    "biz.staffCode.regenerate": "Обновить код",
-    "biz.staffCode.regenConfirm.title": "Создать новый код?",
-    "biz.staffCode.regenConfirm.description": "Текущий код сотрудников перестанет работать немедленно.",
-    "biz.staffCode.regenConfirm.confirm": "Создать новый код",
     "biz.settings": "Профиль бизнеса",
 
     "biz.staff.title": "Команда",
@@ -935,7 +926,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "staff.nav.scan": "Скан",
     "staff.nav.groups": "Группы",
     "staff.nav.activity": "История",
-    "staff.todayCode": "Код подтверждения сегодня",
     "staff.scan.title": "Сканировать QR",
     "staff.scan.start": "Включить камеру",
     "staff.scan.stop": "Остановить",
@@ -1594,7 +1584,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "owner.settings.tagRemove": "Удалить тег",
     "owner.settings.iconHint": "Показывается, если нет логотипа",
     "owner.settings.coordsEmpty": "Отметьте точку на карте, чтобы задать координаты",
-    "owner.settings.accountHint": "Доступ персонала и выход из аккаунта.",
     "owner.settings.logout": "Выйти",
 
     // --- Business campaign list: type + status filters (design §5) ---
@@ -2481,8 +2470,6 @@ export const messages: Record<Locale, Record<string, string>> = {
 
     "qr.title": "Collect reward",
     "qr.collect": "Collect",
-    "qr.approvalCode": "Staff code",
-    "qr.approvalHint": "Ask staff for the approval code",
     "qr.collected": "Counted!",
     "qr.unlocked": "Reward unlocked!",
     "qr.scanned": "Scanned",
@@ -2554,8 +2541,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "groups.haveInvite": "Join with a link or QR",
     "groups.pasteInvite": "Paste invite code or link",
     "groups.invalidInvite": "Please paste the full invite link, not the short display code",
-    "groups.approvalCode": "Staff code",
-    "groups.approvalCodePlaceholder": "Enter staff code",
     "groups.showQr": "Show QR",
     "groups.scanQr": "Scan QR",
     "groups.linkTab": "Link",
@@ -2705,11 +2690,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "biz.customers.empty": "No customers yet",
     "biz.reports.title": "Reports",
     "biz.more.title": "Settings",
-    "biz.staffCode.title": "Staff code (today)",
-    "biz.staffCode.regenerate": "Generate new",
-    "biz.staffCode.regenConfirm.title": "Generate a new code?",
-    "biz.staffCode.regenConfirm.description": "Your staff's current code will stop working immediately.",
-    "biz.staffCode.regenConfirm.confirm": "Generate new code",
     "biz.settings": "Business profile",
 
     "biz.staff.title": "Manage staff",
@@ -2806,7 +2786,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "staff.nav.scan": "Scan",
     "staff.nav.groups": "Groups",
     "staff.nav.activity": "Activity",
-    "staff.todayCode": "Today's approval code",
     "staff.scan.title": "Scan QR",
     "staff.scan.start": "Start camera",
     "staff.scan.stop": "Stop",
@@ -3465,7 +3444,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     "owner.settings.tagRemove": "Remove tag",
     "owner.settings.iconHint": "Shown when there's no logo",
     "owner.settings.coordsEmpty": "Pick a point on the map to set coordinates",
-    "owner.settings.accountHint": "Staff access and sign out.",
     "owner.settings.logout": "Sign out",
 
     // --- Business campaign list: type + status filters (design §5) ---

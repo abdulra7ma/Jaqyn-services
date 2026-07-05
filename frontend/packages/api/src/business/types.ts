@@ -254,8 +254,6 @@ export type Dashboard = {
 
 export type MaskedCustomer = { id: string; phone: string; name: string | null };
 
-export type ApprovalCode = { code: string; valid_from: string; valid_to: string };
-
 export type MerchantQr = { token: string; type: string; url: string; png: string };
 
 // ---- Campaigns (apps.campaigns — plan §1.3 business surface) -----------------

@@ -9,10 +9,6 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
 app.conf.beat_schedule = {
-    "rotate-approval-codes-daily": {
-        "task": "apps.qr.tasks.rotate_approval_codes",
-        "schedule": 60 * 60 * 24,
-    },
     "expire-old-groups-hourly": {
         "task": "apps.campaigns.tasks.expire_old_groups",
         "schedule": 60 * 60,

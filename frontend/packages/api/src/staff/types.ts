@@ -13,8 +13,6 @@ export type StaffLoginResult = {
   staff: StaffInfo;
 };
 
-export type TodayCode = { code: string; valid_from: string; valid_to: string };
-
 /** GET /api/staff/stats/ — today's counters for the staff member's business. */
 export type StaffTodayStats = { scans_today: number; redemptions_today: number };
 

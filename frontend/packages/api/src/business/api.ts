@@ -15,7 +15,6 @@ import {
 } from "./adapters";
 import type {
   ActivateResponse,
-  ApprovalCode,
   BusinessCampaign,
   BusinessCampaignListParams,
   BusinessCampaignListResponse,
@@ -113,9 +112,6 @@ export const businessApi = {
     api.post<BusinessProfile>("/api/business/owner-staff/", { enabled }),
   dashboard: () => api.get<Dashboard>("/api/business/dashboard/"),
   qr: () => api.get<MerchantQr>("/api/business/qr/"),
-  approvalCode: () => api.get<ApprovalCode>("/api/business/approval-code/"),
-  regenerateApprovalCode: () =>
-    api.post<ApprovalCode>("/api/business/approval-code/regenerate/"),
 
   reports: (period: ReportPeriod = "month", range?: ReportRange) => {
     const params = new URLSearchParams({ period });

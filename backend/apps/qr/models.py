@@ -44,20 +44,6 @@ class QRCodeToken(UUIDModel):
         return f"{self.type}:{self.token[:8]}"
 
 
-class ApprovalCode(UUIDModel):
-    business = models.ForeignKey(
-        "businesses.Business", on_delete=models.CASCADE, related_name="approval_codes"
-    )
-    code = models.CharField(max_length=12)
-    valid_from = models.DateTimeField()
-    valid_to = models.DateTimeField()
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.business.name} {self.code}"
-
-
 class ScanLog(UUIDModel):
     class Status(models.TextChoices):
         SUCCESS = "success", "Success"

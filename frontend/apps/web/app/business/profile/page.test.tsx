@@ -42,7 +42,6 @@ vi.mock("@jaqyn/api", () => {
     useGallery: () => ({ data: [] }),
     useUploadGalleryImage: () => idle,
     useDeleteGalleryImage: () => idle,
-    useRegenerateApprovalCode: () => ({ ...idle, isSuccess: false, isError: false }),
     useSetOwnerStaff: () => idle,
   };
 });

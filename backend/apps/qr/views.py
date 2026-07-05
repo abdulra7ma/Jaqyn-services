@@ -1,20 +1,15 @@
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from apps.businesses.models import Business
-from apps.qr.models import QRCodeToken
-from apps.qr.serializers import ApprovalCodeInputSerializer
 from apps.qr.services import (
-    current_approval_code,
-    generate_approval_code,
     get_or_create_customer_profile_token,
     get_or_create_merchant_collect_token,
     resolve_qr_token,
-    validate_approval_code,
 )
 from core.exceptions import JaqynAPIException
 from core.frontend import frontend_base_url
-from core.permissions import IsBusinessOwner, IsCustomer, IsStaff
+from core.permissions import IsBusinessOwner, IsCustomer
 from core.qr import render_png_data_url
 from core.response import success_response
 
@@ -96,54 +91,3 @@ class QRResolveView(APIView):
             } if qr_token.business else None,
             "context": {"active_reward": active_reward},
         })
-
-
-class StaffTodayCodeView(APIView):
-    permission_classes = [IsStaff]
-
-    def get(self, request):
-        staff = request.user.staff_memberships.select_related("business").get(is_active=True)
-        code = current_approval_code(staff.business)
-        return success_response({"code": code.code, "valid_from": code.valid_from, "valid_to": code.valid_to})
-
-
-class OwnerApprovalCodeView(APIView):
-    """Return the current active approval code for the authenticated business owner.
-
-    Returns the existing active code for today's window (creating one on first
-    call if none exists). This is a read-only endpoint — staff must always be
-    given today's code; the owner sees it immediately on load without pressing
-    regenerate.
-    """
-
-    permission_classes = [IsBusinessOwner]
-
-    def get(self, request):
-        code = current_approval_code(request.user.owned_business)
-        return success_response({"code": code.code, "valid_from": code.valid_from, "valid_to": code.valid_to})
-
-
-class RegenerateApprovalCodeView(APIView):
-    """Invalidate the current approval code and generate a fresh one.
-
-    Marks all active codes for the business as inactive, then creates a new
-    code for today's window. Staff using the old code will be rejected after
-    this call.
-    """
-
-    permission_classes = [IsBusinessOwner]
-
-    def post(self, request):
-        code = generate_approval_code(request.user.owned_business)
-        return success_response({"code": code.code, "valid_from": code.valid_from, "valid_to": code.valid_to})
-
-
-class ValidateApprovalCodeView(APIView):
-    permission_classes = [IsCustomer]
-
-    def post(self, request, business_id):
-        serializer = ApprovalCodeInputSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        business = Business.objects.get(id=business_id)
-        validate_approval_code(business, serializer.validated_data["code"], request.user, request)
-        return success_response({"valid": True})

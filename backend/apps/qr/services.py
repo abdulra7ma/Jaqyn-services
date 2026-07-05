@@ -1,20 +1,12 @@
-import secrets
-from datetime import timedelta
-
-from django.conf import settings
-from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import User
-from apps.businesses.models import Business
-from apps.qr.models import ApprovalCode, QRCodeToken, ScanLog
-from apps.staff.models import StaffMember
+from apps.qr.models import QRCodeToken, ScanLog
 from core.exceptions import JaqynAPIException
-from core.logging import emit_event, log_scan
+from core.logging import log_scan
 from core.qr import generate_token
-from core.ratelimit import hit_limit
 
 
 def create_token(token_type, **kwargs):
@@ -63,46 +55,6 @@ def resolve_qr_token(raw_token, request=None, action="resolve"):
     return token
 
 
-def code_window(now=None):
-    now = now or timezone.now()
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    return start, start + timedelta(days=1)
-
-
-def generate_approval_code(business):
-    ApprovalCode.objects.filter(business=business, is_active=True).update(is_active=False)
-    start, end = code_window()
-    return ApprovalCode.objects.create(
-        business=business,
-        code=f"{secrets.randbelow(1000000):06d}",
-        valid_from=start,
-        valid_to=end,
-    )
-
-
-def current_approval_code(business):
-    now = timezone.now()
-    code = ApprovalCode.objects.filter(business=business, is_active=True, valid_from__lte=now, valid_to__gt=now).order_by("-created_at").first()
-    if code:
-        return code
-    return generate_approval_code(business)
-
-
-def validate_approval_code(business, code, customer=None, request=None):
-    ip = request.META.get("REMOTE_ADDR") if request else None
-    ua = request.META.get("HTTP_USER_AGENT", "") if request else ""
-    key = f"approval-failed:{business.id}:{getattr(customer, 'id', ip)}"
-    now = timezone.now()
-    ok = ApprovalCode.objects.filter(business=business, code=code, is_active=True, valid_from__lte=now, valid_to__gt=now).exists()
-    if not ok:
-        hit_limit(key, settings.APPROVAL_CODE_FAILED_LIMIT, 3600)
-        log_scan(customer=customer, business=business, action="validate_code", status=ScanLog.Status.FAILED, failure_reason="INVALID_APPROVAL_CODE", ip_address=ip, user_agent=ua)
-        raise JaqynAPIException("INVALID_APPROVAL_CODE", status_code=status.HTTP_400_BAD_REQUEST)
-
-    log_scan(customer=customer, business=business, action="validate_code", status=ScanLog.Status.SUCCESS, ip_address=ip, user_agent=ua)
-    return True
-
-
 def link_staff_user(staff_member, phone=None, email=None, password=None, name=None):
     """Ensure a StaffMember is backed by a User account (role=staff) so the staff
     member can log in via the unified phone-OTP / email-password flow. Idempotent."""
@@ -145,11 +97,3 @@ def staff_token(staff_member, **kwargs):
     user = link_staff_user(staff_member, **kwargs)
     refresh = RefreshToken.for_user(user)
     return str(refresh.access_token)
-
-
-def rotate_codes_for_all_businesses():
-    count = 0
-    for business in Business.objects.filter(status=Business.Status.APPROVED):
-        generate_approval_code(business)
-        count += 1
-    return count

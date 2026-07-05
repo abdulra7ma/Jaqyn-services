@@ -6,7 +6,6 @@ import { qk } from "../customer/hooks";
 import type { ActivityEventKind } from "./types";
 
 export const sqk = {
-  todayCode: ["staff", "today-code"] as const,
   // ponytail: prefix ["staff","activity"] is the invalidation key; callers that
   // invalidate sqk.activity invalidate ALL kind variants via prefix matching.
   activityPrefix: ["staff", "activity"] as const,
@@ -15,8 +14,6 @@ export const sqk = {
   stats: ["staff", "stats"] as const,
 };
 
-export const useTodayCode = (enabled = true) =>
-  useQuery({ queryKey: sqk.todayCode, queryFn: () => staffApi.todayCode(), enabled });
 export const useStaffStats = (enabled = true) =>
   useQuery({ queryKey: sqk.stats, queryFn: () => staffApi.stats(), enabled });
 export const useRecentActivity = (enabled = true, kind?: ActivityEventKind) =>
