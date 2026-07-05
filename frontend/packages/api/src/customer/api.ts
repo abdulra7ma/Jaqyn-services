@@ -206,7 +206,7 @@ export const customerApi: CustomerApi = {
     return json.data;
   },
   async resolveQr(token) {
-    const raw = await api.get<any>(`/api/qr/${token}/`, { auth: false });
+    const raw = await api.get<any>(`/api/qr/${encodeURIComponent(token)}/`, { auth: false });
     const r = raw.context?.active_reward;
     return {
       token,

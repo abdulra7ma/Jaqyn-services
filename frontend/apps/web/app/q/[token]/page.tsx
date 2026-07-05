@@ -9,14 +9,27 @@ import { useParams } from "next/navigation";
 import { useErrMessage } from "../../_lib/useErrMessage";
 import { useAuth } from "../../_lib/auth";
 
+// QR tokens are minted by backend/core/qr.py::generate_token():
+//   secrets.token_urlsafe(24) → 32 base64url chars [A-Za-z0-9_-]
+// Validate before any network call so a malformed value is rejected client-side.
+const QR_TOKEN_RE = /^[A-Za-z0-9_-]{32}$/;
+
+function isValidQrToken(raw: unknown): raw is string {
+  return typeof raw === "string" && QR_TOKEN_RE.test(raw);
+}
+
 export default function QrLandingPage() {
   const t = useT();
   const errMessage = useErrMessage();
-  const { token } = useParams<{ token: string }>();
+  const params = useParams<{ token: string }>();
+  const rawToken = params?.token;
   const { isAuthenticated, ready } = useAuth();
   // Design-system §Animations: idle-bob tokens are gated behind reduced-motion.
   const reduceMotion = useReducedMotion();
 
+  // Pass empty string when token shape is invalid — useQrResolve's `enabled: !!token`
+  // guard prevents any network request for invalid/missing tokens.
+  const token = isValidQrToken(rawToken) ? rawToken : "";
   const resolve = useQrResolve(token);
   const loginHref = `/login?return=${encodeURIComponent(`/q/${token}`)}`;
 
@@ -35,10 +48,10 @@ export default function QrLandingPage() {
       </div>
 
       {resolve.isLoading && <Loading label={t("common.loading")} />}
-      {resolve.isError && (
+      {(!token || resolve.isError) && (
         <ErrorState
-          message={errMessage(resolve.error)}
-          onRetry={() => resolve.refetch()}
+          message={!token ? t("common.error") : errMessage(resolve.error)}
+          onRetry={!token ? undefined : () => resolve.refetch()}
           retryLabel={t("common.retry")}
         />
       )}

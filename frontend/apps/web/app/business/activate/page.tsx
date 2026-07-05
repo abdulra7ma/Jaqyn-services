@@ -7,6 +7,16 @@ import { ApiClientError, businessApi, tokenStore, useActivateInvite, type Invite
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
+// Owner-invite tokens are minted by backend/apps/businesses/onboarding_services.py:31:
+//   secrets.token_urlsafe(32) → 43 base64url chars [A-Za-z0-9_-]
+// Validate shape before the validateInvite API call so malformed values are
+// rejected client-side without a network round-trip.
+const INVITE_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
+
+function isValidInviteToken(raw: string): boolean {
+  return INVITE_TOKEN_RE.test(raw);
+}
+
 const FIELD =
   "w-full rounded-xl border-[1.5px] border-line bg-card px-3 py-3 text-sm font-semibold text-ink outline-none transition focus:border-brand";
 const LABEL = "text-xs font-bold text-subtle";
@@ -34,6 +44,13 @@ function ActivateInner() {
     let active = true;
     if (!token) {
       setInvalid("No activation token in the link.");
+      setValidating(false);
+      return;
+    }
+    // Reject malformed tokens before any network call (defense-in-depth:
+    // backend validates too, but we avoid a round-trip and log noise).
+    if (!isValidInviteToken(token)) {
+      setInvalid("GENERIC:This invitation link is invalid or expired.");
       setValidating(false);
       return;
     }
