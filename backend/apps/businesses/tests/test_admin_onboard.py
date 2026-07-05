@@ -36,7 +36,9 @@ def test_onboard_creates_pending_ownerless_business():
     assert biz.owner_id is None
     assert biz.status == Business.Status.PENDING
     assert biz.verification_status == Business.VerificationStatus.PENDING
-    assert biz.onboarding_status == Business.OnboardingStatus.COMPLETED
+    # IN_PROGRESS so the claiming owner reviews the pre-filled wizard, not a
+    # "verified & live" status screen for a business awaiting verification.
+    assert biz.onboarding_status == Business.OnboardingStatus.IN_PROGRESS
     assert biz.name == "Manas Coffee"
     assert biz.area == biz.city == "Bishkek"  # area mirrors city
     from decimal import Decimal
@@ -64,6 +66,21 @@ def test_onboard_creates_catalog_items():
     assert len(items) == 1  # blank-name row skipped
     assert items[0].name == "Latte"
     assert items[0].price == "190 c"
+
+
+def test_onboard_saves_uploaded_logo():
+    from io import BytesIO
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (32, 32), "#C25E3C").save(buf, format="PNG")
+    logo = SimpleUploadedFile("logo.png", buf.getvalue(), content_type="image/png")
+
+    biz = onboard_business(fields=_fields(), logo=logo)
+    assert biz.logo  # compressed + stored via set_business_logo
+    assert biz.logo_set is True
 
 
 def test_bad_latitude_is_dropped_not_raised():

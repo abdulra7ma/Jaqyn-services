@@ -64,9 +64,12 @@ def onboard_business(
     ``fields`` is the validated ``BusinessOnboardForm.cleaned_data`` (working_hours
     already a dict, tags already a list). Status depends on ``is_demo``:
 
-    * ``is_demo=False`` (default): status PENDING, onboarding COMPLETED,
+    * ``is_demo=False`` (default): status PENDING, onboarding IN_PROGRESS,
       verification PENDING — a real prospect awaiting the team's verification;
-      claimable via a pitch link.
+      claimable via a pitch link. Onboarding stays IN_PROGRESS (not COMPLETED)
+      so the owner who claims it lands on the *editable, pre-filled* wizard to
+      review and submit — COMPLETED would send them to the "verified & live"
+      status screen for a business that isn't verified yet.
     * ``is_demo=True``: APPROVED + PUBLISHED + VERIFIED so it is immediately
       visible in the app for testing (mirrors ``create_demo_business`` minus the
       seeded owner login).
@@ -110,7 +113,9 @@ def onboard_business(
         business.published_at = now
     else:
         business.status = Business.Status.PENDING
-        business.onboarding_status = Business.OnboardingStatus.COMPLETED
+        # IN_PROGRESS (not COMPLETED) so the claiming owner lands on the editable
+        # pre-filled wizard to review + submit, not a false "verified & live" screen.
+        business.onboarding_status = Business.OnboardingStatus.IN_PROGRESS
         business.verification_status = Business.VerificationStatus.PENDING
     business.save()
 
