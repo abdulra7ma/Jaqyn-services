@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from apps.businesses.admin_onboard import onboard_business_view
 from apps.businesses.onboarding_views import BusinessTypeListView
 from apps.reporting.analytics import analytics_view
 from apps.loyalty.scan_views import UnifiedStaffScanView
@@ -22,6 +23,13 @@ urlpatterns = [
     # access to staff and renders inside the admin shell; the api_* views enforce
     # is_staff themselves (they return JSON 403, not an HTML login redirect).
     path("admin/leads/", include("apps.leads.urls")),
+    # Custom "onboard a business" admin page — must precede admin.site.urls.
+    # admin_view gates staff access; the view itself checks add-business perm.
+    path(
+        "admin/businesses/onboard/",
+        admin.site.admin_view(onboard_business_view),
+        name="admin_business_onboard",
+    ),
     path("admin/", admin.site.urls),
     path("api/health/", HealthView.as_view(), name="health"),
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),

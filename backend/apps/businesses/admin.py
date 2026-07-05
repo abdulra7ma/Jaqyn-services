@@ -106,8 +106,8 @@ class BusinessAdmin(ModelAdmin):
     # Brand-asset previews on the detail page (read-only; uploads happen in-app).
     readonly_fields = ("logo_preview", "cover_preview")
     actions = [approve_businesses, reject_businesses, disable_businesses, request_changes, mark_as_demo]
-    # Changelist-level button (unfold renders it at the top of the list).
-    actions_list = ["create_demo_business_button"]
+    # Changelist-level buttons (unfold renders them at the top of the list).
+    actions_list = ["onboard_business_button", "create_demo_business_button"]
     # Change-form button to generate a pitch link for this specific business.
     actions_detail = ["create_pitch_link_button"]
     inlines = [BusinessNoteInline, PitchInviteInline]
@@ -191,6 +191,19 @@ class BusinessAdmin(ModelAdmin):
             ),
         )
         return redirect(request.META.get("HTTP_REFERER", "."))
+
+    @action(description="Onboard a business", icon="store")
+    def onboard_business_button(self, request):
+        """Open the custom one-tab onboarding page (form + JSON import).
+
+        A GET link to the dedicated page — creation happens there. Gated to users
+        who can add a business, matching the page's own permission check.
+        """
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        from django.urls import reverse
+
+        return redirect(reverse("admin_business_onboard"))
 
     @action(description="Create demo business", icon="add_business")
     def create_demo_business_button(self, request):

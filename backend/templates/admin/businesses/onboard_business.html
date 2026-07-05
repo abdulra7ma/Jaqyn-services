@@ -1,0 +1,285 @@
+{% extends 'admin/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Onboard a business" %} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+{% block branding %}{% include "unfold/helpers/site_branding.html" %}{% endblock %}
+
+{% block content %}
+<style>
+  .onb-wrap { display:flex; flex-direction:column; gap:16px; max-width:920px; }
+  .onb-card { background:rgb(var(--color-base-50)); border:1px solid rgb(var(--color-base-200)); border-radius:10px; padding:18px; }
+  .onb-card h2 { margin:0 0 4px; font-size:15px; font-weight:600; }
+  .onb-muted { color:rgb(var(--color-base-500)); font-size:12.5px; }
+  .onb-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .onb-field { display:flex; flex-direction:column; gap:5px; }
+  .onb-field.full { grid-column:1 / -1; }
+  .onb-field label { font-size:12px; font-weight:600; color:rgb(var(--color-base-600)); }
+  .onb-field .req { color:#B42318; }
+  .onb-field input[type=text], .onb-field input[type=email], .onb-field input[type=url],
+  .onb-field input[type=number], .onb-field select, .onb-field textarea, .onb-field input:not([type]) {
+    width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid rgb(var(--color-base-300));
+    border-radius:7px; font-size:13px; background:rgb(var(--color-base-100)); color:rgb(var(--color-base-700));
+  }
+  .onb-field .help { font-size:11px; color:rgb(var(--color-base-500)); }
+  .onb-field .err { font-size:11.5px; font-weight:600; color:#B42318; }
+  .onb-field.has-err input, .onb-field.has-err select, .onb-field.has-err textarea { border-color:#B42318; }
+  .onb-tabs { display:flex; gap:6px; border-bottom:1px solid rgb(var(--color-base-200)); }
+  .onb-tab { padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; border:none; background:none;
+    color:rgb(var(--color-base-500)); border-bottom:2px solid transparent; }
+  .onb-tab.active { color:rgb(var(--color-primary-600)); border-bottom-color:rgb(var(--color-primary-600)); }
+  .onb-panel { display:none; padding-top:16px; }
+  .onb-panel.active { display:block; }
+  .onb-btn { padding:9px 16px; font-size:13px; font-weight:600; border-radius:8px; border:none; cursor:pointer;
+    background:rgb(var(--color-primary-600)); color:#fff; }
+  .onb-btn.ghost { background:rgb(var(--color-base-100)); color:rgb(var(--color-base-700)); border:1px solid rgb(var(--color-base-300)); }
+  .onb-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .onb-cat-row { display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:8px; margin-bottom:8px; align-items:center; }
+  .onb-cat-row input { padding:7px 9px; border:1px solid rgb(var(--color-base-300)); border-radius:6px; font-size:13px;
+    background:rgb(var(--color-base-100)); color:rgb(var(--color-base-700)); }
+  .onb-x { border:1px solid rgb(var(--color-base-300)); background:rgb(var(--color-base-100)); border-radius:6px;
+    width:30px; height:30px; cursor:pointer; color:#B0563A; }
+  /* floating confirm overlay */
+  .onb-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center;
+    justify-content:center; z-index:1000; }
+  .onb-overlay.open { display:flex; }
+  .onb-modal { background:rgb(var(--color-base-50)); border-radius:12px; width:min(560px,92vw); max-height:86vh;
+    overflow:auto; padding:20px; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .onb-modal h3 { margin:0 0 4px; font-size:16px; font-weight:600; }
+  .onb-conf-row { display:grid; grid-template-columns:150px 1fr; gap:10px; align-items:center; margin-bottom:9px; }
+  .onb-conf-row label { font-size:12px; font-weight:600; color:rgb(var(--color-base-600)); }
+  .onb-conf-row input, .onb-conf-row textarea { width:100%; box-sizing:border-box; padding:6px 9px;
+    border:1px solid rgb(var(--color-base-300)); border-radius:6px; font-size:12.5px;
+    background:rgb(var(--color-base-100)); color:rgb(var(--color-base-700)); }
+  .onb-alert { font-size:12.5px; font-weight:600; color:#B42318; margin-top:8px; display:none; }
+</style>
+
+<div class="onb-wrap">
+  <div class="onb-row" style="justify-content:space-between;">
+    <h1 class="text-font-important-light dark:text-font-important-dark" style="margin:0; font-size:20px; font-weight:600;">{% trans "Onboard a business" %}</h1>
+    <a href="{% url 'admin:businesses_business_changelist' %}" class="onb-muted" style="text-decoration:none;">&larr; {% trans "Back to businesses" %}</a>
+  </div>
+
+  {# ---- JSON / LLM importer ---- #}
+  <div class="onb-card">
+    <h2>{% trans "Load from JSON" %}</h2>
+    <p class="onb-muted">{% trans "Paste a JSON object (or upload a .json file), review it, then confirm to fill the form. Use the prompt below to generate the JSON from any business's info with an LLM." %}</p>
+    <div style="margin-top:10px;">
+      <textarea id="onb-json" rows="4" style="width:100%; box-sizing:border-box; padding:9px; border:1px solid rgb(var(--color-base-300)); border-radius:7px; font-family:monospace; font-size:12px; background:rgb(var(--color-base-100)); color:rgb(var(--color-base-700));" placeholder='{"name":"Manas Coffee","category":"cafe", ...}'></textarea>
+    </div>
+    <div class="onb-row" style="margin-top:10px;">
+      <button type="button" class="onb-btn" id="onb-load">{% trans "Review & load" %}</button>
+      <label class="onb-btn ghost" style="margin:0;">
+        {% trans "Upload .json" %}
+        <input type="file" id="onb-file" accept="application/json,.json" style="display:none;">
+      </label>
+      <button type="button" class="onb-btn ghost" id="onb-copy-prompt">{% trans "Copy LLM prompt" %}</button>
+    </div>
+    <div class="onb-alert" id="onb-json-err"></div>
+    <details style="margin-top:12px;">
+      <summary class="onb-muted" style="cursor:pointer;">{% trans "Show LLM prompt" %}</summary>
+      <pre id="onb-prompt" style="white-space:pre-wrap; font-size:11.5px; background:rgb(var(--color-base-100)); border:1px solid rgb(var(--color-base-200)); border-radius:7px; padding:12px; margin-top:8px; color:rgb(var(--color-base-600));">{{ llm_prompt }}</pre>
+    </details>
+  </div>
+
+  {# ---- the create form ---- #}
+  <form method="post" enctype="multipart/form-data" class="onb-form" id="onb-form">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="onb-alert" style="display:block;">{{ form.non_field_errors }}</div>{% endif %}
+
+    <div class="onb-tabs">
+      <button type="button" class="onb-tab active" data-tab="details">{% trans "Business details" %}</button>
+      <button type="button" class="onb-tab" data-tab="catalog">{% trans "Catalog (optional)" %}</button>
+    </div>
+
+    {# Tab 1 — everything needed to create a business #}
+    <div class="onb-panel active" data-panel="details">
+      <div class="onb-card">
+        <div class="onb-grid">
+          {% for field in form %}
+            {% if field.name != 'catalog_json' %}
+              <div class="onb-field {% if field.name == 'description' or field.name == 'working_hours' or field.name == 'is_demo' %}full{% endif %} {% if field.errors %}has-err{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
+                {% for e in field.errors %}<span class="err">{{ e }}</span>{% endfor %}
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# Tab 2 — optional catalog rows (JS-managed; JSON import fills these too) #}
+    <div class="onb-panel" data-panel="catalog">
+      <div class="onb-card">
+        <h2>{% trans "Catalog items" %}</h2>
+        <p class="onb-muted">{% trans "Optional. Add menu items / services, or let the JSON import fill them." %}</p>
+        <div id="onb-cat-list" style="margin-top:12px;"></div>
+        <button type="button" class="onb-btn ghost" id="onb-cat-add">+ {% trans "Add item" %}</button>
+        {{ form.catalog_json }}
+      </div>
+    </div>
+
+    <div class="onb-row" style="margin-top:16px;">
+      <button type="submit" class="onb-btn">{% trans "Create business" %}</button>
+      <span class="onb-muted">{% trans "Owner is attached later via a pitch link, unless 'demo' is checked." %}</span>
+    </div>
+  </form>
+</div>
+
+{# ---- floating confirm modal ---- #}
+<div class="onb-overlay" id="onb-overlay">
+  <div class="onb-modal">
+    <h3>{% trans "Review imported data" %}</h3>
+    <p class="onb-muted">{% trans "Edit anything before it fills the form. Empty values are skipped." %}</p>
+    <div id="onb-conf-fields" style="margin-top:14px;"></div>
+    <div id="onb-conf-catalog"></div>
+    <div class="onb-row" style="margin-top:18px; justify-content:flex-end;">
+      <button type="button" class="onb-btn ghost" id="onb-cancel">{% trans "Cancel" %}</button>
+      <button type="button" class="onb-btn" id="onb-confirm">{% trans "Confirm & fill" %}</button>
+    </div>
+  </div>
+</div>
+
+<script id="onb-fields-meta" type="application/json">{{ import_fields_json|safe }}</script>
+<script>
+(function () {
+  const FIELDS = JSON.parse(document.getElementById("onb-fields-meta").textContent);
+  const byName = Object.fromEntries(FIELDS.map(f => [f.name, f]));
+  const $ = (s, r) => (r || document).querySelector(s);
+
+  // ---- tabs ----
+  document.querySelectorAll(".onb-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".onb-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".onb-panel").forEach(p => p.classList.remove("active"));
+      tab.classList.add("active");
+      $('.onb-panel[data-panel="' + tab.dataset.tab + '"]').classList.add("active");
+    });
+  });
+
+  // ---- copy prompt ----
+  $("#onb-copy-prompt").addEventListener("click", () => {
+    navigator.clipboard.writeText($("#onb-prompt").textContent).then(() => {
+      const b = $("#onb-copy-prompt"); const o = b.textContent; b.textContent = "Copied ✓";
+      setTimeout(() => (b.textContent = o), 1500);
+    });
+  });
+
+  // ---- catalog rows ----
+  const catList = $("#onb-cat-list");
+  function addCatRow(item) {
+    item = item || {};
+    const row = document.createElement("div");
+    row.className = "onb-cat-row";
+    row.innerHTML =
+      '<input class="c-name" placeholder="Name" value="">' +
+      '<input class="c-cat" placeholder="Category" value="">' +
+      '<input class="c-price" placeholder="Price" value="">' +
+      '<button type="button" class="onb-x">&times;</button>';
+    row.querySelector(".c-name").value = item.name || "";
+    row.querySelector(".c-cat").value = item.category || "";
+    row.querySelector(".c-price").value = item.price || "";
+    row.querySelector(".onb-x").addEventListener("click", () => row.remove());
+    catList.appendChild(row);
+  }
+  $("#onb-cat-add").addEventListener("click", () => addCatRow());
+
+  // serialize catalog rows into the hidden field on submit
+  $("#onb-form").addEventListener("submit", () => {
+    const rows = [...catList.querySelectorAll(".onb-cat-row")].map(r => ({
+      name: r.querySelector(".c-name").value.trim(),
+      category: r.querySelector(".c-cat").value.trim(),
+      price: r.querySelector(".c-price").value.trim(),
+    })).filter(r => r.name);
+    $('[name="catalog_json"]').value = rows.length ? JSON.stringify(rows) : "";
+  });
+
+  // ---- JSON import → confirm modal ----
+  const overlay = $("#onb-overlay");
+  let pendingCatalog = [];
+
+  function openConfirm(data) {
+    const wrap = $("#onb-conf-fields");
+    wrap.innerHTML = "";
+    FIELDS.forEach(f => {
+      let val = data[f.name];
+      if (val === undefined || val === null) return;
+      if (f.name === "working_hours" && typeof val === "object") val = JSON.stringify(val);
+      if (f.name === "tags" && Array.isArray(val)) val = val.join(", ");
+      const row = document.createElement("div");
+      row.className = "onb-conf-row";
+      const editor = (f.name === "description" || f.name === "working_hours")
+        ? '<textarea rows="2" data-key="' + f.name + '"></textarea>'
+        : '<input type="text" data-key="' + f.name + '">';
+      row.innerHTML = '<label>' + f.label + '</label>' + editor;
+      wrap.appendChild(row);
+      row.querySelector("[data-key]").value = val == null ? "" : String(val);
+    });
+    // catalog preview
+    pendingCatalog = Array.isArray(data.catalog) ? data.catalog : [];
+    $("#onb-conf-catalog").innerHTML = pendingCatalog.length
+      ? '<div class="onb-muted" style="margin-top:10px;">' + pendingCatalog.length + ' catalog item(s) will be added.</div>'
+      : "";
+    overlay.classList.add("open");
+  }
+
+  function parseJson(text) {
+    $("#onb-json-err").style.display = "none";
+    let data;
+    try { data = JSON.parse(text); }
+    catch (e) {
+      $("#onb-json-err").textContent = "Couldn't read that JSON — check for a missing quote or comma. (" + e.message + ")";
+      $("#onb-json-err").style.display = "block";
+      return;
+    }
+    if (typeof data !== "object" || Array.isArray(data) || data === null) {
+      $("#onb-json-err").textContent = "Expected a single JSON object like { \"name\": \"...\" }.";
+      $("#onb-json-err").style.display = "block";
+      return;
+    }
+    openConfirm(data);
+  }
+
+  $("#onb-load").addEventListener("click", () => parseJson($("#onb-json").value));
+  $("#onb-file").addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { $("#onb-json").value = reader.result; parseJson(reader.result); };
+    reader.readAsText(file);
+    e.target.value = "";
+  });
+
+  $("#onb-cancel").addEventListener("click", () => overlay.classList.remove("open"));
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.classList.remove("open"); });
+
+  // ---- confirm → fill the real form ----
+  $("#onb-confirm").addEventListener("click", () => {
+    $("#onb-conf-fields").querySelectorAll("[data-key]").forEach(el => {
+      const key = el.dataset.key;
+      const target = document.querySelector('[name="' + key + '"]');
+      if (!target) return;               // no matching field → skip (never silently mis-map)
+      const v = el.value.trim();
+      if (v === "") return;              // don't overwrite with blanks
+      if (target.tagName === "SELECT") {
+        const opt = [...target.options].find(o => o.value === v || o.text.toLowerCase() === v.toLowerCase());
+        if (opt) target.value = opt.value;
+      } else {
+        target.value = v;
+      }
+    });
+    // fill catalog rows + switch focus so the employee notices
+    if (pendingCatalog.length) {
+      catList.innerHTML = "";
+      pendingCatalog.forEach(item => addCatRow({
+        name: item.name, category: item.category, price: item.price,
+      }));
+    }
+    overlay.classList.remove("open");
+  });
+
+  void byName; // reserved for future per-field hints
+})();
+</script>
+{% endblock %}
