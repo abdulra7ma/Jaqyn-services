@@ -26,6 +26,7 @@ vi.mock("@jaqyn/api", () => {
   const idle = { mutate: vi.fn(), isPending: false };
   return {
     useBusinessMe: () => ({ data: business }),
+    useBusinessTypes: () => ({ data: [] }),
     useOnboardingState: () => ({
       data: { completion_score: 80, missing_required_fields: [{ label: "Logo image", step: 1 }] },
       refetch: vi.fn(),
