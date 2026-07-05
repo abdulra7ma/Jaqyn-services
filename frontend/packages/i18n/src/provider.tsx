@@ -32,13 +32,17 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setLocale = useCallback((l: Locale) => {
+    // Runtime guard, not just the type: a non-locale string (bad cast, wired-up
+    // select with a wrong value) must not poison state — t() would crash app-wide.
+    if (!(LOCALES as readonly string[]).includes(l)) return;
     setLocaleState(l);
     window.localStorage.setItem(STORAGE_KEY, l);
     document.documentElement.lang = l;
   }, []);
 
   const t = useCallback(
-    (key: string) => messages[locale][key] ?? messages[DEFAULT_LOCALE][key] ?? key,
+    (key: string) =>
+      (messages[locale] ?? messages[DEFAULT_LOCALE])[key] ?? messages[DEFAULT_LOCALE][key] ?? key,
     [locale],
   );
 

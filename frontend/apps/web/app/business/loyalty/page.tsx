@@ -157,24 +157,28 @@ export default function BusinessLoyaltyPage() {
   return (
     <OwnerShell title={t("owner.nav.loyalty")}>
       <div className="animate-[jqIn_.3s_ease]">
-        {/* Header lives outside the QueryBoundary so the create button stays
-            reachable when there are zero programs (empty state is not a dead end). */}
+        {/* Header CTA hides when the list is empty — the empty state below owns
+            the single, catchy create action (never two identical buttons). */}
         <div className="mb-5 flex items-start justify-between gap-4">
           <p className="text-[13.5px] text-subtle">{t("loyalty.biz.subtitle")}</p>
-          <button
-            onClick={() => router.push("/business/loyalty/new")}
-            className="flex flex-none items-center gap-2 rounded-xl bg-brand px-[18px] py-3 text-[13.5px] font-bold text-brand-fg shadow-glow transition active:scale-[.99]"
-          >
-            + {t("loyalty.biz.new")}
-          </button>
+          {(query.data?.length ?? 0) > 0 && (
+            <button
+              onClick={() => router.push("/business/loyalty/new")}
+              className="flex flex-none items-center gap-2 rounded-xl bg-brand px-[18px] py-3 text-[13.5px] font-bold text-brand-fg shadow-glow transition active:scale-[.99]"
+            >
+              + {t("loyalty.biz.new")}
+            </button>
+          )}
         </div>
 
         <QueryBoundary
           query={query}
           isEmpty={(rows) => rows.length === 0}
-          emptyMessage={t("loyalty.biz.empty")}
+          emptyIcon={<span aria-hidden className="text-4xl">🎴</span>}
+          emptyTitle={t("loyalty.biz.emptyTitle")}
+          emptyMessage={t("loyalty.biz.emptyBody")}
           emptyAction={{
-            label: `+ ${t("loyalty.biz.new")}`,
+            label: t("loyalty.biz.emptyCta"),
             onClick: () => router.push("/business/loyalty/new"),
           }}
         >

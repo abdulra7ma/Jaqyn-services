@@ -282,6 +282,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     "cmp.biz.title": "Акции",
     "cmp.biz.subtitle": "Создавайте задания, выдавайте награды и отслеживайте погашения.",
     "cmp.biz.create": "Создать акцию",
+    "cmp.biz.emptyTitle": "Запустите первую акцию",
+    "cmp.biz.emptyBody":
+      "Награждайте визиты, компании друзей и посты в Instagram — выберите цель, и клиенты будут к ней стремиться.",
+    "cmp.biz.emptyCta": "Создать первую акцию",
     "cmp.biz.empty": "Пока нет акций. Создайте первую.",
     "cmp.biz.kpi.active": "Активные акции",
     "cmp.biz.kpi.participants": "Всего участников",
@@ -1204,6 +1208,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     "owner.nav.campaigns": "Акции",
     "owner.nav.loyalty": "Лояльность",
     "loyalty.biz.new": "Новая программа",
+    "loyalty.biz.emptyTitle": "Превратите визиты в постоянных клиентов",
+    "loyalty.biz.emptyBody":
+      "Создайте первую программу — штампы, баллы или визиты — и дайте клиентам повод вернуться.",
+    "loyalty.biz.emptyCta": "Создать первую программу",
     "loyalty.biz.all": "Все",
     "loyalty.biz.members": "Участники",
     "loyalty.biz.outstanding": "Ожидают",
@@ -2142,6 +2150,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     "cmp.biz.title": "Campaigns",
     "cmp.biz.subtitle": "Create challenges, issue rewards, and track redemptions.",
     "cmp.biz.create": "Create campaign",
+    "cmp.biz.emptyTitle": "Launch your first campaign",
+    "cmp.biz.emptyBody":
+      "Reward visits, friend groups and Instagram posts — pick a goal and customers will chase it.",
+    "cmp.biz.emptyCta": "Create my first campaign",
     "cmp.biz.empty": "No campaigns yet. Create your first one.",
     "cmp.biz.kpi.active": "Active campaigns",
     "cmp.biz.kpi.participants": "Total participants",
@@ -3065,6 +3077,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     "owner.nav.campaigns": "Campaigns",
     "owner.nav.loyalty": "Loyalty",
     "loyalty.biz.new": "New program",
+    "loyalty.biz.emptyTitle": "Turn visits into regulars",
+    "loyalty.biz.emptyBody":
+      "Create your first program — stamps, points or visits — and give customers a reason to come back.",
+    "loyalty.biz.emptyCta": "Create my first program",
     "loyalty.biz.all": "All",
     "loyalty.biz.members": "Members",
     "loyalty.biz.outstanding": "Outstanding",

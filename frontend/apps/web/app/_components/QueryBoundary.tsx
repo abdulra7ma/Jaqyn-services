@@ -18,12 +18,17 @@ export function QueryBoundary<T>({
   query,
   isEmpty,
   emptyMessage,
+  emptyTitle,
+  emptyIcon,
   emptyAction,
   children,
 }: {
   query: QueryLike<T>;
   isEmpty?: (data: T) => boolean;
   emptyMessage?: string;
+  /** Catchy pitch headline for the empty state (e.g. "Launch your first campaign"). */
+  emptyTitle?: string;
+  emptyIcon?: ReactNode;
   /** Empty states must offer a next step — pass the obvious action when one exists. */
   emptyAction?: { label: string; onClick: () => void };
   children: (data: T) => ReactNode;
@@ -46,6 +51,8 @@ export function QueryBoundary<T>({
     return (
       <Empty
         message={emptyMessage ?? t("common.empty")}
+        title={emptyTitle}
+        icon={emptyIcon}
         actionLabel={emptyAction?.label}
         onAction={emptyAction?.onClick}
       />

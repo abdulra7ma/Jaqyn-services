@@ -14,24 +14,30 @@ export function Loading({ label = "Loading…" }: { label?: string }) {
 
 // Empty states must not be dead ends: when the screen has an obvious next
 // action (create the first item, discover content), pass actionLabel/onAction
-// so the state offers it instead of a bare message.
+// so the state offers it instead of a bare message. `title` makes it a pitch
+// ("Turn visits into regulars") rather than a shrug ("nothing here yet") —
+// the page's own header CTA should be hidden when this action is shown, so
+// the screen never has two identical buttons.
 export function Empty({
   message,
   icon,
+  title,
   actionLabel,
   onAction,
 }: {
   message: string;
   icon?: ReactNode;
+  title?: string;
   actionLabel?: string;
   onAction?: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center gap-4 py-10 text-center text-subtle">
+    <div className="flex flex-col items-center gap-3 py-12 text-center text-subtle">
       {icon}
-      <p>{message}</p>
+      {title && <p className="font-display text-lg font-bold text-ink">{title}</p>}
+      <p className="max-w-sm">{message}</p>
       {actionLabel && onAction && (
-        <Button onClick={onAction} className="px-7">
+        <Button onClick={onAction} className="mt-2 px-7">
           {actionLabel}
         </Button>
       )}

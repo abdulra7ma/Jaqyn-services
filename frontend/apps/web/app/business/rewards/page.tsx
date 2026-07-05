@@ -24,9 +24,11 @@ export default function RewardsRedemptionsPage() {
         <QueryBoundary
           query={list}
           isEmpty={(d) => d.campaigns.length === 0}
-          emptyMessage={t("cmp.biz.empty")}
+          emptyIcon={<span aria-hidden className="text-4xl">🎁</span>}
+          emptyTitle={t("cmp.biz.emptyTitle")}
+          emptyMessage={t("cmp.biz.emptyBody")}
           emptyAction={{
-            label: `+ ${t("cmp.biz.create")}`,
+            label: t("cmp.biz.emptyCta"),
             onClick: () => router.push("/business/campaigns/new"),
           }}
         >

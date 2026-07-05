@@ -159,18 +159,25 @@ export default function BusinessCampaignsPage() {
     ...(statusFilter !== "all" ? { status: statusFilter } : {}),
   };
   const list = useBusinessCampaigns(params);
+  // Filters are applied server-side, so an empty response under active filters
+  // means "no matches", not "no campaigns" — only the truly-empty case gets the
+  // catchy create pitch (and then the header CTA hides so there's one button).
+  const filtersActive = typeFilter !== "all" || statusFilter !== "all";
+  const trulyEmpty = !filtersActive && (list.data?.campaigns.length ?? 0) === 0;
 
   return (
     <OwnerShell title={t("cmp.biz.title")}>
       <div className="animate-[jqIn_.3s_ease]">
         <div className="mb-5 flex items-center justify-between gap-4">
           <p className="text-[13.5px] text-subtle">{t("cmp.biz.subtitle")}</p>
-          <button
-            onClick={() => router.push("/business/campaigns/new")}
-            className="flex flex-none items-center gap-2 rounded-xl bg-brand px-[18px] py-3 text-[13.5px] font-bold text-brand-fg shadow-glow transition active:scale-[.99]"
-          >
-            + {t("cmp.biz.create")}
-          </button>
+          {!trulyEmpty && (
+            <button
+              onClick={() => router.push("/business/campaigns/new")}
+              className="flex flex-none items-center gap-2 rounded-xl bg-brand px-[18px] py-3 text-[13.5px] font-bold text-brand-fg shadow-glow transition active:scale-[.99]"
+            >
+              + {t("cmp.biz.create")}
+            </button>
+          )}
         </div>
 
         <div className="mb-5 rounded-[16px] border border-line bg-[#FFFCF7] p-3 shadow-[0_8px_24px_-22px_rgba(46,36,29,.45)] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
@@ -210,11 +217,17 @@ export default function BusinessCampaignsPage() {
         <QueryBoundary
           query={list}
           isEmpty={(d) => d.campaigns.length === 0}
-          emptyMessage={t("cmp.biz.empty")}
-          emptyAction={{
-            label: `+ ${t("cmp.biz.create")}`,
-            onClick: () => router.push("/business/campaigns/new"),
-          }}
+          emptyIcon={filtersActive ? undefined : <span aria-hidden className="text-4xl">⚡</span>}
+          emptyTitle={filtersActive ? undefined : t("cmp.biz.emptyTitle")}
+          emptyMessage={filtersActive ? t("cmp.biz.empty") : t("cmp.biz.emptyBody")}
+          emptyAction={
+            filtersActive
+              ? undefined
+              : {
+                  label: t("cmp.biz.emptyCta"),
+                  onClick: () => router.push("/business/campaigns/new"),
+                }
+          }
         >
           {(data) => (
             <>
