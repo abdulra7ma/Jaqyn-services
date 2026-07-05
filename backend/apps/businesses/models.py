@@ -300,3 +300,43 @@ class BusinessOwnerInvite(TimeStampedModel):
 
     def __str__(self):
         return f"Invite {self.email or self.phone} -> {self.business_id}"
+
+
+class PitchInvite(TimeStampedModel):
+    """Single-use, tokenized sales-pitch link for a pre-created prospect business.
+
+    Mirrors BusinessOwnerInvite's token security: only sha256(raw) is stored; the
+    raw token is shown once in admin and embedded in the pitch URL. Lifecycle:
+    PENDING (created) -> OPENED (first resolve) -> CLAIMED (email verified). EXPIRED
+    is set lazily on resolve when past expires_at. A claimed or expired invite can
+    never be resolved or claimed again. `chosen_goal`/`chosen_reward_text` capture
+    what the prospect configured on the card so onboarding can prefill later.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        OPENED = "opened", "Opened"
+        CLAIMED = "claimed", "Claimed"
+        EXPIRED = "expired", "Expired"
+
+    business = models.ForeignKey(
+        Business, on_delete=models.CASCADE, related_name="pitch_invites"
+    )
+    token_hash = models.CharField(max_length=128, unique=True)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
+    expires_at = models.DateTimeField()
+    opened_at = models.DateTimeField(blank=True, null=True)
+    claimed_at = models.DateTimeField(blank=True, null=True)
+    claimed_email = models.EmailField(blank=True, null=True)
+    # What the prospect set on the interactive card before claiming — carried into
+    # onboarding. Nullable: they may claim without touching the editor.
+    chosen_goal = models.PositiveIntegerField(blank=True, null=True)
+    chosen_reward_text = models.CharField(max_length=120, blank=True, null=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self) -> str:
+        return f"PitchInvite {self.business_id} ({self.status})"

@@ -14,6 +14,7 @@ from apps.businesses.models import (
     BusinessOwnerInvite,
     BusinessType,
     CatalogItem,
+    PitchInvite,
     StaffInvite,
 )
 from apps.businesses.onboarding_services import request_changes as onboarding_request_changes
@@ -75,11 +76,28 @@ class BusinessNoteInline(TabularInline):
         return False
 
 
+class PitchInviteInline(TabularInline):
+    """Read-only audit trail of pitch invites for this business."""
+
+    model = PitchInvite
+    extra = 0
+    can_delete = False
+    fields = ("status", "created_at", "expires_at", "opened_at", "claimed_at", "claimed_email")
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Business)
 class BusinessAdmin(ModelAdmin):
     list_display = (
         "logo_thumb", "name", "owner", "trial_badge", "is_demo",
-        "category", "area", "status", "onboarding_status", "verification_status", "created_at",
+        "category", "area", "status", "onboarding_status", "verification_status",
+        "pitch_status", "created_at",
     )
     list_filter = ("status", "onboarding_status", "verification_status", "is_demo", "is_paid", "category", "area")
     search_fields = ("name", "owner__phone", "phone", "address", "pending_owner_name", "pending_owner_email")
@@ -90,7 +108,9 @@ class BusinessAdmin(ModelAdmin):
     actions = [approve_businesses, reject_businesses, disable_businesses, request_changes, mark_as_demo]
     # Changelist-level button (unfold renders it at the top of the list).
     actions_list = ["create_demo_business_button"]
-    inlines = [BusinessNoteInline]
+    # Change-form button to generate a pitch link for this specific business.
+    actions_detail = ["create_pitch_link_button"]
+    inlines = [BusinessNoteInline, PitchInviteInline]
 
     @admin.display(description="")
     def logo_thumb(self, obj: Business):
@@ -116,6 +136,56 @@ class BusinessAdmin(ModelAdmin):
             '<span style="background:{};color:{};border-radius:10px;padding:1px 8px;font-size:12px;">{}</span>',
             bg, fg, st.badge,
         )
+
+    def get_queryset(self, request):
+        # Prefetch invites (newest first via model Meta.ordering) so pitch_status
+        # never issues a per-row query.
+        return super().get_queryset(request).prefetch_related("pitch_invites")
+
+    @admin.display(description="Pitch")
+    def pitch_status(self, obj):
+        """Render the latest pitch-invite status as a label for the changelist.
+
+        Returns "— Не отправлено" when no invite exists; otherwise the Russian
+        label for the invite's status. Reads obj.pitch_invites (prefetched via
+        get_queryset to avoid N+1).
+        """
+        invite = next(iter(obj.pitch_invites.all()), None)
+        if invite is None:
+            return "— Не отправлено"
+        labels = {
+            PitchInvite.Status.PENDING: "Создано",
+            PitchInvite.Status.OPENED: "Открыто",
+            PitchInvite.Status.CLAIMED: "Забрано",
+            PitchInvite.Status.EXPIRED: "Истекло",
+        }
+        return labels.get(invite.status, invite.status)
+
+    @action(description="Создать pitch-ссылку", icon="link")
+    def create_pitch_link_button(self, request, object_id):
+        """Mint a fresh pitch link for this business and show the URL once.
+
+        Expires any existing active (pending/opened) invite first so there is a
+        single live link per business. The raw token is surfaced only in this
+        message and never stored.
+        """
+        from apps.businesses.pitch_services import generate_pitch_invite
+        from core.frontend import frontend_base_url
+
+        business = self.get_object(request, object_id)
+        business.pitch_invites.filter(
+            status__in=[PitchInvite.Status.PENDING, PitchInvite.Status.OPENED]
+        ).update(status=PitchInvite.Status.EXPIRED)
+        _, raw = generate_pitch_invite(business)
+        url = f"{frontend_base_url(request)}/pitch/{raw}"
+        messages.success(
+            request,
+            format_html(
+                "Pitch-ссылка (активна 30 дней, показана один раз): <code>{}</code>",
+                url,
+            ),
+        )
+        return redirect(request.META.get("HTTP_REFERER", "."))
 
     @action(description="Create demo business", icon="add_business")
     def create_demo_business_button(self, request):
