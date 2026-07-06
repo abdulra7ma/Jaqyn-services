@@ -599,4 +599,33 @@ def test_customer_detail_serializer_exposes_group_offer_fields():
     assert data["business_logo_url"] is None
 
 
+# --- D1 — pagination envelope assertion on GroupSessionListView ---------------
+
+
+def test_group_session_list_returns_pagination_envelope():
+    """GET /api/customer/campaign-groups/ returns the standard {count, results} envelope."""
+    business = make_business()
+    campaign = _group_campaign(business, status=Campaign.Status.ACTIVE, group_size=2)
+    leader = make_customer("996")
+    CampaignGroupService.start_group_session(campaign, leader)
+
+    response = _auth(leader).get("/api/customer/campaign-groups/")
+
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert "count" in data
+    assert "results" in data
+    assert data["count"] == 1
+    assert data["results"][0]["campaign"]["id"] == str(campaign.id)
+
+
+def test_group_session_list_page_size_cap():
+    """?page_size=1000000 is silently capped at max_page_size (100)."""
+    leader = make_customer("997")
+    response = _auth(leader).get("/api/customer/campaign-groups/?page_size=1000000")
+
+    assert response.status_code == 200
+    assert "results" in response.data["data"]
+
+
 # --- end-to-end via the HTTP API --------------------------------------------

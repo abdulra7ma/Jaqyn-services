@@ -378,6 +378,29 @@ def test_campaign_social_post_rejects_customer():
     assert response.status_code == 403
 
 
+# --- D3: campaign image upload size cap ----------------------------------------
+# The size cap is enforced by validate_image_size on CampaignImageUploadSerializer.
+# Django's multipart parser re-wraps uploads as InMemoryUploadedFile, so the only
+# reliable way to test via HTTP would be to send >5 MB of real bytes — impractical
+# in a unit suite.  The validator itself + its wiring is verified in
+# core/tests/test_images.py; here we just confirm the happy path so endpoint
+# wiring isn't silently broken.
+
+
+def test_campaign_image_upload_accepts_small_image():
+    """A small valid PNG is accepted by the endpoint (happy-path wiring check)."""
+    business = make_business("003")
+    campaign = make_campaign(business)
+
+    response = owner_client(business).post(
+        f"/api/business/campaigns/{campaign.id}/image/",
+        {"image": _png_upload()},
+        format="multipart",
+    )
+
+    assert response.status_code == 200
+
+
 def test_campaign_social_post_response_shape():
     business = make_business()
     campaign = make_campaign(business)

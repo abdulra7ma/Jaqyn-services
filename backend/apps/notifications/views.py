@@ -8,6 +8,7 @@ from apps.notifications.serializers import (
     NotificationPreferenceSerializer,
 )
 from apps.notifications.services import CampaignNoticeService
+from core.pagination import StandardResultsSetPagination
 from core.permissions import IsAdmin, IsCustomer
 from core.response import success_response
 
@@ -28,28 +29,46 @@ class NotificationPreferenceView(APIView):
 
 
 class AdminNotificationLogsView(APIView):
+    """Paginated list of all notification logs for admin inspection.
+
+    Replaces the former hand-capped ``[:100]`` slice with project-standard
+    page-number pagination (default 25, hard max 100 via ``?page_size``).
+    """
+
     permission_classes = [IsAdmin]
+    pagination_class = StandardResultsSetPagination
 
     def get(self, request):
         logs = NotificationLog.objects.select_related("recipient").order_by(
             "-created_at"
-        )[:100]
-        return success_response(
-            {"results": NotificationLogSerializer(logs, many=True).data}
+        )
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(logs, request, view=self)
+        return paginator.get_paginated_response(
+            NotificationLogSerializer(page, many=True).data
         )
 
 
 class CustomerCampaignNoticesView(APIView):
-    """List relevant unread campaign notices and acknowledge viewed rows."""
+    """List relevant unread campaign notices and acknowledge viewed rows.
+
+    The GET returns project-standard page-number pagination (default 25, hard
+    max 100 via ``?page_size``). In practice a customer never has more than a
+    handful of notices, but pagination enforces the contract that no list
+    endpoint is unbounded.
+    """
 
     permission_classes = [IsCustomer]
     serializer_class = CampaignNoticeSerializer
+    pagination_class = StandardResultsSetPagination
     throttle_scope = "notification_write"
 
     def get(self, request):
         notices = CampaignNoticeService.unread_for_customer(request.user)
-        return success_response(
-            {"results": self.serializer_class(notices, many=True).data}
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(notices, request, view=self)
+        return paginator.get_paginated_response(
+            self.serializer_class(page, many=True).data
         )
 
     def post(self, request):

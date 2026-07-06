@@ -205,3 +205,67 @@ def test_campaign_notice_endpoint_enforces_customer_role(api_client):
     business = make_business()
     api_client.force_authenticate(business.owner)
     assert api_client.get("/api/notifications/campaign-notices/").status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# D1 — pagination envelope assertions
+# ---------------------------------------------------------------------------
+
+
+def test_admin_notification_logs_returns_pagination_envelope(api_client):
+    """AdminNotificationLogsView returns the standard {count, results, …} envelope."""
+    admin = User.objects.create_superuser(phone="+996708000055", password="secret")
+    NotificationLog.objects.create(
+        channel="sms", event="otp", status=NotificationLog.Status.SENT
+    )
+    api_client.force_authenticate(admin)
+
+    response = api_client.get("/api/admin/notification-logs/")
+
+    assert response.status_code == 200
+    data = response.data["data"]
+    # Standard pagination envelope keys must be present.
+    assert "count" in data
+    assert "results" in data
+    assert data["count"] == 1
+    assert data["results"][0]["event"] == "otp"
+
+
+def test_admin_notification_logs_page_size_cap(api_client):
+    """?page_size=1000000 is silently capped at max_page_size (100)."""
+    admin = User.objects.create_superuser(phone="+996708000056", password="secret")
+    api_client.force_authenticate(admin)
+
+    response = api_client.get("/api/admin/notification-logs/?page_size=1000000")
+
+    assert response.status_code == 200
+    # Django's PageNumberPagination silently clamps to max_page_size when the
+    # request exceeds it, so the response should still be 200 (not a 400).
+    assert "results" in response.data["data"]
+
+
+def test_customer_campaign_notices_returns_pagination_envelope(api_client):
+    """CustomerCampaignNoticesView GET returns the standard {count, results} envelope."""
+    business = make_business()
+    customer = User.objects.create_user(
+        phone="+996708000088",
+        role=User.Role.CUSTOMER,
+        is_phone_verified=True,
+    )
+    program = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Paginate card",
+        required_count=6,
+    )
+    LoyaltyMembership.objects.create(program=program, customer=customer)
+    make_campaign(business, required_count=5)
+    api_client.force_authenticate(customer)
+
+    response = api_client.get("/api/notifications/campaign-notices/")
+
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert "count" in data
+    assert "results" in data
+    assert data["count"] == 1

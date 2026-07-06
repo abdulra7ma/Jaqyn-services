@@ -3,6 +3,7 @@ from django.core.validators import RegexValidator
 
 from apps.businesses.models import Business, BusinessImage, BusinessType, CatalogItem, StaffInvite
 from apps.staff.services import ACTIVITY_KINDS
+from core.validators import validate_image_size
 
 
 class BusinessTypeSerializer(serializers.ModelSerializer):
@@ -294,9 +295,11 @@ class BusinessImageUploadSerializer(serializers.Serializer):
 
     ``ImageField`` enforces that the upload is a decodable image (shape/format
     validation). Compression + persistence is the service's concern.
+    ``validate_image_size`` caps the upload at MAX_IMAGE_UPLOAD_BYTES (5 MB) so
+    the compressor never receives an oversized file and R2 storage is bounded.
     """
 
-    image = serializers.ImageField()
+    image = serializers.ImageField(validators=[validate_image_size])
 
 
 class BusinessImageSerializer(serializers.ModelSerializer):
@@ -323,9 +326,10 @@ class GalleryUploadSerializer(serializers.Serializer):
 
     ``ImageField`` ensures the upload is a decodable image. Compression +
     persistence is the service's concern; this serializer validates shape only.
+    ``validate_image_size`` caps the upload at MAX_IMAGE_UPLOAD_BYTES (5 MB).
     """
 
-    image = serializers.ImageField()
+    image = serializers.ImageField(validators=[validate_image_size])
 
 
 class CatalogItemSerializer(serializers.ModelSerializer):

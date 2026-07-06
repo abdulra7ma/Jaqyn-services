@@ -23,4 +23,5 @@ certs/
 .worktrees/
 .turbo/
 .next-settings/
-.next-preview/.next-security/
+.next-preview/
+.next-security/

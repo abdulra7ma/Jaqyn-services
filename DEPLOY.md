@@ -175,7 +175,7 @@ The Vite landing is a static build. Either:
 - **Railway**: **+ New** → repo → Root Directory `landing`, build `npm run build`, serve `dist` (Railway static). Generate a domain.
 - Or skip it for now — the Next.js app already covers the product.
 
-> **Must set before building**: `VITE_APP_URL` = the deployed frontend host (mirrors backend `FRONTEND_URL`), `VITE_API_URL` = the backend host (or empty if same-origin). Vite bakes these in at `npm run build` — they're compiled into the static bundle, not read at runtime. Missing `VITE_APP_URL` silently falls back to `http://localhost:3000` (see `landing/.env.example`), so CTAs like "Explore Deals" point at localhost in prod. Adding the var to Railway after the fact does nothing until you trigger a redeploy.
+> **Must set before building**: `VITE_APP_URL` = the deployed frontend host (mirrors backend `FRONTEND_URL`), `VITE_API_URL` = the backend host (or empty if same-origin), `VITE_SITE_URL` = the landing's own public origin (baked into canonical/OG/JSON-LD in `index.html` and into `robots.txt`/`sitemap.xml`/`llms.txt` rendered from `landing/seo/`). Vite bakes these in at `npm run build` — they're compiled into the static bundle, not read at runtime. Missing vars silently fall back to `http://localhost:*` (see `landing/.env.example`), so CTAs and SEO URLs point at localhost in prod. Adding the var to Railway after the fact does nothing until you trigger a redeploy.
 
 ---
 
@@ -193,6 +193,7 @@ The Vite landing is a static build. Either:
 - [ ] `SEED_TEST_USERS=false`, `DEV_LOGIN_OTP=` empty
 - [ ] `DJANGO_ALLOWED_HOSTS` + `DJANGO_CSRF_TRUSTED_ORIGINS` = the web service's `*.up.railway.app` host
 - [ ] `API_PROXY_TARGET` (frontend) = web service URL; `FRONTEND_URL` (backend) = frontend service URL
+- [ ] `NEXT_PUBLIC_SITE_URL` (frontend) = the app's own public URL; `NEXT_PUBLIC_LANDING_URL` = the landing URL — both baked at build (Dockerfile ARGs), feed robots/sitemap/llms.txt/OG
 - [ ] `USE_S3=true` and a test upload lands in R2 (URL is `pub-...r2.dev`, not local)
 - [ ] R2 bucket **CORS policy** allows `https://app.jaqyn.kg` GET (else share-card image + download break — see §5.5)
 - [ ] `/api/health/` returns 200 (web healthcheck green)
@@ -204,7 +205,7 @@ The Vite landing is a static build. Either:
 
 ## Adding a custom domain later
 
-When you buy one: add it under each service's **Settings → Networking → Custom Domain**, point DNS as Railway instructs, then update `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `FRONTEND_URL`, and `API_PROXY_TARGET` to the new hostnames. Nothing else changes.
+When you buy one: add it under each service's **Settings → Networking → Custom Domain**, point DNS as Railway instructs, then update `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `FRONTEND_URL`, `API_PROXY_TARGET`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_LANDING_URL` (frontend), and `VITE_SITE_URL` + `VITE_APP_URL` (landing) to the new hostnames, then redeploy frontend + landing (those vars bake at build). No domain lives in code — env only. Also re-verify the new domain in Search Console/Bing/Yandex and 301 the old one.
 
 ## Cheaper / alternative hosts
 

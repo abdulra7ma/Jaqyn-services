@@ -298,8 +298,20 @@ class AvatarUploadView(APIView):
             from core.exceptions import JaqynAPIException
 
             raise JaqynAPIException(code="AVATAR_REQUIRED", message="avatar file is required", status_code=400)
+        from core.exceptions import JaqynAPIException
         from core.images import AVATAR_MAX_DIM, compress_image
+        from core.validators import MAX_IMAGE_UPLOAD_BYTES
 
+        # Reject oversized files before the compressor sees them — avatars render
+        # at small sizes so 5 MB is well above any reasonable input (see the
+        # why-comment on MAX_IMAGE_UPLOAD_BYTES in core/validators.py).
+        if avatar_file.size > MAX_IMAGE_UPLOAD_BYTES:
+            mb = MAX_IMAGE_UPLOAD_BYTES // (1024 * 1024)
+            raise JaqynAPIException(
+                code="FILE_TOO_LARGE",
+                message=f"Image file too large. Maximum allowed size is {mb} MB.",
+                status_code=400,
+            )
         # Compress before storing — avatars render small, so bound them tightly.
         request.user.avatar = compress_image(avatar_file, max_dim=AVATAR_MAX_DIM)
         request.user.avatar_emoji = ""

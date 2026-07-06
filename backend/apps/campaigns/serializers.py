@@ -23,6 +23,7 @@ from apps.campaigns.models import (
     GroupMember,
 )
 from core.frontend import frontend_base_url
+from core.validators import validate_image_size
 
 
 class CampaignRuleSerializer(serializers.ModelSerializer):
@@ -792,9 +793,11 @@ class CampaignImageUploadSerializer(serializers.Serializer):
 
     ``ImageField`` enforces that the upload is a valid, decodable image (shape/
     format validation); persisting it onto the campaign is the view's concern.
+    ``validate_image_size`` caps the upload at MAX_IMAGE_UPLOAD_BYTES (5 MB) so
+    the compressor never receives an oversized file and R2 storage is bounded.
     """
 
-    image = serializers.ImageField()
+    image = serializers.ImageField(validators=[validate_image_size])
 
 
 class SocialPostSerializer(serializers.Serializer):

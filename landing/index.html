@@ -1,11 +1,47 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- lang matches DEFAULT_LANG ('ru') in src/i18n/translations.ts; I18nProvider
+     updates it at runtime when the visitor switches language. -->
+<html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <title>Jaqyn — Local group rewards & QR loyalty in Bishkek</title>
-  <meta name="description" content="Discover group deals and QR rewards from local cafes, salons, barbers, and shops in Bishkek. Create a group, invite friends, check in together, and unlock rewards — no app download required." />
+  <!-- Meta copy is Russian — primary search language of the Kyrgyz market. -->
+  <title>Jaqyn — QR-лояльность и акции от местных заведений Бишкека</title>
+  <meta name="description" content="Собирайте штампы, бонусы и награды в любимых кафе, салонах, барбершопах и магазинах Бишкека. Групповые акции и QR-лояльность — без установки приложения." />
+  <link rel="canonical" href="%SITE_URL%/" />
+
+  <!-- Open Graph / social sharing -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Jaqyn" />
+  <meta property="og:url" content="%SITE_URL%/" />
+  <meta property="og:title" content="Jaqyn — QR-лояльность и акции от местных заведений Бишкека" />
+  <meta property="og:description" content="Собирайте штампы, бонусы и награды в любимых заведениях Бишкека. Групповые акции и QR-лояльность — без установки приложения." />
+  <meta property="og:locale" content="ru_RU" />
+  <meta property="og:locale:alternate" content="ky_KG" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta name="twitter:card" content="summary" />
+
+  <!-- Structured data: helps search engines and AI assistants extract facts. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Jaqyn",
+    "url": "%SITE_URL%/",
+    "logo": "%SITE_URL%/favicon.svg",
+    "email": "hello@jaqyn.kg",
+    "description": "Платформа лояльности для локальных заведений: QR-штампы, бонусы, ваучеры и групповые акции для кафе, салонов и магазинов Кыргызстана.",
+    "areaServed": {
+      "@type": "Country",
+      "name": "Kyrgyzstan"
+    },
+    "sameAs": [
+      "https://www.instagram.com/jaqyn.kg",
+      "https://t.me/jaqyn_kg"
+    ]
+  }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />

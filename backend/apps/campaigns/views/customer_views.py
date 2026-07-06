@@ -278,19 +278,27 @@ class GroupSessionStartView(APIView):
 
 
 class GroupSessionListView(APIView):
+    """Paginated list of the customer's active group sessions.
+
+    Returns non-terminal groups the customer leads or actively belongs to,
+    newest-first. The frontend reads ``campaign``/``campaign_name`` to render
+    the "Your active group" banner and to decide create-vs-forming.
+    Default page: 25, hard max: 100 (via ``?page_size``). A customer can only
+    be in one active group per campaign, so this list is tiny in practice;
+    pagination enforces the contract that no list endpoint is unbounded.
+    """
+
     permission_classes = [IsCustomer]
     serializer_class = GroupSerializer
+    pagination_class = StandardResultsSetPagination
 
     def get(self, request):
-        """List the customer's active groups (feed banner + per-campaign lookup).
-
-        Returns non-terminal groups the customer leads or actively belongs to,
-        newest-first. The frontend reads ``campaign``/``campaign_name`` to render
-        the "Your active group" banner and to decide create-vs-forming.
-        """
         groups = CampaignGroupService.active_groups_for_customer(request.user)
-        data = GroupSerializer(groups, many=True, context={"request": request}).data
-        return success_response({"results": data})
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(groups, request, view=self)
+        return paginator.get_paginated_response(
+            GroupSerializer(page, many=True, context={"request": request}).data
+        )
 
 
 class GroupSessionDetailView(APIView):

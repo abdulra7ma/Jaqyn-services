@@ -217,3 +217,61 @@ def test_staff_emoji_update_does_not_clear_emoji_when_empty_string(api_client):
     # avatar must still be set (empty emoji does NOT clear photo)
     assert bool(staff.avatar)
     assert staff.avatar_emoji == ""
+
+
+# --- D3: avatar upload size cap ------------------------------------------------
+# AvatarUploadView reads raw from request.FILES (no DRF ImageField).  Django's
+# multipart parser re-wraps uploads as InMemoryUploadedFile, resetting .size to
+# the actual byte count, so we cannot trigger the size guard via a normal HTTP
+# call without sending >5 MB of real bytes.
+#
+# Instead: test the view directly by patching request.FILES to inject a mock
+# file object whose .size exceeds MAX_IMAGE_UPLOAD_BYTES.
+
+
+@pytest.mark.django_db
+def test_avatar_view_size_guard_raises_for_oversized_file():
+    """AvatarUploadView raises JaqynAPIException(FILE_TOO_LARGE) for an oversized file.
+
+    Calls ``.post()`` directly (bypassing DRF dispatch + exception handler) so we
+    can assert the domain exception is raised — which is what DRF's dispatch layer
+    would catch and turn into the 400 response the client sees.
+    """
+    from unittest.mock import MagicMock
+
+    from rest_framework.request import Request as DRFRequest
+
+    from apps.accounts.models import User
+    from apps.accounts.views import AvatarUploadView
+    from core.exceptions import JaqynAPIException
+    from core.validators import MAX_IMAGE_UPLOAD_BYTES
+
+    user = User.objects.create_user(
+        phone="+996700555020", role=User.Role.CUSTOMER, is_phone_verified=True
+    )
+
+    big_file = MagicMock()
+    big_file.size = MAX_IMAGE_UPLOAD_BYTES + 1
+
+    mock_request = MagicMock(spec=DRFRequest)
+    mock_request.user = user
+    mock_request.FILES = {"avatar": big_file}
+
+    view_instance = AvatarUploadView()
+
+    with pytest.raises(JaqynAPIException) as exc_info:
+        view_instance.post(mock_request)
+
+    assert exc_info.value.code == "FILE_TOO_LARGE"
+    assert exc_info.value.status_code == 400
+
+
+def test_avatar_upload_accepts_small_file(api_client):
+    """A small avatar (well under 5 MB) is accepted by the endpoint."""
+    phone = "+996700555021"
+    _login(api_client, phone)
+
+    small = SimpleUploadedFile("small.png", _PNG_1x1, content_type="image/png")
+    response = api_client.post("/api/auth/avatar/", {"avatar": small}, format="multipart")
+
+    assert response.status_code == 200

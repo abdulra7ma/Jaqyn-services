@@ -462,6 +462,26 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = PROJECT_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Upload size limits (defence-in-depth alongside the per-field validate_image_size
+# validator in core/validators.py which is the primary user-facing 400).
+#
+# DATA_UPLOAD_MAX_MEMORY_SIZE bounds the *non-file* portion of a multipart request
+# body (form fields, JSON body). Files are excluded from this total.  10 MB is
+# generous — form fields alone should never approach this. Source: Django docs.
+#
+# FILE_UPLOAD_MAX_MEMORY_SIZE is the threshold below which an uploaded file is held
+# in memory; above it Django streams the file to a temporary disk file. It does NOT
+# reject any upload — it is a memory-vs-disk routing knob. Setting it to 10 MB
+# means uploads up to 10 MB stay in RAM (typical for our images); larger files
+# (if they somehow slip through validate_image_size) stream to disk instead of
+# exhausting the process heap. Source: Django docs.
+#
+# Both are set above the 5 MB field cap (MAX_IMAGE_UPLOAD_BYTES in core/validators.py)
+# so Django's request layer never rejects a borderline-OK upload before the field
+# validator has a chance to return the structured {success: false, ...} error body.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   # 10 MB
+
 # Media storage. By default writes to the local MEDIA_ROOT (fine for dev). In
 # production set USE_S3=true to push user uploads to Cloudflare R2 (S3 API) so
 # they persist across container restarts and are served from a CDN-friendly URL.

@@ -1,0 +1,35 @@
+# Marketing site. Everything public is crawlable.
+User-agent: *
+Allow: /
+
+# AI assistant / answer-engine crawlers, allowed explicitly so a future
+# tightening of the wildcard rule doesn't lock them out by accident.
+# We want Jaqyn discoverable in ChatGPT, Claude, Perplexity, Gemini answers.
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: %SITE_URL%/sitemap.xml

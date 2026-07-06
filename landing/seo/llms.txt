@@ -1,0 +1,27 @@
+# Jaqyn
+
+> Jaqyn is a loyalty and rewards platform for local businesses in Bishkek, Kyrgyzstan. Customers collect stamps, points, cashback and vouchers from cafes, salons, barbershops and shops by scanning QR codes — no app download required. Businesses create loyalty programs, campaigns and group offers and track them from a web dashboard.
+
+Languages: Russian (primary), Kyrgyz, English. Market: Kyrgyzstan, starting with Bishkek.
+
+## Sites
+
+- [Marketing site](%SITE_URL%/): what Jaqyn is, benefits for customers and businesses, FAQ, business sign-up form
+- [Web app](%APP_URL%/): customer loyalty wallet, QR scanning, campaigns; business and staff dashboards
+
+## How it works
+
+- A customer scans a business's QR code (or shows their personal QR to staff) to collect stamps or points.
+- Loyalty programs: stamp cards (visits → reward), points → cashback, vouchers with business-defined caps and expiry.
+- Campaigns: individual, group (invite friends, check in together) and time-window offers.
+- Everything runs in the browser; customers do not need to install an app.
+
+## For businesses
+
+- Local businesses in Kyrgyzstan can register via the form on %SITE_URL%/.
+- Contact: hello@jaqyn.kg · Instagram @jaqyn.kg · Telegram @jaqyn_kg
+
+## Legal
+
+- [Privacy policy](%SITE_URL%/privacy.html) (Russian, Kyrgyz, English)
+- [Terms of service](%SITE_URL%/terms.html) (Russian, Kyrgyz, English)

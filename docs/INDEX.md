@@ -69,6 +69,7 @@ Cross-cutting docs live in `docs/`; each deployable has canonical docs under `ba
 | [Campaigns — Business (Owner) Workflow](guides/campaigns-business-workflow.md) | guide | active |
 | [Campaigns — Customer Workflow](guides/campaigns-customer-workflow.md) | guide | active |
 | [Docker — Images & Services](guides/DOCKER.md) | guide | active |
+| [SEO & Online Visibility — Non-Technical Guide](guides/seo-and-visibility.md) | guide | active |
 | [Campaigns Liveness Sweep — QA Report](qa/campaigns-liveness-report.md) | qa | active |
 | [Onboarding / Activation / Landing — Production Readiness Audit](qa/onboarding-production-audit.md) | qa | active |
 | [Conventions](conventions/CONVENTIONS.md) | reference | active |

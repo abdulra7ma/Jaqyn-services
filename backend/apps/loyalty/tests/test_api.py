@@ -207,6 +207,71 @@ def test_loyalty_endpoints_enforce_roles(api_actors):
     assert client.get("/api/customer/loyalty/home-summary/").status_code == 403
 
 
+# ---------------------------------------------------------------------------
+# D1 — pagination envelope assertions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_customer_cards_returns_pagination_envelope(api_actors):
+    """CustomerCardsView returns the standard {count, results, …} envelope."""
+    _, customer, _, business = api_actors
+    program = LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Paginate card",
+        required_count=6,
+    )
+    LoyaltyMembership.objects.create(program=program, customer=customer)
+
+    client = APIClient()
+    client.force_authenticate(customer)
+    response = client.get("/api/customer/loyalty/cards/")
+
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert "count" in data
+    assert "results" in data
+    assert data["count"] == 1
+    assert data["results"][0]["name"] == "Paginate card"
+
+
+@pytest.mark.django_db
+def test_customer_cards_page_size_cap(api_actors):
+    """?page_size=1000000 is silently capped at max_page_size (100)."""
+    _, customer, _, _ = api_actors
+
+    client = APIClient()
+    client.force_authenticate(customer)
+    response = client.get("/api/customer/loyalty/cards/?page_size=1000000")
+
+    assert response.status_code == 200
+    assert "results" in response.data["data"]
+
+
+@pytest.mark.django_db
+def test_customer_business_loyalty_returns_pagination_envelope(api_actors):
+    """CustomerBusinessLoyaltyView returns the standard {count, results} envelope."""
+    _, customer, _, business = api_actors
+    LoyaltyProgram.objects.create(
+        business=business,
+        type=LoyaltyProgram.Type.STAMP,
+        name="Business program",
+        required_count=6,
+        status=LoyaltyProgram.Status.ACTIVE,
+    )
+
+    client = APIClient()
+    client.force_authenticate(customer)
+    response = client.get(f"/api/customer/loyalty/businesses/{business.id}/loyalty/")
+
+    assert response.status_code == 200
+    data = response.data["data"]
+    assert "count" in data
+    assert "results" in data
+    assert data["count"] == 1
+
+
 @pytest.mark.django_db
 def test_customer_home_summary_returns_consecutive_visit_streak(api_actors):
     _, customer, staff, business = api_actors
