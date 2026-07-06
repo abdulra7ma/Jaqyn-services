@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { staffApi } from "./api";
 import { qk } from "../customer/hooks";
-import type { ActivityEventKind } from "./types";
+import type { ActivityEventKind, LoyaltyBatchAward } from "./types";
 
 export const sqk = {
   // ponytail: prefix ["staff","activity"] is the invalidation key; callers that
@@ -45,6 +45,17 @@ export const useConfirmVisitUnified = () => {
   return useMutation({
     mutationFn: (body: { token: string; campaignId?: string; amount?: string }) =>
       staffApi.confirmVisitUnified(body.token, body.campaignId, body.amount),
+    onSuccess: () => qc.invalidateQueries({ queryKey: sqk.activityPrefix }),
+  });
+};
+
+// Combined collect: award several loyalty programs in one confirm (stamps
+// stepper + cashback bill from one scan sheet).
+export const useAwardLoyaltyBatch = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { token: string; awards: LoyaltyBatchAward[] }) =>
+      staffApi.awardLoyaltyBatch(body.token, body.awards),
     onSuccess: () => qc.invalidateQueries({ queryKey: sqk.activityPrefix }),
   });
 };

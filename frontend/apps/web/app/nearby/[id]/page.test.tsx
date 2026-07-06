@@ -77,6 +77,10 @@ function program(over: Partial<LoyaltyCardView>): LoyaltyCardView {
     points_per_som: null,
     cashback_per_point: null,
     pct_back: null,
+    tiers: [],
+    current_tier_name: null,
+    next_tier_name: null,
+    next_tier_visits_left: null,
     ...over,
   };
 }

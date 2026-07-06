@@ -16,6 +16,7 @@ from apps.loyalty.models import (
     LoyaltyVoucher,
 )
 from apps.loyalty.serializers import (
+    AwardBatchSerializer,
     AwardSerializer,
     LoyaltyCardSerializer,
     LoyaltyHomeSummarySerializer,
@@ -28,12 +29,14 @@ from apps.loyalty.serializers import (
     SelectItemSerializer,
 )
 from apps.loyalty.services import (
+    LoyaltyAwardItem,
     LoyaltyHomeService,
     LoyaltyAnalyticsService,
     LoyaltyEarningService,
     LoyaltyMembershipService,
     LoyaltyProgramService,
     LoyaltyRedemptionService,
+    LoyaltyTierService,
 )
 from apps.qr.services import resolve_qr_token
 from apps.staff.services import get_staff_for_user
@@ -52,7 +55,9 @@ class _WriteThrottleMixin:
 
 def _owner_program(request: object, program_id: object) -> LoyaltyProgram:
     return get_object_or_404(
-        LoyaltyProgram.objects.select_related("business", "catalog_item"),
+        LoyaltyProgram.objects.select_related(
+            "business", "catalog_item"
+        ).prefetch_related("tiers"),
         id=program_id,
         business=request.user.owned_business,
     )
@@ -234,13 +239,25 @@ class ArchiveProgramView(BusinessProgramActionView):
 
 
 class CustomerCardsView(APIView):
+    """Paginated loyalty-card wallet for the authenticated customer.
+
+    The service returns a Python list (already ordered by recency); the
+    paginator works equally on lists and QuerySets (Django pagination contract).
+    Default page: 25, hard max: 100 (via ``?page_size``). In practice most
+    customers hold fewer than 25 cards, but pagination enforces the contract
+    that no list endpoint is unbounded.
+    """
+
     permission_classes = [IsCustomer]
     serializer_class = LoyaltyCardSerializer
+    pagination_class = StandardResultsSetPagination
 
     def get(self, request):
         cards = LoyaltyMembershipService.cards_for_customer(request.user)
-        return success_response(
-            {"results": LoyaltyCardSerializer(cards, many=True).data}
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(cards, request, view=self)
+        return paginator.get_paginated_response(
+            LoyaltyCardSerializer(page, many=True).data
         )
 
 
@@ -259,7 +276,8 @@ class CustomerProgramView(APIView):
 
     def get(self, request, program_id):
         program = get_object_or_404(
-            LoyaltyProgram.objects.select_related("business"), id=program_id
+            LoyaltyProgram.objects.select_related("business").prefetch_related("tiers"),
+            id=program_id,
         )
         card = LoyaltyMembershipService.card_view(program, request.user)
         history = (
@@ -281,7 +299,7 @@ class CustomerJoinView(_WriteThrottleMixin, APIView):
 
     def post(self, request, program_id):
         program = get_object_or_404(
-            LoyaltyProgram.objects.select_related("business"),
+            LoyaltyProgram.objects.select_related("business").prefetch_related("tiers"),
             id=program_id,
             status=LoyaltyProgram.Status.ACTIVE,
         )
@@ -395,16 +413,27 @@ class CustomerSelectVoucherItemView(_WriteThrottleMixin, APIView):
 
 
 class CustomerBusinessLoyaltyView(APIView):
+    """Paginated list of a business's active loyalty programs for one customer.
+
+    The service returns a Python list (programs the customer joined, plus
+    zero-state cards for unjoined ones). Default page: 25, hard max: 100.
+    A business rarely runs more than a handful of concurrent programs, but
+    pagination enforces the contract that no list endpoint is unbounded.
+    """
+
     permission_classes = [IsCustomer]
     serializer_class = LoyaltyCardSerializer
+    pagination_class = StandardResultsSetPagination
 
     def get(self, request, business_id):
         business = get_object_or_404(Business, id=business_id)
         rows = LoyaltyMembershipService.rows_for_business_customer(
             business, request.user
         )
-        return success_response(
-            {"results": LoyaltyCardSerializer(rows, many=True).data}
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(rows, request, view=self)
+        return paginator.get_paginated_response(
+            LoyaltyCardSerializer(page, many=True).data
         )
 
 
@@ -441,6 +470,81 @@ class StaffAwardView(_WriteThrottleMixin, APIView):
                 "voucher": LoyaltyVoucherSerializer(result.voucher).data
                 if result.voucher
                 else None,
+            }
+        )
+
+
+class StaffAwardBatchView(_WriteThrottleMixin, APIView):
+    permission_classes = [IsStaff]
+    serializer_class = AwardBatchSerializer
+
+    def post(self, request):
+        """Combined collect: apply one till order across several programs.
+
+        One scan, one confirm — e.g. quantity=5 on the stamp card AND the bill
+        amount on the cashback program land atomically (service-level batch).
+        The view resolves the token, loads each named program, and shapes one
+        result row per leg, including any vouchers the legs minted and the
+        customer's cashback-status rung after the award.
+        """
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        staff = get_staff_for_user(request.user)
+        token = resolve_qr_token(
+            serializer.validated_data["token"], request, action="loyalty_award"
+        )
+        if token.customer is None:
+            raise JaqynAPIException("INVALID_QR_TOKEN")
+        programs = {
+            program.id: program
+            for program in LoyaltyProgram.objects.filter(
+                id__in=[
+                    entry["program_id"] for entry in serializer.validated_data["awards"]
+                ],
+                business=staff.business,
+            ).prefetch_related("tiers")
+        }
+        items = []
+        for entry in serializer.validated_data["awards"]:
+            program = programs.get(entry["program_id"])
+            if program is None:
+                raise JaqynAPIException(
+                    "NOT_FOUND", "Unknown loyalty program", status_code=404
+                )
+            items.append(
+                LoyaltyAwardItem(
+                    program=program,
+                    bill_amount=entry.get("amount"),
+                    quantity=entry["quantity"],
+                )
+            )
+        results = LoyaltyEarningService.award_batch(token.customer, staff, items)
+        rows = []
+        for item, result in zip(items, results):
+            membership = result.membership
+            standing = LoyaltyTierService.standing(
+                item.program, membership.visits_count
+            )
+            rows.append(
+                {
+                    "program_id": str(item.program.id),
+                    "name": item.program.name,
+                    "type": item.program.type,
+                    "points_awarded": result.points_awarded,
+                    "stamps_count": membership.stamps_count,
+                    "visits_count": membership.visits_count,
+                    "required_count": item.program.required_count,
+                    "points_balance": membership.points_balance,
+                    "tier_name": standing.current.name if standing.current else None,
+                    "vouchers": LoyaltyVoucherSerializer(
+                        result.vouchers, many=True
+                    ).data,
+                }
+            )
+        return success_response(
+            {
+                "customer": token.customer.name or "Customer",
+                "results": rows,
             }
         )
 

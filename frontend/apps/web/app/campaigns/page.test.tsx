@@ -43,6 +43,7 @@ function makeLoyaltyCard(over: Partial<LoyaltyCardView> = {}): LoyaltyCardView {
     reward_expiry_days: 30, joined: true, stamps_count: 3, visits_count: 0,
     required_count: 6, points_balance: 0, min_redeem_points: null,
     points_per_som: null, cashback_per_point: null, pct_back: null,
+    tiers: [], current_tier_name: null, next_tier_name: null, next_tier_visits_left: null,
     ...over,
   };
 }

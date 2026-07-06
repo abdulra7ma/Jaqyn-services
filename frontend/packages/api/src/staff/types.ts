@@ -94,6 +94,40 @@ export type CampaignScanRow = {
   cashback_per_point: string | null;
   // Som spent so far toward a spend goal. Decimal string ("0" when none).
   current_spend: string;
+  // Effective cashback % for THIS customer — their status-ladder rung when the
+  // program has tiers, else the flat rate. Decimal string; null when unknown.
+  pct_back: string | null;
+  // Customer's status name on the cashback ladder (null = program has none).
+  tier_name: string | null;
+};
+
+// ---- combined collect (one scan → stamps + cashback in one confirm) ----
+
+// One program leg of a combined award: quantity = items bought (stamp cards),
+// amount = the bill in som (spend-basis points/cashback).
+export type LoyaltyBatchAward = {
+  program_id: string;
+  amount?: string;
+  quantity?: number;
+};
+
+export type LoyaltyBatchRow = {
+  program_id: string;
+  name: string;
+  type: "points" | "stamp" | "visit";
+  points_awarded: number;
+  stamps_count: number;
+  visits_count: number;
+  required_count: number | null;
+  points_balance: number;
+  tier_name: string | null;
+  // Vouchers this leg minted (a multi-stamp award can complete several cycles).
+  vouchers: Array<{ reward_title: string }>;
+};
+
+export type LoyaltyBatchResult = {
+  customer: string;
+  results: LoyaltyBatchRow[];
 };
 
 // An active voucher the customer holds for this business — surfaced in the

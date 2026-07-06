@@ -90,6 +90,39 @@ class LoyaltyProgram(TimeStampedModel):
         return self.name
 
 
+class LoyaltyTier(TimeStampedModel):
+    """One rung of a cashback status ladder on a spend-basis points program.
+
+    A customer's lifetime visit count at the business selects the highest rung
+    whose ``min_visits`` they have reached; that rung's ``cashback_percent``
+    is the effective cashback rate applied to each bill. The rung's ``name``
+    is the customer-facing status label (e.g. "Silver").
+    """
+
+    program = models.ForeignKey(
+        LoyaltyProgram, on_delete=models.CASCADE, related_name="tiers"
+    )
+    # Customer-facing status label ("Bronze", "Gold", ...). Owner-defined copy,
+    # not an enum — businesses name their own levels.
+    name = models.CharField(max_length=60)
+    # Lifetime visits needed to hold this status. The first rung of a ladder is
+    # always 0 so every member has a status from their first visit.
+    min_visits = models.PositiveIntegerField()
+    # Effective cashback rate at this status, in percent of the bill (0–100].
+    cashback_percent = models.DecimalField(max_digits=5, decimal_places=2)
+
+    class Meta:
+        ordering = ["min_visits"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["program", "min_visits"], name="uniq_loyalty_tier_threshold"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.min_visits}+)"
+
+
 class LoyaltyMembership(TimeStampedModel):
     class Status(models.TextChoices):
         # Inactive cards preserve history without accepting new awards.

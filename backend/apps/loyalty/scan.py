@@ -6,6 +6,7 @@ from decimal import Decimal
 from apps.campaigns.models import CampaignRewardVoucher, Group
 from apps.campaigns.services import StaffScannerService
 from apps.loyalty.models import LoyaltyMembership, LoyaltyProgram, LoyaltyVoucher
+from apps.loyalty.services import LoyaltyTierService
 from apps.qr.models import QRCodeToken
 from apps.qr.services import resolve_qr_token
 from apps.staff.models import StaffMember
@@ -26,7 +27,11 @@ class LoyaltyScanRow:
     points_per_som: Decimal | None
     points_per_visit: int | None
     cashback_per_point: Decimal | None
+    # Effective cashback % for THIS customer — their current status-ladder rung
+    # when the program has tiers, else the flat program rate.
     pct_back: Decimal | None
+    # Customer's status name on the program's cashback ladder (None = no ladder).
+    tier_name: str | None
     current_spend: Decimal
     needs_amount: bool
 
@@ -112,9 +117,13 @@ class UnifiedStaffScanService:
             campaign_result = StaffScannerService.scan_customer_qr(
                 staff, raw_token, request=request
             )
-            programs = LoyaltyProgram.objects.filter(
-                business=staff.business, status=LoyaltyProgram.Status.ACTIVE
-            ).select_related("business")
+            programs = (
+                LoyaltyProgram.objects.filter(
+                    business=staff.business, status=LoyaltyProgram.Status.ACTIVE
+                )
+                .select_related("business")
+                .prefetch_related("tiers")
+            )
             memberships = {
                 row.program_id: row
                 for row in LoyaltyMembership.objects.filter(
@@ -130,6 +139,15 @@ class UnifiedStaffScanService:
                     and program.cashback_per_point is not None
                     else None
                 )
+                # Status ladder: staff sees the customer's real rate/rung, not
+                # the flat program rate.
+                standing = LoyaltyTierService.standing(
+                    program, membership.visits_count if membership else 0
+                )
+                tier_name = None
+                if standing.current is not None:
+                    pct_back = standing.current.cashback_percent
+                    tier_name = standing.current.name
                 loyalty.append(
                     LoyaltyScanRow(
                         program_id=str(program.id),
@@ -144,6 +162,7 @@ class UnifiedStaffScanService:
                         points_per_visit=program.points_per_visit,
                         cashback_per_point=program.cashback_per_point,
                         pct_back=pct_back,
+                        tier_name=tier_name,
                         current_spend=membership.current_spend
                         if membership
                         else Decimal("0"),
@@ -208,11 +227,15 @@ class UnifiedStaffScanService:
         """
         rows: list[ActiveVoucherRow] = []
 
-        campaign_vouchers = CampaignRewardVoucher.objects.filter(
-            customer=customer,
-            business=business,
-            status=CampaignRewardVoucher.Status.ACTIVE,
-        ).select_related("reward").order_by("-issued_at")
+        campaign_vouchers = (
+            CampaignRewardVoucher.objects.filter(
+                customer=customer,
+                business=business,
+                status=CampaignRewardVoucher.Status.ACTIVE,
+            )
+            .select_related("reward")
+            .order_by("-issued_at")
+        )
         for v in campaign_vouchers:
             reward = getattr(v, "reward", None)
             label = reward.title if reward is not None else "Reward"

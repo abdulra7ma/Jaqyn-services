@@ -17,6 +17,12 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { QueryBoundary } from "../../../_components/QueryBoundary";
 import { OwnerShell } from "../../_components/OwnerShell";
 import { LOYALTY_TYPE_GLYPH } from "../../_components/loyalty";
+import {
+  DEFAULT_TIER_DRAFTS,
+  draftsToTiers,
+  TierEditor,
+  tiersToDrafts,
+} from "../../_components/TierEditor";
 
 type Tab = "overview" | "members" | "transactions" | "rewardUsage" | "analytics" | "settings";
 
@@ -214,6 +220,61 @@ function OverviewTab({ p }: { p: BusinessLoyaltyProgramDetail }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <LoyaltyMeter p={p} />
         <RewardCard p={p} />
+      </div>
+
+      <TierLadderCard p={p} />
+    </div>
+  );
+}
+
+/**
+ * Owner view of the cashback status ladder: each rung with its threshold and
+ * rate, plus how many members currently hold that status (derived from the
+ * members' lifetime visit counts). Hidden when the program has no ladder.
+ */
+function TierLadderCard({ p }: { p: BusinessLoyaltyProgramDetail }) {
+  const t = useT();
+  const tiers = p.tiers ?? [];
+  if (tiers.length === 0) return null;
+
+  const memberCounts = tiers.map((tier, i) => {
+    const next = tiers[i + 1];
+    return (p.members ?? []).filter((m) => {
+      const visits = m.state.visits_count ?? 0;
+      return visits >= tier.min_visits && (next == null || visits < next.min_visits);
+    }).length;
+  });
+
+  return (
+    <div className={PANEL}>
+      <div className="text-[11px] font-bold uppercase tracking-[0.04em] text-subtle">
+        {t("loyalty.biz.tiers.ladder")}
+      </div>
+      <div className="mt-4 flex flex-col gap-2.5">
+        {tiers.map((tier, i) => (
+          <div key={tier.name} className="flex items-center gap-3 rounded-xl bg-cream/60 px-3.5 py-3">
+            <span
+              className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-brand-muted font-display text-[13px] font-bold text-brand"
+              aria-hidden
+            >
+              {i + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13.5px] font-bold text-ink">{tier.name}</div>
+              <div className="text-[12px] text-subtle">
+                {tier.min_visits === 0
+                  ? t("loyalty.tiers.fromStart")
+                  : t("loyalty.tiers.fromVisits").replace("{count}", String(tier.min_visits))}
+              </div>
+            </div>
+            <span className="flex-none text-[12px] font-semibold text-subtle">
+              {t("loyalty.biz.tiers.membersAt").replace("{count}", String(memberCounts[i]))}
+            </span>
+            <span className="flex-none rounded-pill bg-brand-muted px-3 py-1 text-[12.5px] font-bold text-brand">
+              {Number(tier.cashback_percent)}%
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -593,15 +654,27 @@ function SettingsTab({ p }: { p: BusinessLoyaltyProgramDetail }) {
   const [maxBanked, setMaxBanked] = useState(String(s.max_banked ?? ""));
   const [reward, setReward] = useState(s.reward_title ?? "");
   const [expiry, setExpiry] = useState(String(s.reward_expiry_days ?? ""));
+  // Status ladder draft — spend-basis points programs only (backend rule).
+  const ladderApplies = s.type === "points" && s.points_basis === "spend";
+  const [tiersEnabled, setTiersEnabled] = useState((s.tiers ?? []).length > 0);
+  const [tierRows, setTierRows] = useState(() =>
+    s.tiers?.length ? tiersToDrafts(s.tiers) : DEFAULT_TIER_DRAFTS,
+  );
+  const ladder = ladderApplies && tiersEnabled ? draftsToTiers(tierRows) : null;
+  const tiersInvalid = ladderApplies && tiersEnabled && ladder === null;
 
   function onSave() {
+    if (tiersInvalid) return;
     const payload: Partial<LoyaltyProgramInput> =
       s.type === "points"
         ? {
             name: name.trim(),
             ...(s.points_basis === "visit"
               ? { points_per_visit: Number(rate) }
-              : { points_per_som: rate }),
+              : ladder
+                ? // Each rung prices its own rate; the ladder replaces the flat rate.
+                  { points_per_som: null, tiers: ladder }
+                : { points_per_som: rate, tiers: [] }),
             cashback_per_point: cashback,
             min_redeem_points: Number(minimum),
           }
@@ -637,12 +710,14 @@ function SettingsTab({ p }: { p: BusinessLoyaltyProgramDetail }) {
           {s.type === "points" ? (
             <>
               <div className="flex gap-3">
-                <label className="block flex-1">
-                  <span className={SET_LABEL}>
-                    {s.points_basis === "visit" ? t("loyalty.biz.mech.ratePerVisit") : t("loyalty.biz.mech.ratePerSom")}
-                  </span>
-                  <input value={rate} onChange={(e) => setRate(e.target.value)} inputMode="numeric" className={SET_FIELD} />
-                </label>
+                {!(ladderApplies && tiersEnabled) && (
+                  <label className="block flex-1">
+                    <span className={SET_LABEL}>
+                      {s.points_basis === "visit" ? t("loyalty.biz.mech.ratePerVisit") : t("loyalty.biz.mech.ratePerSom")}
+                    </span>
+                    <input value={rate} onChange={(e) => setRate(e.target.value)} inputMode="numeric" className={SET_FIELD} />
+                  </label>
+                )}
                 <label className="block flex-1">
                   <span className={SET_LABEL}>{t("loyalty.biz.cashbackRate")}</span>
                   <input value={cashback} onChange={(e) => setCashback(e.target.value)} inputMode="numeric" className={SET_FIELD} />
@@ -652,6 +727,36 @@ function SettingsTab({ p }: { p: BusinessLoyaltyProgramDetail }) {
                 <span className={SET_LABEL}>{t("loyalty.biz.minimum")}</span>
                 <input value={minimum} onChange={(e) => setMinimum(e.target.value)} inputMode="numeric" className={SET_FIELD} />
               </label>
+              {ladderApplies && (
+                <div className="rounded-2xl border-[1.5px] border-line bg-card p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13.5px] font-bold text-ink">{t("loyalty.biz.tiers.toggle")}</p>
+                      <p className="mt-0.5 text-[12px] text-subtle">{t("loyalty.biz.tiers.toggleSub")}</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={tiersEnabled}
+                      aria-label={t("loyalty.biz.tiers.toggle")}
+                      onClick={() => setTiersEnabled((v) => !v)}
+                      className={`relative h-5 w-9 flex-none rounded-pill transition ${tiersEnabled ? "bg-brand" : "bg-handle"}`}
+                    >
+                      <span
+                        className={`absolute top-[3px] h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-all ${tiersEnabled ? "left-[19px]" : "left-[3px]"}`}
+                      />
+                    </button>
+                  </div>
+                  {tiersEnabled && (
+                    <div className="mt-4">
+                      <TierEditor rows={tierRows} onChange={setTierRows} />
+                      {tiersInvalid && (
+                        <p className="mt-2 text-[12.5px] font-semibold text-danger">{t("loyalty.biz.tiers.invalid")}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -725,7 +830,7 @@ function SettingsTab({ p }: { p: BusinessLoyaltyProgramDetail }) {
         <div className="mt-6 flex items-center gap-3">
           <button
             onClick={onSave}
-            disabled={update.isPending}
+            disabled={update.isPending || tiersInvalid}
             className="rounded-xl bg-brand px-[22px] py-3.5 text-[14.5px] font-bold text-brand-fg shadow-glow transition active:scale-[.99] disabled:opacity-60"
           >
             {update.isPending ? t("loyalty.biz.set.saving") : t("loyalty.biz.set.save")}

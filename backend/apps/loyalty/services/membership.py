@@ -10,6 +10,17 @@ from django.db.models import QuerySet
 from apps.accounts.models import User
 from apps.loyalty.models import LoyaltyMembership, LoyaltyProgram
 
+from .tiers import LoyaltyTierService
+
+
+@dataclass(frozen=True)
+class LoyaltyTierView:
+    """One rung of a program's cashback status ladder, as shown to customers."""
+
+    name: str
+    min_visits: int
+    cashback_percent: Decimal
+
 
 @dataclass(frozen=True)
 class LoyaltyCardView:
@@ -46,6 +57,13 @@ class LoyaltyCardView:
     points_per_som: Decimal | None
     cashback_per_point: Decimal | None
     pct_back: Decimal | None
+    # Cashback status ladder (empty when the program has none) plus the
+    # customer's standing on it: current status name, the next rung, and how
+    # many visits remain to reach it (None at the top or off-ladder).
+    tiers: list[LoyaltyTierView]
+    current_tier_name: str | None
+    next_tier_name: str | None
+    next_tier_visits_left: int | None
     # Business geo-coordinates, exposed so the client (which owns geolocation
     # permission) can compute distance labels like "120 m". Nullable — many
     # businesses are not yet geo-tagged. Source: spec §B lat/lng exposure.
@@ -106,8 +124,9 @@ class LoyaltyMembershipService:
             ignore_conflicts=True,
         )
         memberships = list(
-            LoyaltyMembership.objects.filter(customer=customer, program__in=programs)
-            .order_by("program__created_at", "program_id")
+            LoyaltyMembership.objects.filter(
+                customer=customer, program__in=programs
+            ).order_by("program__created_at", "program_id")
         )
         return WalletJoinResult(
             memberships=memberships,
@@ -120,7 +139,13 @@ class LoyaltyMembershipService:
         customer: User,
         membership: LoyaltyMembership | None = None,
     ) -> LoyaltyCardView:
-        """Project program config plus optional customer state without creating a card."""
+        """Project program config plus optional customer state without creating a card.
+
+        When the program carries a cashback status ladder, ``pct_back`` is the
+        customer's current rung rate (their real effective cashback), the full
+        ladder is included for display, and next-rung progress is computed from
+        the membership's lifetime visit count.
+        """
         if membership is None:
             membership = LoyaltyMembership.objects.filter(
                 program=program, customer=customer
@@ -134,6 +159,19 @@ class LoyaltyMembershipService:
             pct_back = (
                 program.points_per_som * program.cashback_per_point * Decimal("100")
             )
+        tiers = [
+            LoyaltyTierView(
+                name=tier.name,
+                min_visits=tier.min_visits,
+                cashback_percent=tier.cashback_percent,
+            )
+            for tier in program.tiers.all()
+        ]
+        standing = LoyaltyTierService.standing(
+            program, membership.visits_count if membership else 0
+        )
+        if standing.current is not None:
+            pct_back = standing.current.cashback_percent
         logo_url = program.business.logo.url if program.business.logo else None
         return LoyaltyCardView(
             program_id=str(program.id),
@@ -159,6 +197,10 @@ class LoyaltyMembershipService:
             points_per_som=program.points_per_som,
             cashback_per_point=program.cashback_per_point,
             pct_back=pct_back,
+            tiers=tiers,
+            current_tier_name=standing.current.name if standing.current else None,
+            next_tier_name=standing.next_tier.name if standing.next_tier else None,
+            next_tier_visits_left=standing.visits_to_next,
             business_lat=program.business.latitude,
             business_lng=program.business.longitude,
         )
@@ -169,6 +211,7 @@ class LoyaltyMembershipService:
         memberships: QuerySet[LoyaltyMembership] = (
             LoyaltyMembership.objects.filter(customer=customer)
             .select_related("program__business")
+            .prefetch_related("program__tiers")
             .order_by("-last_activity_at", "-joined_at", "id")
         )
         return [
@@ -181,9 +224,13 @@ class LoyaltyMembershipService:
         business: object, customer: User
     ) -> list[LoyaltyCardView]:
         """Return every active business program, including unjoined zero-state cards."""
-        programs = LoyaltyProgram.objects.filter(
-            business=business, status=LoyaltyProgram.Status.ACTIVE
-        ).select_related("business")
+        programs = (
+            LoyaltyProgram.objects.filter(
+                business=business, status=LoyaltyProgram.Status.ACTIVE
+            )
+            .select_related("business")
+            .prefetch_related("tiers")
+        )
         memberships = {
             m.program_id: m
             for m in LoyaltyMembership.objects.filter(

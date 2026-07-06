@@ -19,6 +19,8 @@ import type {
   CampaignVoucherScanState,
   ConfirmGroupResult,
   ConfirmSocialResult,
+  LoyaltyBatchAward,
+  LoyaltyBatchResult,
   RecentActivityPage,
   RedeemCampaignVoucherResult,
   ScanDispatchResult,
@@ -101,6 +103,16 @@ export const staffApi = {
       })
       .then(adaptUnifiedScan);
   },
+  // Combined collect: one confirm awards several loyalty programs atomically —
+  // e.g. quantity=5 stamps AND the bill amount on the cashback program.
+  awardLoyaltyBatch: (
+    token: string,
+    awards: LoyaltyBatchAward[],
+  ): Promise<LoyaltyBatchResult> =>
+    api.post<LoyaltyBatchResult>("/api/staff/loyalty/award-batch/", {
+      token,
+      awards,
+    }),
   async scanCampaignVoucher(token: string): Promise<CampaignVoucherScanResult> {
     // A valid voucher resolves to the voucher object; the backend raises a typed
     // error for an invalid one. Map the known voucher-error codes to the design's

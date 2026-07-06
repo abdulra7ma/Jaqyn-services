@@ -77,6 +77,8 @@ export function adaptScanCustomerResult(raw: Raw): ScanCustomerResult {
       points_per_visit: row.points_per_visit ?? null,
       cashback_per_point: row.cashback_per_point ?? null,
       current_spend: String(row.current_spend ?? "0"),
+      pct_back: row.pct_back ?? null,
+      tier_name: row.tier_name ?? null,
     };
   });
   const activeVouchers: ActiveVoucher[] = Array.isArray(raw.active_vouchers)
@@ -202,6 +204,9 @@ export function adaptScanDispatch(raw: Raw): ScanDispatchResult {
         points_per_visit: row.points_per_visit ?? null,
         cashback_per_point: row.cashback_per_point ?? null,
         current_spend: String(row.current_spend ?? "0"),
+        // Tier-aware effective % + status name from the backend scan row.
+        pct_back: row.pct_back ?? null,
+        tier_name: row.tier_name ?? null,
       }));
       const campaignRows: CampaignScanRow[] = campaigns.map((row) => ({
         campaign_id: row.campaign_id ?? "",
@@ -221,6 +226,8 @@ export function adaptScanDispatch(raw: Raw): ScanDispatchResult {
         points_per_visit: null,
         cashback_per_point: null,
         current_spend: "0",
+        pct_back: null,
+        tier_name: null,
       }));
       const allRows = [...loyaltyRows, ...campaignRows];
       const activeVouchers: ActiveVoucher[] = Array.isArray(raw.active_vouchers)

@@ -1,6 +1,15 @@
 export type LoyaltyType = "points" | "stamp" | "visit";
 export type LoyaltyStatus = "active" | "paused" | "archived";
 
+/** One rung of a cashback status ladder: reach `min_visits` lifetime visits to
+ * hold status `name` and earn `cashback_percent` of every bill back. */
+export type LoyaltyTier = {
+  name: string;
+  min_visits: number;
+  /** Decimal string from the backend, e.g. "5.00". */
+  cashback_percent: string;
+};
+
 export type LoyaltyCardView = {
   program_id: string;
   business_id: string;
@@ -29,7 +38,14 @@ export type LoyaltyCardView = {
   min_redeem_points: number | null;
   points_per_som: string | null;
   cashback_per_point: string | null;
+  /** Effective cashback % — the customer's current rung rate when the program
+   * has a status ladder, else the flat program rate. */
   pct_back: string | null;
+  /** Cashback status ladder; empty when the program has none. */
+  tiers: LoyaltyTier[];
+  current_tier_name: string | null;
+  next_tier_name: string | null;
+  next_tier_visits_left: number | null;
 };
 
 export type LoyaltyTransaction = {
@@ -120,6 +136,8 @@ export type LoyaltyProgramConfig = {
   reward_expiry_days?: number;
   item_selection?: "fixed" | "customer" | null;
   catalog_item_id?: string | null;
+  /** Status ladder; sending the full list replaces it, [] removes it. */
+  tiers?: LoyaltyTier[];
   members?: number;
   outstanding?: number;
   redeemed?: number;

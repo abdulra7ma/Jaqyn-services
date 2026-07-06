@@ -6,6 +6,7 @@ import { ScanIcon } from "../../_components/icons";
 import { useQrSheet } from "../../_components/QrSheet";
 import type { WalletReward, WalletShopCard } from "../_lib/wallet";
 import { ACCENT_BG, isCashback } from "../_lib/wallet";
+import { TierLadder } from "./TierLadder";
 
 type Translate = ReturnType<typeof useT>;
 
@@ -76,12 +77,19 @@ function ProgramRow({ program }: { program: LoyaltyCardView }) {
       </div>
 
       {cash ? (
-        <p className="mt-2.5 font-display text-[26px] font-extrabold leading-none text-brand">
-          {som}{" "}
-          <span className="font-sans text-[13px] font-bold text-amber-deep">
-            {t("cmp.loyalty.somCashback")}
-          </span>
-        </p>
+        <>
+          <p className="mt-2.5 font-display text-[26px] font-extrabold leading-none text-brand">
+            {som}{" "}
+            <span className="font-sans text-[13px] font-bold text-amber-deep">
+              {t("cmp.loyalty.somCashback")}
+            </span>
+          </p>
+          {program.tiers.length > 0 && (
+            <div className="mt-3 border-t border-line pt-3">
+              <TierLadder program={program} embedded />
+            </div>
+          )}
+        </>
       ) : total > 0 ? (
         <div className="mt-2.5">
           <div className="h-2 overflow-hidden rounded-pill bg-board">

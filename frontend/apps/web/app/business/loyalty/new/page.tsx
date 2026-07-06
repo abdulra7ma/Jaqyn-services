@@ -7,6 +7,12 @@ import { useState } from "react";
 import { useErrMessage } from "../../../_lib/useErrMessage";
 import { OwnerShell } from "../../_components/OwnerShell";
 import { LOYALTY_TYPE_GLYPH } from "../../_components/loyalty";
+import {
+  DEFAULT_TIER_DRAFTS,
+  draftsToTiers,
+  TierEditor,
+  type TierDraft,
+} from "../../_components/TierEditor";
 
 const LOYALTY_TYPES: LoyaltyType[] = ["points", "stamp", "visit"];
 const STEPS = ["type", "mechanics", "reward", "review"] as const;
@@ -30,6 +36,8 @@ type Form = {
   itemMode: "fixed" | "customer";
   item: string;
   expiryDays: string;
+  tiersEnabled: boolean;
+  tiers: TierDraft[];
 };
 
 const DEFAULT: Form = {
@@ -45,12 +53,20 @@ const DEFAULT: Form = {
   itemMode: "customer",
   item: "",
   expiryDays: "90",
+  tiersEnabled: false,
+  tiers: DEFAULT_TIER_DRAFTS,
 };
+
+/** A ladder applies only to spend-basis points programs (backend rule). */
+function tiersActive(f: Form): boolean {
+  return f.tiersEnabled && f.type === "points" && f.basis === "spend";
+}
 
 function validateForm(f: Form): string | null {
   if (!f.name.trim()) return "loyalty.biz.form.invalid.name";
   if (f.type !== "points" && !f.reward.trim()) return "loyalty.biz.form.invalid.reward";
   if (f.type !== "points" && f.itemMode === "fixed" && !f.item) return "loyalty.biz.form.invalid.item";
+  if (tiersActive(f) && draftsToTiers(f.tiers) === null) return "loyalty.biz.tiers.invalid";
   return null;
 }
 
@@ -153,12 +169,14 @@ function StepMechanics({ form, set }: { form: Form; set: <K extends keyof Form>(
               </select>
             </label>
             <div className="flex gap-3">
-              <Field
-                label={form.basis === "visit" ? t("loyalty.biz.mech.ratePerVisit") : t("loyalty.biz.mech.ratePerSom")}
-                value={form.rate}
-                onChange={(v) => set("rate", v)}
-                inputMode="numeric"
-              />
+              {!tiersActive(form) && (
+                <Field
+                  label={form.basis === "visit" ? t("loyalty.biz.mech.ratePerVisit") : t("loyalty.biz.mech.ratePerSom")}
+                  value={form.rate}
+                  onChange={(v) => set("rate", v)}
+                  inputMode="numeric"
+                />
+              )}
               <Field
                 label={t("loyalty.biz.cashbackRate")}
                 value={form.cashback}
@@ -172,10 +190,38 @@ function StepMechanics({ form, set }: { form: Form; set: <K extends keyof Form>(
               onChange={(v) => set("minimum", v)}
               inputMode="numeric"
             />
-            {Number(form.rate) > 0 && Number(form.cashback) > 0 && (
+            {!tiersActive(form) && Number(form.rate) > 0 && Number(form.cashback) > 0 && (
               <p className="text-[13px] font-semibold text-brand">
                 ≈ {(Number(form.rate) * Number(form.cashback) * 100).toFixed(1)}% {t("loyalty.biz.mech.back")}
               </p>
+            )}
+
+            {form.basis === "spend" && (
+              <div className="rounded-2xl border-[1.5px] border-line bg-card p-4">
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13.5px] font-bold text-ink">{t("loyalty.biz.tiers.toggle")}</p>
+                    <p className="mt-0.5 text-[12px] text-subtle">{t("loyalty.biz.tiers.toggleSub")}</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={form.tiersEnabled}
+                    aria-label={t("loyalty.biz.tiers.toggle")}
+                    onClick={() => set("tiersEnabled", !form.tiersEnabled)}
+                    className={`relative h-5 w-9 flex-none rounded-pill transition ${form.tiersEnabled ? "bg-brand" : "bg-handle"}`}
+                  >
+                    <span
+                      className={`absolute top-[3px] h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-all ${form.tiersEnabled ? "left-[19px]" : "left-[3px]"}`}
+                    />
+                  </button>
+                </div>
+                {form.tiersEnabled && (
+                  <div className="mt-4">
+                    <TierEditor rows={form.tiers} onChange={(rows) => set("tiers", rows)} />
+                  </div>
+                )}
+              </div>
             )}
           </>
         ) : (
@@ -315,15 +361,24 @@ function StepReview({ form }: { form: Form }) {
     { label: t("loyalty.biz.name"), value: form.name || "—" },
   ];
   if (form.type === "points") {
-    rows.push(
-      {
-        label: t("loyalty.biz.settings.label.earnBasis"),
-        value: form.basis === "visit" ? t("loyalty.biz.perVisit") : t("loyalty.biz.perSpend"),
-      },
-      { label: t("loyalty.biz.settings.label.rate"), value: form.rate },
-      { label: t("loyalty.biz.settings.label.cashback"), value: `${form.cashback} · ${backPct}%` },
-      { label: t("loyalty.biz.settings.label.minRedeem"), value: form.minimum },
-    );
+    rows.push({
+      label: t("loyalty.biz.settings.label.earnBasis"),
+      value: form.basis === "visit" ? t("loyalty.biz.perVisit") : t("loyalty.biz.perSpend"),
+    });
+    if (tiersActive(form)) {
+      rows.push({
+        label: t("loyalty.biz.tiers.ladder"),
+        value: form.tiers
+          .map((tier) => `${tier.name.trim() || "—"} · ${tier.percent}%`)
+          .join("  →  "),
+      });
+    } else {
+      rows.push(
+        { label: t("loyalty.biz.settings.label.rate"), value: form.rate },
+        { label: t("loyalty.biz.settings.label.cashback"), value: `${form.cashback} · ${backPct}%` },
+      );
+    }
+    rows.push({ label: t("loyalty.biz.settings.label.minRedeem"), value: form.minimum });
   } else {
     rows.push(
       { label: t("loyalty.biz.target"), value: form.target },
@@ -364,15 +419,18 @@ export default function NewLoyaltyPage() {
   function onSubmit() {
     if (invalidKey) return;
     const base = { type: form.type, name: form.name.trim(), description: "" };
+    const ladder = tiersActive(form) ? draftsToTiers(form.tiers) : null;
     const payload =
       form.type === "points"
         ? {
             ...base,
             points_basis: form.basis,
+            // With a ladder each rung prices its own rate, so no flat rate is sent.
             points_per_visit: form.basis === "visit" ? Number(form.rate) : null,
-            points_per_som: form.basis === "spend" ? form.rate : null,
+            points_per_som: form.basis === "spend" && !ladder ? form.rate : null,
             cashback_per_point: form.cashback,
             min_redeem_points: Number(form.minimum),
+            ...(ladder ? { tiers: ladder } : {}),
           }
         : {
             ...base,

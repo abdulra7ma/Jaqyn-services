@@ -78,6 +78,8 @@ function row(over: Partial<CampaignScanRow>): CampaignScanRow {
     points_per_visit: null,
     cashback_per_point: null,
     current_spend: "0",
+    pct_back: null,
+    tier_name: null,
     ...over,
   };
 }
@@ -87,6 +89,9 @@ function row(over: Partial<CampaignScanRow>): CampaignScanRow {
 const confirmCall: { body: { token: string; campaignId?: string; amount?: string } | null } = {
   body: null,
 };
+
+// Captures the combined-collect batch body sent to awardLoyaltyBatch.
+const batchCall: { body: { token: string; awards: unknown[] } | null } = { body: null };
 
 // The customer dispatch the mocked resolveScan resolves to. Reassigned per test.
 let dispatch: ScanDispatchResult;
@@ -121,6 +126,33 @@ vi.mock("@jaqyn/api", () => ({
           },
         ],
         skipped_campaigns: [],
+      });
+    },
+    reset: vi.fn(),
+  }),
+  useAwardLoyaltyBatch: () => ({
+    isPending: false,
+    mutate: (
+      body: { token: string; awards: unknown[] },
+      opts: { onSuccess: (d: unknown) => void },
+    ) => {
+      batchCall.body = body;
+      opts.onSuccess({
+        customer: "Bek",
+        results: [
+          {
+            program_id: "pts-1",
+            name: "Cashback",
+            type: "points",
+            points_awarded: 50,
+            stamps_count: 0,
+            visits_count: 1,
+            required_count: null,
+            points_balance: 50,
+            tier_name: "Silver",
+            vouchers: [],
+          },
+        ],
       });
     },
     reset: vi.fn(),
@@ -171,73 +203,136 @@ describe("Staff scan — desktop viewport regression", () => {
   });
 });
 
-describe("Staff scan — loyalty chooser (choose-one)", () => {
+describe("Staff scan — combined collect (loyalty rows)", () => {
   beforeEach(() => {
     confirmCall.body = null;
+    batchCall.body = null;
   });
 
-  it("scanning a customer with a points program shows the chooser with an Enter bill action", async () => {
+  // Loyalty rows carry campaign_type "loyalty" + a "loyalty:" id prefix (adapter contract).
+  const cashbackRow = () =>
+    row({
+      campaign_id: "loyalty:pts-1",
+      campaign_type: "loyalty",
+      name: "Cashback",
+      mechanic: "points",
+      points_per_som: null,
+      cashback_per_point: "1",
+      pct_back: "5.00",
+      tier_name: "Silver",
+      points_balance: 40,
+    });
+  const stampRow = () =>
+    row({
+      campaign_id: "loyalty:stamp-1",
+      campaign_type: "loyalty",
+      name: "Coffee card",
+      mechanic: "stamp",
+      current_count: 4,
+      goal: 6,
+    });
+
+  it("a cashback program shows the bill field with the customer's status chip", async () => {
+    const user = userEvent.setup();
+    dispatch = customerDispatch([cashbackRow()]);
+    render(<StaffScanPage />);
+    await scan(user);
+
+    expect(screen.getByText("staff.collect.title")).toBeInTheDocument();
+    expect(screen.getByText("Cashback")).toBeInTheDocument();
+    // Tier-aware chip: status name + effective percent.
+    expect(screen.getByText("Silver · 5%")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("0")).toBeInTheDocument();
+  });
+
+  it("typing a bill shows the cashback preview and confirm sends the batch", async () => {
+    const user = userEvent.setup();
+    dispatch = customerDispatch([cashbackRow()]);
+    render(<StaffScanPage />);
+    await scan(user);
+
+    await user.type(screen.getByPlaceholderText("0"), "1000");
+    // 5% of 1000 som = 50 som back.
+    expect(screen.getByText("staff.collect.cashbackPreview")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "staff.collect.confirm" }));
+
+    expect(batchCall.body).toEqual({
+      token: "TOKEN-123",
+      awards: [{ program_id: "pts-1", amount: "1000" }],
+    });
+    // Success sheet lists the leg with the new balance.
+    expect(screen.getByText("staff.result.pointsAwarded")).toBeInTheDocument();
+  });
+
+  it("a stamp program uses the stepper; confirm sends the chosen quantity", async () => {
+    const user = userEvent.setup();
+    dispatch = customerDispatch([stampRow()]);
+    render(<StaffScanPage />);
+    await scan(user);
+
+    // Default quantity 1 → step up to 3 (two taps on +).
+    const plus = screen.getByRole("button", { name: "staff.collect.increase" });
+    await user.click(plus);
+    await user.click(plus);
+    await user.click(screen.getByRole("button", { name: "staff.collect.confirm" }));
+
+    expect(batchCall.body).toEqual({
+      token: "TOKEN-123",
+      awards: [{ program_id: "stamp-1", quantity: 3 }],
+    });
+  });
+
+  it("stamps and cashback confirm together as one batch", async () => {
+    const user = userEvent.setup();
+    dispatch = customerDispatch([stampRow(), cashbackRow()]);
+    render(<StaffScanPage />);
+    await scan(user);
+
+    await user.click(screen.getByRole("button", { name: "staff.collect.increase" }));
+    await user.type(screen.getByPlaceholderText("0"), "1000");
+    await user.click(screen.getByRole("button", { name: "staff.collect.confirm" }));
+
+    expect(batchCall.body).toEqual({
+      token: "TOKEN-123",
+      awards: [
+        { program_id: "stamp-1", quantity: 2 },
+        { program_id: "pts-1", amount: "1000" },
+      ],
+    });
+  });
+
+  it("stepping a stamp card to 0 skips its leg", async () => {
+    const user = userEvent.setup();
+    dispatch = customerDispatch([stampRow(), cashbackRow()]);
+    render(<StaffScanPage />);
+    await scan(user);
+
+    await user.click(screen.getByRole("button", { name: "staff.collect.decrease" }));
+    await user.type(screen.getByPlaceholderText("0"), "500");
+    await user.click(screen.getByRole("button", { name: "staff.collect.confirm" }));
+
+    expect(batchCall.body).toEqual({
+      token: "TOKEN-123",
+      awards: [{ program_id: "pts-1", amount: "500" }],
+    });
+  });
+
+  it("campaign rows still render as one-tap tiles alongside the collect panel", async () => {
     const user = userEvent.setup();
     dispatch = customerDispatch([
-      row({
-        campaign_id: "pts-1",
-        name: "Points Card",
-        mechanic: "points",
-        points_per_som: "0.5",
-        cashback_per_point: "1",
-        points_balance: 40,
-      }),
+      stampRow(),
+      row({ campaign_id: "c-visit", name: "Weekend visits", mechanic: "visit" }),
     ]);
     render(<StaffScanPage />);
     await scan(user);
 
-    // The Sheet primitive renders a sr-only title from ariaLabel and the visible
-    // section label — both contain the same key. Use getAllByText.
-    // The chooser title appears as the dialog aria-label (sr-only) and as a visible heading.
-    expect(screen.getAllByText("staff.chooser.title").length).toBeGreaterThanOrEqual(1);
-    // The program name appears as the tile's secondary line.
-    expect(screen.getByText("Points Card")).toBeInTheDocument();
-    // ProgramTile button's accessible name = emoji + action word + program name — use partial match.
-    expect(screen.getByRole("button", { name: /staff\.chooser\.enterBill/ })).toBeInTheDocument();
-  });
+    // Collect panel for the loyalty leg + a campaign tile section.
+    expect(screen.getByText("staff.collect.title")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /staff\.scan\.progSpend/ })).toBeInTheDocument();
 
-  it("entering a bill amount calls confirmVisitUnified with that amount", async () => {
-    const user = userEvent.setup();
-    dispatch = customerDispatch([
-      row({
-        campaign_id: "pts-1",
-        name: "Points Card",
-        mechanic: "points",
-        points_per_som: "0.5",
-        cashback_per_point: "1",
-        points_balance: 40,
-      }),
-    ]);
-    render(<StaffScanPage />);
-    await scan(user);
-
-    await user.click(screen.getByRole("button", { name: /staff\.chooser\.enterBill/ }));
-    // Key "120" on the numpad.
-    await user.click(screen.getByRole("button", { name: "1" }));
-    await user.click(screen.getByRole("button", { name: "2" }));
-    await user.click(screen.getByRole("button", { name: "0" }));
-    await user.click(screen.getByRole("button", { name: "staff.amount.award" }));
-
-    expect(confirmCall.body).toEqual({ token: "TOKEN-123", campaignId: "pts-1", amount: "120" });
-  });
-
-  it("a stamp program's Add stamp calls confirm with no amount", async () => {
-    const user = userEvent.setup();
-    dispatch = customerDispatch([
-      row({ campaign_id: "stamp-1", name: "Stamp Card", mechanic: "stamp" }),
-    ]);
-    render(<StaffScanPage />);
-    await scan(user);
-
-    // ProgramTile accessible name = emoji + action word + program name.
-    await user.click(screen.getByRole("button", { name: /staff\.scan\.progStamp/ }));
-
-    expect(confirmCall.body).toEqual({ token: "TOKEN-123", campaignId: "stamp-1" });
+    // The campaign tile still confirms through the single-program endpoint.
+    await user.click(screen.getByRole("button", { name: /staff\.scan\.progSpend/ }));
+    expect(confirmCall.body).toEqual({ token: "TOKEN-123", campaignId: "c-visit" });
   });
 });
 

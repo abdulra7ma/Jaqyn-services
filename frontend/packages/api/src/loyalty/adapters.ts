@@ -1,4 +1,4 @@
-import type { LoyaltyCardView, LoyaltyProgramConfig, LoyaltyVoucher, LoyaltyVoucherWallet } from "./types";
+import type { LoyaltyCardView, LoyaltyProgramConfig, LoyaltyTier, LoyaltyVoucher, LoyaltyVoucherWallet } from "./types";
 
 type Raw = Record<string, unknown>;
 const text = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
@@ -9,6 +9,14 @@ const nullableNum = (value: unknown): number | null => {
   const n = typeof value === "number" ? value : Number(value);
   return Number.isNaN(n) ? null : n;
 };
+
+function adaptTiers(value: unknown): LoyaltyTier[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((row) => {
+    const tier = row as Raw;
+    return { name: text(tier.name), min_visits: num(tier.min_visits), cashback_percent: text(tier.cashback_percent) };
+  });
+}
 
 export function adaptLoyaltyCard(raw: Raw): LoyaltyCardView {
   const type = text(raw.type);
@@ -30,6 +38,9 @@ export function adaptLoyaltyCard(raw: Raw): LoyaltyCardView {
     required_count: raw.required_count == null ? null : num(raw.required_count), points_balance: num(raw.points_balance),
     min_redeem_points: raw.min_redeem_points == null ? null : num(raw.min_redeem_points),
     points_per_som: nullableText(raw.points_per_som), cashback_per_point: nullableText(raw.cashback_per_point), pct_back: nullableText(raw.pct_back),
+    tiers: adaptTiers(raw.tiers), current_tier_name: nullableText(raw.current_tier_name),
+    next_tier_name: nullableText(raw.next_tier_name),
+    next_tier_visits_left: raw.next_tier_visits_left == null ? null : num(raw.next_tier_visits_left),
   };
 }
 

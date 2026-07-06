@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useAwardLoyaltyBatch,
   useConfirmGroup,
   useConfirmSocial,
   useConfirmVisitUnified,
@@ -14,6 +15,8 @@ import type {
   CampaignVoucherScanResult,
   ConfirmGroupResult,
   GroupScanResult,
+  LoyaltyBatchAward,
+  LoyaltyBatchResult,
   ScanCustomerResult,
   ScanDispatchResult,
   UnifiedCampaignLeg,
@@ -21,7 +24,7 @@ import type {
 } from "@jaqyn/api";
 import { useT } from "@jaqyn/i18n";
 import Link from "next/link";
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, type CSSProperties, useEffect, useRef, useState } from "react";
 import { QrScanner, parseScanned } from "../../_components/QrScanner";
 import { useErrMessage } from "../../_lib/useErrMessage";
 import { useStaffAuth } from "../_lib/staffAuth";
@@ -38,6 +41,8 @@ type OverlayState =
   // Focused success for the single program that was just confirmed. `awarded` is
   // the points added this confirm (null for non-points programs).
   | { kind: "single_result"; leg: UnifiedCampaignLeg; customerName: string; awarded: number | null }
+  // Combined-collect success: one confirm applied several loyalty legs.
+  | { kind: "batch_result"; result: LoyaltyBatchResult }
   // Group session scanned — full roster for the member-checklist sheet.
   | { kind: "group_eligible"; group: GroupScanResult }
   | { kind: "reward_valid"; result: CampaignVoucherScanResult }
@@ -101,6 +106,221 @@ function CountdownBar({ duration, onDone }: { duration: number; onDone: () => vo
   );
 }
 
+// ─── combined collect panel (loyalty rows — one confirm for the whole order) ───
+
+/** Loyalty rows the collect panel drives (campaign_type "loyalty"). */
+function isLoyaltyRow(row: CampaignScanRow): boolean {
+  return row.campaign_type === "loyalty";
+}
+
+/** Strip the chooser's "loyalty:" prefix back to the raw program id. */
+function loyaltyProgramId(row: CampaignScanRow): string {
+  return row.campaign_id.replace(/^loyalty:/, "");
+}
+
+// Mirrors MAX_AWARD_QUANTITY on the backend award endpoint.
+const MAX_STAMP_QUANTITY = 30;
+
+/** Stepper for the stamp quantity: [−] n [+], 44px touch cells. 0 = skip leg. */
+function QuantityStepper({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const t = useT();
+  const cell = (label: string, onTap: () => void, disabled: boolean, aria: string) => (
+    <button
+      type="button"
+      onClick={onTap}
+      disabled={disabled}
+      aria-label={aria}
+      style={{
+        width: 44, height: 44, border: "none", borderRadius: 12,
+        background: disabled ? "#F0EAE0" : "#F4ECDF",
+        color: disabled ? "var(--soft, #8C7A6A)" : "var(--ink, #2E241D)",
+        font: "700 20px 'Bricolage Grotesque',sans-serif",
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {cell("−", () => onChange(value - 1), value <= 0, t("staff.collect.decrease"))}
+      <span
+        aria-live="polite"
+        style={{ minWidth: 30, textAlign: "center", font: "800 20px 'Bricolage Grotesque',sans-serif", color: value === 0 ? "var(--soft, #8C7A6A)" : "var(--ink, #2E241D)" }}
+      >
+        {value}
+      </span>
+      {cell("+", () => onChange(value + 1), value >= MAX_STAMP_QUANTITY, t("staff.collect.increase"))}
+    </div>
+  );
+}
+
+/**
+ * One confirm for the whole till order: a stepper per stamp card (items bought
+ * = stamps), a bill field per cashback program (with the customer's status
+ * rung + live "+N som" preview), and fixed "+1" legs for visit cards and
+ * per-visit points. Zeroed legs are skipped; the confirm sends everything else
+ * as one atomic batch.
+ */
+function CollectPanel({
+  rows,
+  onConfirm,
+  isPending,
+}: {
+  rows: CampaignScanRow[];
+  onConfirm: (awards: LoyaltyBatchAward[]) => void;
+  isPending: boolean;
+}) {
+  const t = useT();
+  const stampRows = rows.filter((r) => r.mechanic === "stamp");
+  // Spend-basis points (a bill prices the award) = points rows with no flat
+  // per-visit rate — flat-rate programs carry points_per_som, tier-ladder
+  // programs carry pct_back only.
+  const spendRows = rows.filter(
+    (r) => r.mechanic === "points" && r.points_per_visit == null,
+  );
+  // Visit cards and per-visit points: always one fixed "+1" leg per scan.
+  const fixedRows = rows.filter((r) => !stampRows.includes(r) && !spendRows.includes(r));
+
+  // One quantity per stamp card (default 1 — the common single-item order) and
+  // one bill string per cashback program. Keyed by program id.
+  const [quantities, setQuantities] = useState<Record<string, number>>(() =>
+    Object.fromEntries(stampRows.map((r) => [r.campaign_id, 1])),
+  );
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+
+  const awards: LoyaltyBatchAward[] = [
+    ...stampRows
+      .filter((r) => (quantities[r.campaign_id] ?? 1) > 0)
+      .map((r) => ({ program_id: loyaltyProgramId(r), quantity: quantities[r.campaign_id] ?? 1 })),
+    ...spendRows
+      .filter((r) => Number(amounts[r.campaign_id] ?? "") > 0)
+      .map((r) => ({ program_id: loyaltyProgramId(r), amount: amounts[r.campaign_id]! })),
+    ...fixedRows.map((r) => ({ program_id: loyaltyProgramId(r) })),
+  ];
+  const valid = awards.length > 0 && !isPending;
+
+  const line: CSSProperties = {
+    display: "flex", alignItems: "center", gap: 11,
+    background: "#F8F4EC", borderRadius: 14, padding: "12px 14px",
+  };
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)" }}>
+        {t("staff.collect.title")}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 10 }}>
+        {stampRows.map((row) => {
+          const qty = quantities[row.campaign_id] ?? 1;
+          const next = row.current_count + qty;
+          const done = row.goal > 0 && next >= row.goal;
+          return (
+            <div key={row.campaign_id} style={line}>
+              <span style={{ fontSize: 20 }} aria-hidden>☕</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", font: "700 13.5px 'Hanken Grotesk',sans-serif", color: "var(--ink, #2E241D)" }}>{row.name}</span>
+                <span style={{ display: "block", fontSize: 12, color: done && qty > 0 ? "#B07A1E" : "var(--soft, #8C7A6A)", marginTop: 1, fontWeight: 600 }}>
+                  {qty > 0
+                    ? `${row.current_count} → ${next}${row.goal ? ` / ${row.goal}` : ""}${done ? " 🎁" : ""}`
+                    : `${row.current_count}${row.goal ? ` / ${row.goal}` : ""}`}
+                </span>
+              </span>
+              <QuantityStepper
+                value={qty}
+                onChange={(v) => setQuantities((q) => ({ ...q, [row.campaign_id]: v }))}
+              />
+            </div>
+          );
+        })}
+
+        {spendRows.map((row) => {
+          const amount = amounts[row.campaign_id] ?? "";
+          const pct = row.pct_back != null ? Number(row.pct_back) : null;
+          const somBack = pct != null && Number(amount) > 0 ? Math.floor((Number(amount) * pct) / 100) : null;
+          return (
+            <div key={row.campaign_id} style={{ ...line, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 20, marginTop: 4 }} aria-hidden>⭐</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ font: "700 13.5px 'Hanken Grotesk',sans-serif", color: "var(--ink, #2E241D)" }}>{row.name}</span>
+                  {pct != null && (
+                    <span style={{ font: "700 10.5px 'Hanken Grotesk',sans-serif", padding: "3px 8px", borderRadius: 99, background: "#FBEFD9", color: "#B07A1E" }}>
+                      {row.tier_name ? `${row.tier_name} · ` : ""}{pct}%
+                    </span>
+                  )}
+                </span>
+                <span style={{ display: "block", fontSize: 12, color: "#3F7355", fontWeight: 600, marginTop: 3, minHeight: 15 }}>
+                  {somBack != null ? t("staff.collect.cashbackPreview").replace("{som}", String(somBack)) : ""}
+                </span>
+              </span>
+              <label style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>{t("staff.collect.bill")}</span>
+                <input
+                  value={amount}
+                  onChange={(e) => {
+                    // Whole som, digits only — same rule as the bill keypad.
+                    const digits = e.target.value.replace(/\D/g, "").slice(0, 7);
+                    setAmounts((a) => ({ ...a, [row.campaign_id]: digits }));
+                  }}
+                  inputMode="numeric"
+                  placeholder="0"
+                  style={{
+                    width: 86, padding: "11px 10px", borderRadius: 12,
+                    border: "1.5px solid var(--line, #EFE3D1)", background: "#fff",
+                    font: "800 17px 'Bricolage Grotesque',sans-serif", color: "var(--ink, #2E241D)",
+                    textAlign: "right", outline: "none",
+                  }}
+                />
+                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--soft, #8C7A6A)" }}>{t("staff.amount.som")}</span>
+              </label>
+            </div>
+          );
+        })}
+
+        {fixedRows.map((row) => (
+          <div key={row.campaign_id} style={line}>
+            <span style={{ fontSize: 20 }} aria-hidden>{row.mechanic === "points" ? "⭐" : "📍"}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", font: "700 13.5px 'Hanken Grotesk',sans-serif", color: "var(--ink, #2E241D)" }}>{row.name}</span>
+              <span style={{ display: "block", fontSize: 12, color: "var(--soft, #8C7A6A)", marginTop: 1 }}>
+                {row.goal ? `${row.current_count} / ${row.goal}` : ""}
+              </span>
+            </span>
+            <span style={{ font: "700 13px 'Bricolage Grotesque',sans-serif", color: "var(--accent, #C25E3C)", whiteSpace: "nowrap" }}>
+              {row.mechanic === "points"
+                ? t("staff.collect.plusPoints").replace("{n}", String(row.points_per_visit ?? 0))
+                : t("staff.collect.plusVisit")}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => valid && onConfirm(awards)}
+        disabled={!valid}
+        style={{
+          width: "100%", marginTop: 12, padding: 15, border: "none", borderRadius: 15,
+          background: valid ? "var(--accent, #C25E3C)" : "#EFE3D1",
+          color: valid ? "#fff" : "var(--soft, #8C7A6A)",
+          font: "700 15.5px 'Hanken Grotesk',sans-serif",
+          cursor: valid ? "pointer" : "not-allowed",
+          boxShadow: valid ? "0 12px 26px -8px rgba(160,73,42,.55)" : "none",
+        }}
+      >
+        {isPending ? "…" : t("staff.collect.confirm")}
+      </button>
+    </div>
+  );
+}
+
 // ─── sheet: loyalty chooser ("Apply loyalty" — pure choose-one) ─────────────────
 
 // One tap per tile/row does it: visit/stamp/social confirm immediately; spend /
@@ -108,6 +328,8 @@ function CountdownBar({ duration, onDone }: { duration: number; onDone: () => vo
 // 55% with reason. Redeem entry is pinned at top when active_vouchers is present.
 function LoyaltyChooserSheet({
   result,
+  onCollect,
+  collectPending,
   onPickRow,
   onConfirmRow,
   onConfirmSocial,
@@ -117,6 +339,9 @@ function LoyaltyChooserSheet({
   redeemPending,
 }: {
   result: ScanCustomerResult;
+  // Combined collect: one confirm for all loyalty legs (stamps + cashback).
+  onCollect: (awards: LoyaltyBatchAward[]) => void;
+  collectPending: boolean;
   // Spend / spend-basis points → open the keypad for this row.
   onPickRow: (row: CampaignScanRow) => void;
   // One-tap mechanics (visit / stamp / visit-basis points) → confirm now.
@@ -132,9 +357,13 @@ function LoyaltyChooserSheet({
 }) {
   const t = useT();
   const initial = (result.customer.name.trim()[0] ?? "•").toUpperCase();
-  // Eligible rows first; preserve relative order within each group. GROUP-type
+  // Loyalty programs go to the combined collect panel (one confirm covers the
+  // whole order); campaign rows stay as one-tap tiles, eligible first. GROUP
   // campaigns are excluded at the adapter layer (B2 spec).
-  const rows = [...result.rows].sort((a, b) => Number(b.eligible) - Number(a.eligible));
+  const loyaltyRows = result.rows.filter(isLoyaltyRow);
+  const rows = result.rows
+    .filter((row) => !isLoyaltyRow(row))
+    .sort((a, b) => Number(b.eligible) - Number(a.eligible));
   const vouchers = result.active_vouchers;
 
   // Local picker state: when multiple vouchers exist, show a mini-list before
@@ -235,10 +464,15 @@ function LoyaltyChooserSheet({
         </div>
       )}
 
-      {/* ── Program tiles ── */}
+      {/* ── Combined collect: all loyalty legs, one confirm ── */}
+      {loyaltyRows.length > 0 && (
+        <CollectPanel rows={loyaltyRows} onConfirm={onCollect} isPending={collectPending} />
+      )}
+
+      {/* ── Program tiles (campaigns) ── */}
       {rows.length > 0 && (
         <>
-          <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)", marginTop: vouchers.length > 0 ? 18 : 16 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--soft, #8C7A6A)", marginTop: vouchers.length > 0 || loyaltyRows.length > 0 ? 18 : 16 }}>
             {t("staff.chooser.redeemPrograms")}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 9, marginTop: 10 }}>
@@ -256,7 +490,7 @@ function LoyaltyChooserSheet({
         </>
       )}
 
-      {rows.length === 0 && vouchers.length === 0 && (
+      {rows.length === 0 && loyaltyRows.length === 0 && vouchers.length === 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#F6F0E6", borderRadius: 13, padding: "12px 14px", marginTop: 16 }}>
           <span style={{ fontSize: 16 }}>🚫</span>
           <div style={{ fontSize: 12.5, color: "var(--soft, #8C7A6A)", lineHeight: 1.4 }}>
@@ -554,6 +788,99 @@ function SingleResultSheet({
             <div style={{ display: "inline-block", background: "#fff", color: "#B07A1E", borderRadius: 11, padding: "7px 14px", marginTop: 8, font: "700 14px 'Bricolage Grotesque',sans-serif" }}>
               🎁 {t("cmp.staff.campaignComplete").replace("{reward}", leg.reward_title ?? "")}
             </div>
+          </div>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={onDismiss}
+        style={{ width: "100%", marginTop: 16, padding: 13, border: "none", borderRadius: 14, background: "#F4ECDF", color: "var(--ink, #2E241D)", font: "700 15px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+      >
+        {t("staff.result.done")}
+      </button>
+    </Sheet>
+  );
+}
+
+// ─── sheet: combined-collect success ────────────────────────────────────────────
+
+// One line per awarded leg (stamps progress / points added), plus an amber
+// celebration banner when any leg minted vouchers. Auto-dismisses like the
+// single-program result so the till keeps moving.
+function BatchResultSheet({
+  result,
+  onDismiss,
+}: {
+  result: LoyaltyBatchResult;
+  onDismiss: () => void;
+}) {
+  const t = useT();
+  const rewards = result.results.flatMap((row) => row.vouchers.map((v) => v.reward_title));
+  const completed = rewards.length > 0;
+  const flashColor = completed ? "var(--amber, #E7A23E)" : "var(--sage, #3F7355)";
+  const duration = completed ? 3600 : 2800;
+
+  const stateLine = (row: LoyaltyBatchResult["results"][number]): string => {
+    if (row.type === "points") {
+      return t("staff.result.pointsAwarded")
+        .replace("{awarded}", String(row.points_awarded))
+        .replace("{balance}", String(row.points_balance));
+    }
+    const count = row.type === "stamp" ? row.stamps_count : row.visits_count;
+    return `${count} / ${row.required_count ?? 0}`;
+  };
+
+  return (
+    <Sheet
+      open
+      onOpenChange={(o) => { if (!o) onDismiss(); }}
+      variant="modal"
+      surface="card"
+      showGrabber={false}
+      ariaLabel={t("staff.collect.title")}
+    >
+      <Flash color={flashColor} />
+      <CountdownBar duration={duration} onDone={onDismiss} />
+
+      <div style={{ textAlign: "center" }}>
+        <div style={{
+          width: 70, height: 70, borderRadius: "50%", background: "var(--sage, #3F7355)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: "#fff", fontSize: 36, margin: "0 auto", animation: "jqPop .5s ease",
+          boxShadow: "0 14px 30px -8px rgba(94,139,106,.6)",
+        }}>✓</div>
+        <div style={{ fontSize: 13.5, color: "var(--soft, #8C7A6A)", fontWeight: 600, marginTop: 14 }}>
+          {result.customer} · {t("cmp.staff.bothCounted")}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 18 }}>
+        {result.results.map((row) => (
+          <div key={row.program_id} style={{ display: "flex", alignItems: "center", gap: 11, background: "#F8F4EC", borderRadius: 14, padding: "12px 15px" }}>
+            <span style={{ fontSize: 18 }} aria-hidden>
+              {row.type === "stamp" ? "☕" : row.type === "points" ? "⭐" : "📍"}
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", font: "700 14px 'Bricolage Grotesque',sans-serif", color: "var(--ink, #2E241D)" }}>{row.name}</span>
+              {row.tier_name && (
+                <span style={{ display: "block", fontSize: 11.5, color: "var(--soft, #8C7A6A)", marginTop: 1, fontWeight: 600 }}>{row.tier_name}</span>
+              )}
+            </span>
+            <span style={{ font: "700 15px 'Bricolage Grotesque',sans-serif", whiteSpace: "nowrap", color: "var(--accent, #C25E3C)" }}>
+              {stateLine(row)}
+            </span>
+          </div>
+        ))}
+
+        {completed && (
+          <div style={{ background: "#FBEFD9", borderRadius: 14, padding: "14px 16px", textAlign: "center" }}>
+            <div style={{ fontSize: 30, animation: "jqPop .5s ease" }}>🎉</div>
+            {rewards.map((reward, i) => (
+              <div key={i} style={{ display: "inline-block", background: "#fff", color: "#B07A1E", borderRadius: 11, padding: "7px 14px", marginTop: 8, marginRight: 6, font: "700 14px 'Bricolage Grotesque',sans-serif" }}>
+                🎁 {t("cmp.staff.campaignComplete").replace("{reward}", reward)}
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -967,6 +1294,7 @@ export default function StaffScanPage() {
 
   const resolveScan = useResolveScan();
   const confirmVisit = useConfirmVisitUnified();
+  const awardBatch = useAwardLoyaltyBatch();
   const confirmSocial = useConfirmSocial();
   const redeemVoucher = useRedeemCampaignVoucher();
   const redeemById = useRedeemVoucherById();
@@ -996,6 +1324,7 @@ export default function StaffScanPage() {
     setScanKey((k) => k + 1);
     resolveScan.reset();
     confirmVisit.reset();
+    awardBatch.reset();
     confirmSocial.reset();
     redeemVoucher.reset();
     redeemById.reset();
@@ -1081,6 +1410,19 @@ export default function StaffScanPage() {
       };
     setOverlay({ kind: "single_result", leg, customerName: data.customer.name, awarded });
     setPendingCampaignId(null);
+  };
+
+  // Combined collect: one confirm for every loyalty leg of the till order.
+  const handleCollect = (awards: LoyaltyBatchAward[]) => {
+    awardBatch.mutate(
+      { token: scannedTokenRef.current, awards },
+      {
+        onSuccess(data) {
+          setOverlay({ kind: "batch_result", result: data });
+        },
+        onError(error) { showError(error); },
+      },
+    );
   };
 
   // One-tap mechanics (visit / stamp / visit-basis points): confirm with no amount.
@@ -1285,6 +1627,8 @@ export default function StaffScanPage() {
         {overlay?.kind === "chooser" && (
           <LoyaltyChooserSheet
             result={overlay.result}
+            onCollect={handleCollect}
+            collectPending={awardBatch.isPending}
             onPickRow={handlePickRow}
             onConfirmRow={handleConfirmRow}
             onConfirmSocial={handleConfirmSocialRow}
@@ -1301,6 +1645,9 @@ export default function StaffScanPage() {
             onBack={() => setOverlay({ kind: "chooser", result: overlay.result })}
             isPending={confirmVisit.isPending}
           />
+        )}
+        {overlay?.kind === "batch_result" && (
+          <BatchResultSheet result={overlay.result} onDismiss={dismiss} />
         )}
         {overlay?.kind === "single_result" && (
           <SingleResultSheet

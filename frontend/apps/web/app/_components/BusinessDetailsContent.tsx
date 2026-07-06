@@ -9,6 +9,7 @@ import { useRequireAuth } from "../_lib/auth";
 import { isOpenNow } from "../_lib/hours";
 import { ListGroup, ListRow } from "./kit";
 import { QueryBoundary } from "./QueryBoundary";
+import { TierLadder } from "../loyalty/_components/TierLadder";
 import { WalletCard } from "../loyalty/_components/WalletCard";
 import { WalletDetailSheet } from "../loyalty/_components/WalletDetailSheet";
 import { buildWallet } from "../loyalty/_lib/wallet";
@@ -267,6 +268,9 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
               (() => {
                 const shop = buildWallet(loyalty.data ?? [])[0];
                 if (!shop) return null;
+                // First program with a status ladder — shown as its own info
+                // card so visitors see the levels before joining.
+                const tiered = shop.programs.find((p) => p.tiers.length > 0);
                 return (
                   <>
                     {/* Wallet-card-styled trigger; opens the shared loyalty
@@ -279,6 +283,8 @@ export function BusinessDetailsContent({ businessId }: { businessId: string }) {
                     >
                       <WalletCard card={shop} />
                     </button>
+
+                    {tiered && <TierLadder program={tiered} />}
 
                     <WalletDetailSheet
                       card={loyaltyOpen ? shop : null}

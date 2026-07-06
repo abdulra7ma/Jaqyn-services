@@ -3,10 +3,22 @@ from rest_framework import serializers
 from apps.loyalty.models import LoyaltyProgram, LoyaltyTransaction, LoyaltyVoucher
 
 
+class LoyaltyTierSerializer(serializers.Serializer):
+    """One rung of a cashback status ladder — shape checks only; ladder-level
+    rules (ordering, first rung at 0, uniqueness) live in the program service."""
+
+    name = serializers.CharField(max_length=60)
+    min_visits = serializers.IntegerField(min_value=0)
+    cashback_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+
+
 class LoyaltyProgramWriteSerializer(serializers.ModelSerializer):
     catalog_item_id = serializers.UUIDField(
         required=False, allow_null=True, write_only=True
     )
+    # Full-ladder replacement: send the complete list (empty list removes the
+    # ladder); omit the key to leave the saved ladder unchanged.
+    tiers = LoyaltyTierSerializer(many=True, required=False)
 
     class Meta:
         model = LoyaltyProgram
@@ -31,6 +43,7 @@ class LoyaltyProgramWriteSerializer(serializers.ModelSerializer):
             "active_days",
             "active_start_time",
             "active_end_time",
+            "tiers",
         )
 
 
@@ -41,6 +54,7 @@ class LoyaltyProgramSerializer(serializers.ModelSerializer):
         source="catalog_item.id", read_only=True, allow_null=True
     )
     reward_summary = serializers.SerializerMethodField()
+    tiers = LoyaltyTierSerializer(many=True, read_only=True)
 
     class Meta:
         model = LoyaltyProgram
@@ -71,6 +85,7 @@ class LoyaltyProgramSerializer(serializers.ModelSerializer):
             "active_start_time",
             "active_end_time",
             "reward_summary",
+            "tiers",
             "created_at",
             "updated_at",
         )
@@ -113,6 +128,12 @@ class LoyaltyCardSerializer(serializers.Serializer):
     pct_back = serializers.DecimalField(
         max_digits=12, decimal_places=2, allow_null=True
     )
+    # Cashback status ladder + the customer's standing on it. Empty list / nulls
+    # when the program has no ladder; next_* nulls at the top rung.
+    tiers = LoyaltyTierSerializer(many=True)
+    current_tier_name = serializers.CharField(allow_null=True)
+    next_tier_name = serializers.CharField(allow_null=True)
+    next_tier_visits_left = serializers.IntegerField(allow_null=True)
     # Business geo-coordinates for client-side distance calculation (spec §B).
     # Nullable — businesses may not have set their location yet.
     business_lat = serializers.DecimalField(
@@ -203,6 +224,33 @@ class AwardSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=128)
     program_id = serializers.UUIDField()
     amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+
+
+class AwardBatchItemSerializer(serializers.Serializer):
+    """One program leg of a combined collect: bill for cashback/points legs,
+    quantity (items bought = stamps) for stamp legs."""
+
+    program_id = serializers.UUIDField()
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True
+    )
+    # Bounds mirror MAX_AWARD_QUANTITY in the earning service.
+    quantity = serializers.IntegerField(min_value=1, max_value=30, default=1)
+
+
+class AwardBatchSerializer(serializers.Serializer):
+    """Staff combined collect: one scan, several program legs, one confirm."""
+
+    # A business runs a handful of concurrent programs at most; 8 legs is a
+    # generous ceiling that still bounds the transaction size.
+    token = serializers.CharField(max_length=128)
+    awards = AwardBatchItemSerializer(many=True, min_length=1, max_length=8)
+
+    def validate_awards(self, value: list[dict]) -> list[dict]:
+        ids = [item["program_id"] for item in value]
+        if len(set(ids)) != len(ids):
+            raise serializers.ValidationError("Duplicate program in one collect")
+        return value
 
 
 class RedeemVoucherSerializer(serializers.Serializer):
