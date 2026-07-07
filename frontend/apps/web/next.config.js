@@ -69,8 +69,9 @@ const nextConfig = {
       `default-src 'self'`,
       scriptSrc,
       // style-src: 'unsafe-inline' needed for Tailwind's runtime utility classes
-      // and Next.js's own injected <style> elements.
-      `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
+      // and Next.js's own injected <style> elements. accounts.google.com serves
+      // the GSI button stylesheet (gsi/style) for "Sign in with Google".
+      `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com`,
       // img-src: data: for inline SVG/base64, blob: for canvas/QR exports,
       // maps.gstatic.com for Google Maps tile images, *.r2.dev for R2 media in prod.
       `img-src 'self' data: blob: https://maps.gstatic.com https://*.r2.dev https://*.2gis.com https://*.2gis.ru`,

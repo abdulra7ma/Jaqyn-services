@@ -47,6 +47,11 @@ ARG NEXT_PUBLIC_DEMO_MODE=""
 ENV NEXT_PUBLIC_DEMO_MODE=$NEXT_PUBLIC_DEMO_MODE
 ARG NEXT_PUBLIC_ENABLE_TEST_UPLOAD=""
 ENV NEXT_PUBLIC_ENABLE_TEST_UPLOAD=$NEXT_PUBLIC_ENABLE_TEST_UPLOAD
+# Google OAuth client id for the "Sign in with Google" button (GSI). Baked into
+# the client bundle at build time; without this ARG the GSI button gets an empty
+# client_id and fails with "Parameter client_id is not set correctly".
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=""
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
 RUN pnpm --filter web build
 
 # ---- dev: hot-reload target (bind-mount source over it) ----
