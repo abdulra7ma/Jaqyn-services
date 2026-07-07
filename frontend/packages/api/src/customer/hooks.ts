@@ -6,6 +6,7 @@ import type {
   CampaignFeedFilter,
   CampaignFeedParams,
   CampaignListParams,
+  MyGroup,
   NearbyParams,
   ProfilePatch,
   RequestEmailOtpPayload,
@@ -260,7 +261,30 @@ export const useStartGroupSession = () => {
     mutationFn: (input: StartGroupSessionInput) => customerApi.startGroupSession(input),
     onSuccess: (session) => {
       qc.setQueryData(qk.groupSession(session.id), session);
-      // A new/updated group changes the my-groups list (feed banner + lookup).
+      // Optimistically insert the new group into the my-groups list cache so the
+      // group route resolves the forming view *immediately* on the returned
+      // session, instead of waiting for the invalidation round-trip to land. That
+      // delay/remount left the leader stuck on (and re-mounting) the create form
+      // even though the group was created — the KAN-10/11 "can't create / window
+      // disappears" symptom. Reading from the global cache also survives a remount
+      // of the group route, which component-local state would not.
+      const row: MyGroup = {
+        id: session.id,
+        campaign_id: session.campaign.id,
+        campaign_name: session.campaign.name,
+        business_name: session.business_name,
+        business_logo_url: session.business_logo_url,
+        status: session.status,
+        required_size: session.required_size,
+        joined_count: session.joined_count,
+      };
+      qc.setQueryData<MyGroup[]>(qk.myGroups, (prev) => [
+        row,
+        ...(prev ?? []).filter((g) => g.id !== session.id),
+      ]);
+      // Reconcile with the server list (feed banner + lookup); the leader's fresh
+      // FORMING group is returned by active_groups_for_customer, so this refetch
+      // confirms the optimistic row rather than removing it.
       qc.invalidateQueries({ queryKey: qk.myGroups });
     },
   });
