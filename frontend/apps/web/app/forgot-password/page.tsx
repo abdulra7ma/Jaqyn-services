@@ -71,7 +71,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-cream px-4 py-10 font-sans text-ink sm:px-6">
+    <div className="relative flex min-h-dvh items-center justify-center overflow-x-hidden bg-cream px-4 py-10 font-sans text-ink sm:px-6">
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
           className="absolute -left-24 -top-24 h-[42vw] max-h-[420px] min-h-[260px] w-[42vw] min-w-[260px] max-w-[420px] rounded-full bg-brand/25 blur-3xl"

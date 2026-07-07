@@ -64,7 +64,7 @@ function LoginFlow() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-cream px-4 py-10 font-sans text-ink sm:px-6">
+    <div className="relative flex min-h-dvh items-center justify-center overflow-x-hidden bg-cream px-4 py-10 font-sans text-ink sm:px-6">
       {/* drifting background blobs */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
