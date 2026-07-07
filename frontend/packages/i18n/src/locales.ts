@@ -1071,7 +1071,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "staff.campaign.code": "Код",
     "staff.campaign.redeemReward": "Выдать награду",
     "staff.campaign.rewardRedeemed": "Награда выдана",
-    "staff.campaign.giveCustomer": "{reward}",
+    "staff.campaign.giveCustomer": "Примените награду к заказу клиента",
     // --- F2: redeem-from-scan (chooser sheet redeem entry) ---
     "staff.chooser.redeemEntry": "Погасить награду",
     "staff.chooser.redeemPrograms": "Добавить в программу",
@@ -2956,7 +2956,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "staff.campaign.code": "Code",
     "staff.campaign.redeemReward": "Redeem reward",
     "staff.campaign.rewardRedeemed": "Reward redeemed",
-    "staff.campaign.giveCustomer": "{reward}",
+    "staff.campaign.giveCustomer": "Apply the reward to the customer's order",
     // --- F2: redeem-from-scan (chooser sheet redeem entry) ---
     "staff.chooser.redeemEntry": "Redeem reward",
     "staff.chooser.redeemPrograms": "Add to a program",

@@ -1128,7 +1128,21 @@ function RewardValidSheet({
 
 // ─── sheet: reward / group redeemed ─────────────────────────────────────────────
 
-function RedeemedSheet({ title, subtitle, onDismiss }: { title: string; subtitle: string; onDismiss: () => void }) {
+// Success sheet for a redeemed voucher / group reward. `reward` (e.g. "20% off",
+// "Free coffee") is the value the cashier hands over — shown as a prominent amber
+// hero so the discount/reward reads at a glance rather than as a faint subtitle
+// (§1 amber = emphasis). Omitted for the group-redeem case, which uses subtitle.
+function RedeemedSheet({
+  title,
+  subtitle,
+  reward,
+  onDismiss,
+}: {
+  title: string;
+  subtitle: string;
+  reward?: string;
+  onDismiss: () => void;
+}) {
   return (
     <Sheet
       open
@@ -1140,7 +1154,7 @@ function RedeemedSheet({ title, subtitle, onDismiss }: { title: string; subtitle
     >
       <Flash color="var(--sage, #3F7355)" />
       <CountdownBar duration={2800} onDone={onDismiss} />
-      <div style={{ textAlign: "center" }}>
+      <div style={{ textAlign: "center", padding: "6px 0 8px" }}>
         <div style={{
           width: 78, height: 78, borderRadius: "50%", background: "var(--sage, #3F7355)",
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -1148,7 +1162,20 @@ function RedeemedSheet({ title, subtitle, onDismiss }: { title: string; subtitle
           boxShadow: "0 14px 30px -8px rgba(94,139,106,.6)",
         }}>✓</div>
         <div style={{ font: "800 27px 'Bricolage Grotesque',sans-serif", marginTop: 18 }}>{title}</div>
-        <div style={{ fontSize: 14, color: "var(--soft, #8C7A6A)", marginTop: 6 }}>{subtitle}</div>
+        {/* Reward hero: big amber badge so the discount/reward value is the star. */}
+        {reward && (
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
+            background: "#FBEFD9", borderRadius: 16, padding: "16px 20px",
+            margin: "16px auto 0", maxWidth: 300,
+          }}>
+            <span style={{ fontSize: 26 }} aria-hidden>🎁</span>
+            <span style={{ font: "800 24px 'Bricolage Grotesque',sans-serif", color: "#B07A1E", letterSpacing: "-.01em", lineHeight: 1.15, wordBreak: "break-word" }}>
+              {reward}
+            </span>
+          </div>
+        )}
+        <div style={{ fontSize: 14, color: "var(--soft, #8C7A6A)", marginTop: reward ? 12 : 6, lineHeight: 1.4 }}>{subtitle}</div>
       </div>
     </Sheet>
   );
@@ -1764,7 +1791,8 @@ export default function StaffScanPage() {
         {overlay?.kind === "reward_redeemed" && (
           <RedeemedSheet
             title={t("staff.campaign.rewardRedeemed")}
-            subtitle={t("staff.campaign.giveCustomer").replace("{reward}", overlay.rewardTitle)}
+            reward={overlay.rewardTitle}
+            subtitle={t("staff.campaign.giveCustomer")}
             /* KAN-5: after redeeming from the chooser, return to it for the next
                action; a standalone voucher scan re-resolves to a non-customer and
                falls back to a full dismiss inside continueToChooser. */
