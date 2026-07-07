@@ -57,6 +57,20 @@ Cross-cutting docs live in `docs/`; each deployable has canonical docs under `ba
 | [Landing Runbook](../landing/docs/runbook.md) | runbook | active |
 | [Landing Page Refresh — Work Plan](specs/landing-refresh-plan.md) | spec | active |
 
+## platform
+
+| Doc | Type | Status |
+|---|---|---|
+| [GTM 01 — Positioning & Ideal Customer Profile](gtm/01-positioning.md) | strategy | active |
+| [GTM 02 — Market & Competitive Analysis](gtm/02-market-analysis.md) | strategy | active |
+| [GTM 03 — Pricing & Monetization Strategy](gtm/03-pricing.md) | strategy | active |
+| [GTM 04 — Marketing Strategy](gtm/04-marketing-strategy.md) | strategy | active |
+| [GTM 05 — Sales Strategy & Playbook](gtm/05-sales-playbook.md) | strategy | active |
+| [GTM 06 — Social Media Strategy](gtm/06-social-media-strategy.md) | strategy | active |
+| [GTM 07 — Pre-Launch Checklist](gtm/07-prelaunch-checklist.md) | strategy | active |
+| [GTM 08 — Launch Plan](gtm/08-launch-plan.md) | strategy | active |
+| [GTM 09 — Metrics, Analytics & Retention System](gtm/09-metrics-and-retention.md) | strategy | active |
+
 ## shared
 
 | Doc | Type | Status |

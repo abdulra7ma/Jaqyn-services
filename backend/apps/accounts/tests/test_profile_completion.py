@@ -60,6 +60,40 @@ def test_profile_patch_with_name_sets_profile_completed():
 
 
 @pytest.mark.django_db
+def test_profile_patch_rejects_future_birthday():
+    user = User.objects.create(phone="+996700333555", role=User.Role.CUSTOMER)
+    CustomerProfile.objects.create(user=user)
+    client = APIClient()
+    client.force_authenticate(user=user)
+    res = client.patch("/api/auth/profile/", {"birthday": "2999-01-01"}, format="json")
+    assert res.status_code == 400
+    assert "birthday" in res.json()["error"]["details"]
+
+
+@pytest.mark.django_db
+def test_profile_patch_rejects_prehistoric_birthday():
+    user = User.objects.create(phone="+996700333666", role=User.Role.CUSTOMER)
+    CustomerProfile.objects.create(user=user)
+    client = APIClient()
+    client.force_authenticate(user=user)
+    res = client.patch("/api/auth/profile/", {"birthday": "1899-12-31"}, format="json")
+    assert res.status_code == 400
+    assert "birthday" in res.json()["error"]["details"]
+
+
+@pytest.mark.django_db
+def test_profile_patch_accepts_valid_birthday():
+    user = User.objects.create(phone="+996700333777", role=User.Role.CUSTOMER)
+    CustomerProfile.objects.create(user=user)
+    client = APIClient()
+    client.force_authenticate(user=user)
+    res = client.patch("/api/auth/profile/", {"birthday": "1995-06-15"}, format="json")
+    assert res.status_code == 200
+    user.customer_profile.refresh_from_db()
+    assert str(user.customer_profile.birthday) == "1995-06-15"
+
+
+@pytest.mark.django_db
 def test_profile_patch_sets_phone():
     user = User.objects.create(email="noph@example.com", role=User.Role.CUSTOMER)
     CustomerProfile.objects.create(user=user)

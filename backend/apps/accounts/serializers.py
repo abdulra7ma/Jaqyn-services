@@ -1,6 +1,14 @@
+import datetime
+
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.models import CustomerProfile, User
+
+# Oldest birthday we accept. No verified person has lived past ~122 years, so a
+# 1900 floor rejects fat-finger year entries (e.g. 0202) while staying safely
+# below any real customer's DOB.
+MIN_BIRTHDAY = datetime.date(1900, 1, 1)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -52,6 +60,21 @@ class ProfileUpdateSerializer(serializers.Serializer):
     marketing_opt_in = serializers.BooleanField(required=False)
     onboarding_completed = serializers.BooleanField(required=False)
     avatar_emoji = serializers.CharField(max_length=8, required=False, allow_blank=True)
+
+    def validate_birthday(self, value: datetime.date | None) -> datetime.date | None:
+        """Reject an implausible date of birth: a future date or one before 1900.
+
+        A DOB in the future is never valid, and dates before ``MIN_BIRTHDAY``
+        are fat-finger errors rather than real customers. ``None`` passes through
+        so a user can clear the field.
+        """
+        if value is None:
+            return value
+        if value > timezone.localdate():
+            raise serializers.ValidationError("Birthday cannot be in the future.")
+        if value < MIN_BIRTHDAY:
+            raise serializers.ValidationError("Birthday is too far in the past.")
+        return value
 
 
 class RequestEmailOTPSerializer(serializers.Serializer):

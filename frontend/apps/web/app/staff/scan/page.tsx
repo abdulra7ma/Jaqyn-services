@@ -337,6 +337,8 @@ function LoyaltyChooserSheet({
   onDismiss,
   pendingCampaignId,
   redeemPending,
+  billAmount,
+  onClearBillAmount,
 }: {
   result: ScanCustomerResult;
   // Combined collect: one confirm for all loyalty legs (stamps + cashback).
@@ -354,6 +356,10 @@ function LoyaltyChooserSheet({
   // The campaign currently being confirmed (so its action shows a spinner).
   pendingCampaignId: string | null;
   redeemPending: boolean;
+  // The purchase amount entered earlier this scan (kept visible so the cashier
+  // can verify the discount/cashback figure); null when none entered yet.
+  billAmount: string | null;
+  onClearBillAmount: () => void;
 }) {
   const t = useT();
   const initial = (result.customer.name.trim()[0] ?? "•").toUpperCase();
@@ -391,6 +397,25 @@ function LoyaltyChooserSheet({
           <div style={{ fontSize: 12, color: "var(--soft, #8C7A6A)" }}>+996 {maskPhone(result.customer.phone)}</div>
         </div>
       </div>
+
+      {/* ── Purchase amount: persists across this scan so the cashier can verify
+             the figure used for a discount/cashback while doing later ops (KAN-5) ── */}
+      {billAmount != null && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, padding: "11px 14px", borderRadius: 13, background: "#F0F6F1", border: "1px solid #D6E7DA" }}>
+          <span style={{ fontSize: 16 }} aria-hidden>🧾</span>
+          <span style={{ flex: 1, minWidth: 0, font: "700 14px 'Hanken Grotesk',sans-serif", color: "var(--ink, #2E241D)" }}>
+            {t("staff.chooser.purchaseAmount").replace("{amount}", billAmount)}
+          </span>
+          <button
+            type="button"
+            onClick={onClearBillAmount}
+            aria-label={t("staff.chooser.clearAmount")}
+            style={{ flex: "none", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", border: "none", borderRadius: 8, background: "rgba(63,115,85,.12)", color: "var(--sage, #3F7355)", fontSize: 15, lineHeight: 1, cursor: "pointer" }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* ── Redeem entry: pinned at top when customer has active vouchers ── */}
       {vouchers.length > 0 && (
@@ -719,11 +744,15 @@ function SingleResultSheet({
   customerName,
   awarded,
   onDismiss,
+  onContinue,
 }: {
   leg: UnifiedCampaignLeg;
   customerName: string;
   awarded: number | null;
   onDismiss: () => void;
+  // Return to the (refreshed) chooser so the next promotion can be applied in the
+  // same scan (KAN-5). Also drives the auto-advance countdown.
+  onContinue: () => void;
 }) {
   const t = useT();
   const completed = leg.state === "completed";
@@ -748,14 +777,15 @@ function SingleResultSheet({
   return (
     <Sheet
       open
-      onOpenChange={(o) => { if (!o) onDismiss(); }}
+      onOpenChange={(o) => { if (!o) onContinue(); }}
       variant="modal"
       surface="card"
       showGrabber={false}
       ariaLabel={t("cmp.staff.campaignTitle")}
     >
       <Flash color={flashColor} />
-      <CountdownBar duration={duration} onDone={onDismiss} />
+      {/* Auto-advance back to the chooser (KAN-5) rather than closing the scan. */}
+      <CountdownBar duration={duration} onDone={onContinue} />
 
       <div style={{ textAlign: "center" }}>
         <div style={{
@@ -792,13 +822,22 @@ function SingleResultSheet({
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={onDismiss}
-        style={{ width: "100%", marginTop: 16, padding: 13, border: "none", borderRadius: 14, background: "#F4ECDF", color: "var(--ink, #2E241D)", font: "700 15px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
-      >
-        {t("staff.result.done")}
-      </button>
+      <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+        <button
+          type="button"
+          onClick={onContinue}
+          style={{ flex: 1, padding: 13, border: "none", borderRadius: 14, background: "var(--accent, #C25E3C)", color: "#fff", font: "700 15px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+        >
+          {t("staff.result.applyAnother")}
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          style={{ flex: 1, padding: 13, border: "none", borderRadius: 14, background: "#F4ECDF", color: "var(--ink, #2E241D)", font: "700 15px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+        >
+          {t("staff.result.done")}
+        </button>
+      </div>
     </Sheet>
   );
 }
@@ -811,9 +850,12 @@ function SingleResultSheet({
 function BatchResultSheet({
   result,
   onDismiss,
+  onContinue,
 }: {
   result: LoyaltyBatchResult;
   onDismiss: () => void;
+  // Return to the refreshed chooser so more promotions apply in one scan (KAN-5).
+  onContinue: () => void;
 }) {
   const t = useT();
   const rewards = result.results.flatMap((row) => row.vouchers.map((v) => v.reward_title));
@@ -841,7 +883,8 @@ function BatchResultSheet({
       ariaLabel={t("staff.collect.title")}
     >
       <Flash color={flashColor} />
-      <CountdownBar duration={duration} onDone={onDismiss} />
+      {/* Auto-advance back to the chooser (KAN-5) rather than closing the scan. */}
+      <CountdownBar duration={duration} onDone={onContinue} />
 
       <div style={{ textAlign: "center" }}>
         <div style={{
@@ -885,13 +928,22 @@ function BatchResultSheet({
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={onDismiss}
-        style={{ width: "100%", marginTop: 16, padding: 13, border: "none", borderRadius: 14, background: "#F4ECDF", color: "var(--ink, #2E241D)", font: "700 15px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
-      >
-        {t("staff.result.done")}
-      </button>
+      <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+        <button
+          type="button"
+          onClick={onContinue}
+          style={{ flex: 1, padding: 13, border: "none", borderRadius: 14, background: "var(--accent, #C25E3C)", color: "#fff", font: "700 15px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+        >
+          {t("staff.result.applyAnother")}
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          style={{ flex: 1, padding: 13, border: "none", borderRadius: 14, background: "#F4ECDF", color: "var(--ink, #2E241D)", font: "700 15px 'Hanken Grotesk',sans-serif", cursor: "pointer" }}
+        >
+          {t("staff.result.done")}
+        </button>
+      </div>
     </Sheet>
   );
 }
@@ -1313,6 +1365,11 @@ export default function StaffScanPage() {
   const [scanKey, setScanKey] = useState(0);
   // The token most recently scanned — needed to confirm the visit against it.
   const scannedTokenRef = useRef<string>("");
+  // The purchase (bill) amount most recently entered this scan, kept visible in
+  // the chooser so the cashier can verify the figure used for a discount/cashback
+  // while performing later operations (e.g. redeeming points afterwards). Cleared
+  // on a full dismiss / new scan. See KAN-5 (checkout workflow).
+  const [billAmount, setBillAmount] = useState<string | null>(null);
   // Guards re-entrancy: ignore new scans while a result sheet is open or a scan
   // request is in flight (a camera fires the same frame many times per second).
   const busyRef = useRef(false);
@@ -1320,6 +1377,7 @@ export default function StaffScanPage() {
   const dismiss = () => {
     setOverlay(null);
     setPendingCampaignId(null);
+    setBillAmount(null);
     busyRef.current = false;
     setScanKey((k) => k + 1);
     resolveScan.reset();
@@ -1329,6 +1387,40 @@ export default function StaffScanPage() {
     redeemVoucher.reset();
     redeemById.reset();
     confirmGroup.reset();
+  };
+
+  // KAN-5: after applying one promotion, return to the refreshed chooser instead
+  // of tearing down the scan — the cashier can then apply every eligible promotion
+  // (cashback, visit, redeem, …) from a single QR scan. Re-resolves the same
+  // personal QR (stable token, read-only/idempotent resolve) to pick up the
+  // just-applied progress. Falls back to a full dismiss when the token no longer
+  // resolves to a customer with anything left to do (all promotions exhausted, or
+  // the sheet was reached from a standalone voucher scan with no chooser behind it).
+  const continueToChooser = () => {
+    const token = scannedTokenRef.current;
+    if (!token) {
+      dismiss();
+      return;
+    }
+    setPendingCampaignId(null);
+    confirmVisit.reset();
+    awardBatch.reset();
+    confirmSocial.reset();
+    redeemById.reset();
+    resolveScan.reset();
+    resolveScan.mutate(token, {
+      onSuccess(dispatch: ScanDispatchResult) {
+        if (
+          dispatch.kind === "customer" &&
+          (dispatch.customer.rows.length > 0 || dispatch.customer.active_vouchers.length > 0)
+        ) {
+          setOverlay({ kind: "chooser", result: dispatch.customer });
+          return;
+        }
+        dismiss();
+      },
+      onError() { dismiss(); },
+    });
   };
 
   // Map a thrown ApiClientError code to the design's invalid-voucher sheet. Falls
@@ -1451,6 +1543,9 @@ export default function StaffScanPage() {
   const handleConfirmAmount = (amount: string) => {
     if (overlay?.kind !== "amount") return;
     const { row } = overlay;
+    // Remember the bill amount so it stays visible in the chooser for the rest of
+    // this scan (KAN-5: verify the discount/cashback figure while redeeming points).
+    setBillAmount(amount);
     setPendingCampaignId(row.campaign_id);
     confirmVisit.mutate(
       { token: scannedTokenRef.current, campaignId: row.campaign_id, amount },
@@ -1636,6 +1731,8 @@ export default function StaffScanPage() {
             onDismiss={dismiss}
             pendingCampaignId={pendingCampaignId}
             redeemPending={redeemById.isPending}
+            billAmount={billAmount}
+            onClearBillAmount={() => setBillAmount(null)}
           />
         )}
         {overlay?.kind === "amount" && (
@@ -1647,7 +1744,7 @@ export default function StaffScanPage() {
           />
         )}
         {overlay?.kind === "batch_result" && (
-          <BatchResultSheet result={overlay.result} onDismiss={dismiss} />
+          <BatchResultSheet result={overlay.result} onDismiss={dismiss} onContinue={continueToChooser} />
         )}
         {overlay?.kind === "single_result" && (
           <SingleResultSheet
@@ -1655,6 +1752,7 @@ export default function StaffScanPage() {
             customerName={overlay.customerName}
             awarded={overlay.awarded}
             onDismiss={dismiss}
+            onContinue={continueToChooser}
           />
         )}
         {overlay?.kind === "group_eligible" && (
@@ -1667,7 +1765,10 @@ export default function StaffScanPage() {
           <RedeemedSheet
             title={t("staff.campaign.rewardRedeemed")}
             subtitle={t("staff.campaign.giveCustomer").replace("{reward}", overlay.rewardTitle)}
-            onDismiss={dismiss}
+            /* KAN-5: after redeeming from the chooser, return to it for the next
+               action; a standalone voucher scan re-resolves to a non-customer and
+               falls back to a full dismiss inside continueToChooser. */
+            onDismiss={continueToChooser}
           />
         )}
         {overlay?.kind === "group_done" && (

@@ -97,6 +97,11 @@ export default function ProfilePage() {
     router.replace("/");
   };
 
+  // Birthday bounds: no future dates, and a 1900 floor to reject fat-finger
+  // year entries. Kept in sync with the backend MIN_BIRTHDAY guard (KAN-7).
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const minBirthdayIso = "1900-01-01";
+
   return (
     <CustomerShell title={t("profile.title")} hideChromeTitle>
       {!isAuthenticated ? null : (
@@ -187,7 +192,7 @@ export default function ProfilePage() {
                   <Input id="profile-name" label={t("profile.name")} value={name} onChange={(e) => setName(e.target.value)} className="rounded-xl border-[1.5px] px-3.5 font-semibold focus:ring-4 focus:ring-brand/10" />
                   <Input id="profile-email" label={t("profile.email")} type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="rounded-xl border-[1.5px] px-3.5 font-semibold focus:ring-4 focus:ring-brand/10" />
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
-                  <Input id="profile-birthday" label={t("profile.birthday")} type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} className="rounded-xl border-[1.5px] px-3.5 font-semibold focus:ring-4 focus:ring-brand/10" />
+                  <Input id="profile-birthday" label={t("profile.birthday")} type="date" min={minBirthdayIso} max={todayIso} value={birthday} onChange={(e) => setBirthday(e.target.value)} className="rounded-xl border-[1.5px] px-3.5 font-semibold focus:ring-4 focus:ring-brand/10" />
                   <label className="flex flex-col gap-1 text-sm font-medium text-ink">
                     {t("common.language")}
                     <select

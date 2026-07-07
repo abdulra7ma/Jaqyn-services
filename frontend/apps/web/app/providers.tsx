@@ -1,9 +1,24 @@
 "use client";
 
 import { ApiProvider } from "@jaqyn/api";
-import { I18nProvider } from "@jaqyn/i18n";
+import { I18nProvider, useI18n } from "@jaqyn/i18n";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { useEffect, type ReactNode } from "react";
+
+function GoogleProvider({ children }: { children: ReactNode }) {
+  // Sync Google Identity Services UI language with the app locale. Without an
+  // explicit locale, GSI falls back to the browser/geo language (e.g. Kyrgyz),
+  // so the "Sign in with Google" button mismatches a Russian UI. See KAN-8.
+  const { locale } = useI18n();
+  return (
+    <GoogleOAuthProvider
+      clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ""}
+      locale={locale}
+    >
+      {children}
+    </GoogleOAuthProvider>
+  );
+}
 
 export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
@@ -21,10 +36,10 @@ export function Providers({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ""}>
+    <I18nProvider>
       <ApiProvider>
-        <I18nProvider>{children}</I18nProvider>
+        <GoogleProvider>{children}</GoogleProvider>
       </ApiProvider>
-    </GoogleOAuthProvider>
+    </I18nProvider>
   );
 }
